@@ -3,13 +3,11 @@ import { computed } from 'vue'
 import { useProjectsStore } from '../stores/projects'
 import { useDockerStore } from '../stores/docker'
 import { useGitStore } from '../stores/git'
-import { useProject } from '../composables/useProject'
 import ProjectSelector from './ProjectSelector.vue'
 
 const projectsStore = useProjectsStore()
 const dockerStore = useDockerStore()
 const gitStore = useGitStore()
-const { switchProject } = useProject()
 
 const gitChanges = computed(() => {
   const s = gitStore.status
@@ -18,10 +16,6 @@ const gitChanges = computed(() => {
 
 const dockerRunning = computed(() =>
   (dockerStore.containers || []).filter((c) => c.state === 'running').length
-)
-
-const otherProjects = computed(() =>
-  projectsStore.projects.filter((p) => p.name !== projectsStore.currentProject?.name)
 )
 </script>
 

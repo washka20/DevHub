@@ -173,7 +173,9 @@ export const useGitStore = defineStore('git', () => {
   const logLoadingMore = ref(false)
 
   function parseCommits(data: unknown[]): Commit[] {
-    return (data ?? []).map((c: Record<string, unknown>) => ({
+    return (data ?? []).map((item: unknown) => {
+      const c = item as Record<string, unknown>
+      return {
       hash: (c.hash ?? '') as string,
       short_hash: (c.short_hash ?? (typeof c.hash === 'string' ? (c.hash as string).slice(0, 7) : '')) as string,
       message: (c.message ?? '') as string,
@@ -183,7 +185,7 @@ export const useGitStore = defineStore('git', () => {
       parents: Array.isArray(c.parents) ? c.parents as string[] : [],
       graph: typeof c.graph === 'string' ? c.graph as string : '',
       graph_only: !!c.graph_only,
-    }))
+    }})
   }
 
   async function fetchLog() {
