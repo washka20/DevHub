@@ -23,6 +23,19 @@ export interface GitStatus {
   behind: number
 }
 
+export interface GraphLine {
+  x1: number
+  x2: number
+  type: number  // 0=Bottom, 1=Top, 2=Full, 3=Fork, 4=MergeBack
+  color: string
+}
+
+export interface GraphData {
+  column: number
+  color: string
+  lines: GraphLine[]
+}
+
 export interface Commit {
   hash: string
   short_hash: string
@@ -31,8 +44,9 @@ export interface Commit {
   date: string
   refs: string[]
   parents: string[]
-  graph: string
+  graph?: string
   graph_only?: boolean
+  graph_data?: GraphData
 }
 
 export interface CommitDetail {

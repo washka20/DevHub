@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue'
 import { useGitStore } from '../stores/git'
-import type { DiffLine } from '../types'
-// ASCII graph rendering (hybrid approach: git --graph + parent hashes)
+import type { DiffLine, GraphData } from '../types'
 
 const gitStore = useGitStore()
 const selectedFile = ref<string | null>(null)
@@ -160,56 +159,40 @@ const tabCounts = computed(() => ({
   branches: gitStore.branches.length,
 }))
 
-// ----- Git graph rendering (ASCII-based) -----
+// ----- Git graph rendering (git2graph-based) -----
 
-const GRAPH_COLORS = [
-  '#58a6ff', '#3fb950', '#f0883e', '#bc8cff',
-  '#f85149', '#d29922', '#79c0ff', '#56d364',
-]
 const GRAPH_COL_WIDTH = 16
 const GRAPH_ROW_HEIGHT = 28
-const GRAPH_ONLY_HEIGHT = 14
 
-interface GraphCell {
-  type: 'commit' | 'pipe' | 'merge-down' | 'merge-up' | 'empty'
-  col: number
-  color: string
-  isMerge: boolean
-}
+// Line types from git2graph GetRows
+const LINE_BOTTOM_HALF = 0
+const LINE_TOP_HALF = 1
+const LINE_FULL = 2
+const LINE_FORK = 3
+const LINE_MERGE_BACK = 4
 
-function parseGraphLine(graph: string): GraphCell[] {
-  const cells: GraphCell[] = []
-  if (!graph) return cells
-  let col = 0
-  for (let i = 0; i < graph.length; i++) {
-    const ch = graph[i]
-    if (ch === ' ') { col++; continue }
-    const color = GRAPH_COLORS[col % GRAPH_COLORS.length]
-    if (ch === '*') {
-      cells.push({ type: 'commit', col, color, isMerge: false })
-    } else if (ch === '|') {
-      cells.push({ type: 'pipe', col, color, isMerge: false })
-    } else if (ch === '\\') {
-      cells.push({ type: 'merge-down', col, color, isMerge: false })
-    } else if (ch === '/') {
-      cells.push({ type: 'merge-up', col, color, isMerge: false })
-    }
-    col++
-  }
-  return cells
-}
-
-function graphSvgWidth(graph: string): number {
-  if (!graph) return 32
-  let maxCol = 0
-  let col = 0
-  for (const ch of graph) {
-    if (ch === ' ') { col++; continue }
-    if (col > maxCol) maxCol = col
-    col++
+// Calculate SVG width from graph_data
+function graphDataWidth(gd: GraphData | undefined): number {
+  if (!gd) return 32
+  let maxCol = gd.column
+  for (const line of gd.lines) {
+    if (line.x1 > maxCol) maxCol = line.x1
+    if (line.x2 > maxCol) maxCol = line.x2
   }
   return (maxCol + 1) * GRAPH_COL_WIDTH + 8
 }
+
+// Max graph width across all commits for alignment
+const graphMaxWidth = computed(() => {
+  let max = 32
+  for (const c of gitStore.commits) {
+    if (c.graph_data) {
+      const w = graphDataWidth(c.graph_data)
+      if (w > max) max = w
+    }
+  }
+  return max
+})
 
 // ----- Ref badge helpers -----
 
@@ -708,53 +691,52 @@ watch(() => gitStore.status.branch, () => {
             <span class="empty-text">No commits</span>
           </div>
           <div v-else class="log-list">
-            <template v-for="(c, idx) in gitStore.commits" :key="c.hash || 'g' + idx">
-              <!-- Graph-only rows (merge lines etc.) -->
-              <div v-if="c.graph_only" class="log-row log-row-graph-only">
-                <div class="log-graph-col" :style="{ width: graphSvgWidth(c.graph) + 'px' }">
-                  <svg :width="graphSvgWidth(c.graph)" :height="GRAPH_ONLY_HEIGHT" class="graph-svg">
-                    <template v-for="(cell, ci) in parseGraphLine(c.graph)" :key="ci">
-                      <line v-if="cell.type === 'pipe'"
-                        :x1="cell.col * GRAPH_COL_WIDTH + 8" y1="0"
-                        :x2="cell.col * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ONLY_HEIGHT"
-                        :stroke="cell.color" stroke-width="2" stroke-linecap="round" />
-                      <path v-else-if="cell.type === 'merge-down'"
-                        :d="`M ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},0 C ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},${GRAPH_ONLY_HEIGHT * 0.4} ${cell.col * GRAPH_COL_WIDTH + 8},${GRAPH_ONLY_HEIGHT * 0.6} ${cell.col * GRAPH_COL_WIDTH + 8},${GRAPH_ONLY_HEIGHT}`"
-                        :stroke="cell.color" stroke-width="2" fill="none" stroke-linecap="round" />
-                      <path v-else-if="cell.type === 'merge-up'"
-                        :d="`M ${cell.col * GRAPH_COL_WIDTH + 8},0 C ${cell.col * GRAPH_COL_WIDTH + 8},${GRAPH_ONLY_HEIGHT * 0.4} ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},${GRAPH_ONLY_HEIGHT * 0.6} ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},${GRAPH_ONLY_HEIGHT}`"
-                        :stroke="cell.color" stroke-width="2" fill="none" stroke-linecap="round" />
-                    </template>
-                  </svg>
-                </div>
-              </div>
-              <!-- Commit rows -->
-              <div v-else class="log-row"
+            <template v-for="(c, idx) in gitStore.commits" :key="c.hash || idx">
+              <div v-if="!c.graph_only" class="log-row"
                 :class="{ 'log-row-selected': gitStore.selectedCommit?.hash === c.hash }"
                 @click="selectCommit(c.hash)">
-                <div class="log-graph-col" :style="{ width: graphSvgWidth(c.graph) + 'px' }">
-                  <svg :width="graphSvgWidth(c.graph)" :height="GRAPH_ROW_HEIGHT" class="graph-svg">
-                    <template v-for="(cell, ci) in parseGraphLine(c.graph)" :key="ci">
-                      <line v-if="cell.type === 'pipe'"
-                        :x1="cell.col * GRAPH_COL_WIDTH + 8" y1="0"
-                        :x2="cell.col * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT"
-                        :stroke="cell.color" stroke-width="2" stroke-linecap="round" />
-                      <path v-else-if="cell.type === 'merge-down'"
-                        :d="`M ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},0 C ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.4} ${cell.col * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.6} ${cell.col * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT}`"
-                        :stroke="cell.color" stroke-width="2" fill="none" stroke-linecap="round" />
-                      <path v-else-if="cell.type === 'merge-up'"
-                        :d="`M ${cell.col * GRAPH_COL_WIDTH + 8},0 C ${cell.col * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.4} ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.6} ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT}`"
-                        :stroke="cell.color" stroke-width="2" fill="none" stroke-linecap="round" />
-                      <template v-if="cell.type === 'commit'">
-                        <line :x1="cell.col * GRAPH_COL_WIDTH + 8" y1="0"
-                          :x2="cell.col * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT"
-                          :stroke="cell.color" stroke-width="2" stroke-linecap="round" />
-                        <circle :cx="cell.col * GRAPH_COL_WIDTH + 8" :cy="GRAPH_ROW_HEIGHT / 2"
-                          :r="(c.parents?.length ?? 0) > 1 ? 5 : 4"
-                          :fill="(c.parents?.length ?? 0) > 1 ? '#0d1117' : cell.color"
-                          :stroke="cell.color"
-                          :stroke-width="(c.parents?.length ?? 0) > 1 ? 2 : 0" />
+                <div class="log-graph-col" :style="{ width: graphMaxWidth + 'px' }">
+                  <svg :width="graphMaxWidth" :height="GRAPH_ROW_HEIGHT" class="graph-svg">
+                    <template v-if="c.graph_data">
+                      <!-- Lines -->
+                      <template v-for="(line, li) in c.graph_data.lines" :key="li">
+                        <!-- Full vertical line (same column) -->
+                        <line v-if="line.type === LINE_FULL && line.x1 === line.x2"
+                          :x1="line.x1 * GRAPH_COL_WIDTH + 8" y1="0"
+                          :x2="line.x2 * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT"
+                          :stroke="line.color" stroke-width="2" stroke-linecap="round" />
+                        <!-- Bottom half (center to bottom, same column) -->
+                        <line v-else-if="line.type === LINE_BOTTOM_HALF && line.x1 === line.x2"
+                          :x1="line.x1 * GRAPH_COL_WIDTH + 8" :y1="GRAPH_ROW_HEIGHT / 2"
+                          :x2="line.x2 * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT"
+                          :stroke="line.color" stroke-width="2" stroke-linecap="round" />
+                        <!-- Top half (top to center, same column) -->
+                        <line v-else-if="line.type === LINE_TOP_HALF && line.x1 === line.x2"
+                          :x1="line.x1 * GRAPH_COL_WIDTH + 8" y1="0"
+                          :x2="line.x2 * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT / 2"
+                          :stroke="line.color" stroke-width="2" stroke-linecap="round" />
+                        <!-- Fork (branch splits) — curve from x1 center down to x2 bottom -->
+                        <path v-else-if="line.type === LINE_FORK"
+                          :d="`M ${line.x1 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT / 2} C ${line.x1 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.8} ${line.x2 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.8} ${line.x2 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT}`"
+                          :stroke="line.color" stroke-width="2" fill="none" stroke-linecap="round" />
+                        <!-- MergeBack — curve from x2 top down to x1 center -->
+                        <path v-else-if="line.type === LINE_MERGE_BACK"
+                          :d="`M ${line.x2 * GRAPH_COL_WIDTH + 8},0 C ${line.x2 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.2} ${line.x1 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.2} ${line.x1 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT / 2}`"
+                          :stroke="line.color" stroke-width="2" fill="none" stroke-linecap="round" />
+                        <!-- Fallback: diagonal for cross-column -->
+                        <line v-else
+                          :x1="line.x1 * GRAPH_COL_WIDTH + 8" y1="0"
+                          :x2="line.x2 * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT"
+                          :stroke="line.color" stroke-width="2" stroke-linecap="round" />
                       </template>
+                      <!-- Commit node circle -->
+                      <circle
+                        :cx="c.graph_data.column * GRAPH_COL_WIDTH + 8"
+                        :cy="GRAPH_ROW_HEIGHT / 2"
+                        :r="(c.parents?.length ?? 0) > 1 ? 5 : 4"
+                        :fill="(c.parents?.length ?? 0) > 1 ? '#0d1117' : c.graph_data.color"
+                        :stroke="c.graph_data.color"
+                        :stroke-width="(c.parents?.length ?? 0) > 1 ? 2 : 0" />
                     </template>
                   </svg>
                 </div>
@@ -1654,16 +1636,6 @@ watch(() => gitStore.status.branch, () => {
 .log-row-selected {
   background: rgba(31, 111, 235, 0.08);
   border-bottom-color: #30363d;
-}
-
-.log-row-graph-only {
-  height: 14px;
-  padding: 0 12px;
-  cursor: default;
-}
-
-.log-row-graph-only:hover {
-  background: transparent;
 }
 
 .log-graph-col {

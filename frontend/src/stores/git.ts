@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProject } from '../composables/useProject'
-import type { GitStatus, Commit, CommitDetail, BranchInfo } from '../types'
+import type { GitStatus, Commit, CommitDetail, BranchInfo, GraphData } from '../types'
 
 export const useGitStore = defineStore('git', () => {
   const { projectApiUrl } = useProject()
@@ -185,6 +185,7 @@ export const useGitStore = defineStore('git', () => {
       parents: Array.isArray(c.parents) ? c.parents as string[] : [],
       graph: typeof c.graph === 'string' ? c.graph as string : '',
       graph_only: !!c.graph_only,
+      graph_data: c.graph_data as GraphData | undefined,
     }})
   }
 

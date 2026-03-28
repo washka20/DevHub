@@ -251,7 +251,7 @@ func (h *Handlers) GitLog(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	commits, err := h.Git.Log(path, limit, offset)
+	commits, err := h.Git.LogWithGraph(path, limit, offset)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
