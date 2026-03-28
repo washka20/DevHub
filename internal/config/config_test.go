@@ -19,6 +19,13 @@ func TestDefaultConfig(t *testing.T) {
 	}
 }
 
+func TestDefaultConfig_TerminalMaxSessions(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Terminal.MaxSessions != 10 {
+		t.Errorf("expected MaxSessions=10, got %d", cfg.Terminal.MaxSessions)
+	}
+}
+
 func TestLoadFromYAML(t *testing.T) {
 	dir := t.TempDir()
 	yamlContent := []byte("port: 8080\nprojects_dir: /tmp/myprojects\ndefault_project: myapp\n")

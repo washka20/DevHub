@@ -8,11 +8,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// TerminalConfig holds terminal-related settings.
+type TerminalConfig struct {
+	MaxSessions int `yaml:"max_sessions"`
+}
+
 // Config holds application configuration.
 type Config struct {
-	Port           int    `yaml:"port"`
-	ProjectsDir    string `yaml:"projects_dir"`
-	DefaultProject string `yaml:"default_project"`
+	Port           int            `yaml:"port"`
+	ProjectsDir    string         `yaml:"projects_dir"`
+	DefaultProject string         `yaml:"default_project"`
+	Terminal       TerminalConfig `yaml:"terminal"`
 }
 
 // DefaultConfig returns configuration with default values.
@@ -21,6 +27,9 @@ func DefaultConfig() *Config {
 		Port:           9000,
 		ProjectsDir:    "~/project",
 		DefaultProject: "cfa",
+		Terminal: TerminalConfig{
+			MaxSessions: 10,
+		},
 	}
 }
 
