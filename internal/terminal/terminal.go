@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -70,6 +71,9 @@ type Manager struct {
 	maxSessions int
 }
 
+// ErrMaxSessions is returned when the session limit is reached.
+var ErrMaxSessions = errors.New("max sessions limit reached")
+
 func NewManager(maxSessions int) *Manager {
 	return &Manager{
 		sessions:    make(map[string]*Session),
@@ -82,7 +86,7 @@ func (m *Manager) Create(id, shell, cwd string, cols, rows uint16) (*Session, er
 	defer m.mu.Unlock()
 
 	if len(m.sessions) >= m.maxSessions {
-		return nil, fmt.Errorf("max sessions limit reached (%d)", m.maxSessions)
+		return nil, ErrMaxSessions
 	}
 
 	if _, exists := m.sessions[id]; exists {

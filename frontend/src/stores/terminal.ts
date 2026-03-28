@@ -58,7 +58,7 @@ export const useTerminalStore = defineStore('terminal', () => {
     const tab = tabs.value.find((t) => t.id === tabId)
     if (!tab) return
     for (const pane of tab.panes) {
-      await destroySession(pane.sessionId)
+      try { await destroySession(pane.sessionId) } catch { /* best-effort, WS cleanup is safety net */ }
     }
     tabs.value = tabs.value.filter((t) => t.id !== tabId)
     if (activeTabId.value === tabId) {

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 
@@ -51,7 +52,7 @@ func (th *TerminalHandlers) CreateSession(w http.ResponseWriter, r *http.Request
 	id := generateID()
 	sess, err := th.Manager.Create(id, shell, cwd, body.Cols, body.Rows)
 	if err != nil {
-		if th.Manager.Count() >= th.Manager.MaxSessions() {
+		if errors.Is(err, terminal.ErrMaxSessions) {
 			jsonError(w, err.Error(), http.StatusTooManyRequests)
 		} else {
 			jsonError(w, err.Error(), http.StatusInternalServerError)

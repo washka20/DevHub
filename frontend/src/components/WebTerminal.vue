@@ -37,8 +37,7 @@ function connectWs(sessionId: string) {
   ws.onmessage = (event: MessageEvent) => {
     if (!term) return
     if (event.data instanceof ArrayBuffer) {
-      const text = new TextDecoder().decode(event.data)
-      term.write(text)
+      term.write(new Uint8Array(event.data))
     } else if (typeof event.data === 'string') {
       try {
         const msg = JSON.parse(event.data)
