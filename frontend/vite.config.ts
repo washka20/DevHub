@@ -5,6 +5,10 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     proxy: {
+      '/api/terminal/ws': {
+        target: 'ws://localhost:9000',
+        ws: true,
+      },
       '/api/ws': {
         target: 'ws://localhost:9000',
         ws: true,
