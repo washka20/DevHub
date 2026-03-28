@@ -12,15 +12,17 @@ import (
 	"devhub/internal/docker"
 	"devhub/internal/git"
 	"devhub/internal/runner"
+	"devhub/internal/terminal"
 
 	"github.com/gorilla/mux"
 )
 
 // Server is the main HTTP server for DevHub.
 type Server struct {
-	cfg    *config.Config
-	router *mux.Router
-	hub    *api.Hub
+	cfg         *config.Config
+	router      *mux.Router
+	hub         *api.Hub
+	termManager *terminal.Manager
 }
 
 // New creates a new Server with all routes configured.
@@ -33,6 +35,9 @@ func New(cfg *config.Config) *Server {
 
 	h := api.NewHandlers(cfg.ProjectsDir, hub, gitSvc, dockerSvc)
 	h.RefreshProjects()
+
+	// Terminal
+	termManager := terminal.NewManager(cfg.Terminal.MaxSessions)
 
 	router := mux.NewRouter()
 
@@ -67,6 +72,13 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/logs", h.DockerLogs).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/{action}", h.DockerAction).Methods("POST")
 
+	// Terminal
+	th := &api.TerminalHandlers{Manager: termManager}
+	apiRouter.HandleFunc("/terminal/sessions", th.CreateSession).Methods("POST")
+	apiRouter.HandleFunc("/terminal/sessions", th.ListSessions).Methods("GET")
+	apiRouter.HandleFunc("/terminal/sessions/{id}", th.DestroySession).Methods("DELETE")
+	apiRouter.HandleFunc("/terminal/ws/{id}", api.HandleTerminalWS(termManager))
+
 	// WebSocket (on apiRouter so it matches /api/ws path used by frontend)
 	apiRouter.HandleFunc("/ws", hub.HandleWS)
 
@@ -75,12 +87,20 @@ func New(cfg *config.Config) *Server {
 	router.PathPrefix("/").Handler(spa)
 
 	s := &Server{
-		cfg:    cfg,
-		router: router,
-		hub:    hub,
+		cfg:         cfg,
+		router:      router,
+		hub:         hub,
+		termManager: termManager,
 	}
 
 	return s
+}
+
+// Shutdown cleans up all terminal sessions.
+func (s *Server) Shutdown() {
+	if s.termManager != nil {
+		s.termManager.DestroyAll()
+	}
 }
 
 // Start launches the HTTP server on localhost:port.
