@@ -45,12 +45,22 @@ func BuildGraphRows(commits []Commit) ([]Commit, error) {
 		return commits, nil
 	}
 
-	// Конвертируем коммиты в формат ввода git2graph
+	// Собираем set всех хешей в наборе — parent'ы за пределами набора
+	// вызывают панику в git2graph (index out of range)
+	knownHashes := make(map[string]struct{}, len(commits))
+	for _, c := range commits {
+		knownHashes[c.Hash] = struct{}{}
+	}
+
+	// Конвертируем коммиты в формат ввода git2graph,
+	// фильтруя parent'ов которых нет в наборе (при пагинации)
 	input := make([]map[string]interface{}, len(commits))
 	for i, c := range commits {
-		parents := make([]interface{}, len(c.Parents))
-		for j, p := range c.Parents {
-			parents[j] = p
+		parents := make([]interface{}, 0, len(c.Parents))
+		for _, p := range c.Parents {
+			if _, ok := knownHashes[p]; ok {
+				parents = append(parents, p)
+			}
 		}
 		input[i] = map[string]interface{}{
 			"id":      c.Hash,
