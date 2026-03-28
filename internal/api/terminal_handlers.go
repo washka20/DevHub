@@ -75,6 +75,12 @@ func (th *TerminalHandlers) ListSessions(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(list)
 }
 
+// DestroyAllSessions handles DELETE /api/terminal/sessions (no {id}).
+func (th *TerminalHandlers) DestroyAllSessions(w http.ResponseWriter, r *http.Request) {
+	th.Manager.DestroyAll()
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // DestroySession handles DELETE /api/terminal/sessions/{id}.
 func (th *TerminalHandlers) DestroySession(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]

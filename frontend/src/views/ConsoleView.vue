@@ -12,8 +12,15 @@ import { useProjectsStore } from '../stores/projects'
 const terminalStore = useTerminalStore()
 const projectsStore = useProjectsStore()
 
+let initialized = false
+
 // onActivated fires on first mount AND on re-activation from keep-alive
 onActivated(async () => {
+  if (!initialized) {
+    initialized = true
+    // Clean orphan sessions from previous page loads / server restarts
+    await terminalStore.cleanOrphans()
+  }
   if (terminalStore.tabs.length === 0) {
     const cwd = projectsStore.currentProject?.path || ''
     try {

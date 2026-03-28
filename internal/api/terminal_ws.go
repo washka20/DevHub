@@ -35,21 +35,30 @@ func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 			return
 		}
 
+		// Stop any previous reader goroutine before starting a new one.
+		// This prevents two goroutines reading the same PTY concurrently
+		// (happens on split/remount when the browser reconnects).
+		sess.StopReader()
+
 		var closeOnce sync.Once
 		cleanup := func() {
 			closeOnce.Do(func() {
 				conn.Close()
-				// Don't destroy the PTY session here -- the browser may
-				// reconnect after a split/remount.  Sessions are destroyed
-				// only via REST DELETE or server shutdown.
 			})
 		}
 		defer cleanup()
 
 		// PTY -> WebSocket (binary frames)
+		stopCh := sess.StartReader()
 		go func() {
 			buf := make([]byte, 4096)
 			for {
+				select {
+				case <-stopCh:
+					return
+				default:
+				}
+
 				n, err := sess.Pty.Read(buf)
 				if n > 0 {
 					if wErr := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); wErr != nil {
@@ -58,6 +67,7 @@ func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 					}
 				}
 				if err != nil {
+					// PTY closed (shell exited)
 					exitCode := 0
 					if err != io.EOF {
 						exitCode = 1
@@ -67,6 +77,8 @@ func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 						"code": exitCode,
 					})
 					conn.WriteMessage(websocket.TextMessage, exitMsg)
+					// Shell exited -- destroy the session so it doesn't linger
+					manager.Destroy(id)
 					cleanup()
 					return
 				}

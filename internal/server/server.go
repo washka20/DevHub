@@ -76,6 +76,7 @@ func New(cfg *config.Config) *Server {
 	th := &api.TerminalHandlers{Manager: termManager}
 	apiRouter.HandleFunc("/terminal/sessions", th.CreateSession).Methods("POST")
 	apiRouter.HandleFunc("/terminal/sessions", th.ListSessions).Methods("GET")
+	apiRouter.HandleFunc("/terminal/sessions", th.DestroyAllSessions).Methods("DELETE")
 	apiRouter.HandleFunc("/terminal/sessions/{id}", th.DestroySession).Methods("DELETE")
 	apiRouter.HandleFunc("/terminal/ws/{id}", api.HandleTerminalWS(termManager))
 

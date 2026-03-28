@@ -20,6 +20,27 @@ type Session struct {
 	CWD       string
 	mu        sync.Mutex
 	closed    bool
+	readerCh  chan struct{} // closed to signal current reader goroutine to stop
+}
+
+// StopReader signals the current PTY reader goroutine to exit.
+func (s *Session) StopReader() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.readerCh != nil {
+		close(s.readerCh)
+		s.readerCh = nil
+	}
+}
+
+// StartReader creates a stop channel for a new reader goroutine.
+// Must be called before starting the goroutine.
+func (s *Session) StartReader() <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ch := make(chan struct{})
+	s.readerCh = ch
+	return ch
 }
 
 func (s *Session) Resize(cols, rows uint16) error {

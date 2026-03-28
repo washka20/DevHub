@@ -3,15 +3,14 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { useTerminalStore } from '../stores/terminal'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
   sessionId: string
 }>()
 
-const emit = defineEmits<{
-  exit: [code: number]
-}>()
+const terminalStore = useTerminalStore()
 
 const terminalEl = ref<HTMLDivElement>()
 let term: Terminal | null = null
@@ -43,7 +42,7 @@ function connectWs(sessionId: string) {
       try {
         const msg = JSON.parse(event.data)
         if (msg.type === 'exit') {
-          emit('exit', msg.code)
+          terminalStore.handleSessionExit(props.sessionId)
         }
       } catch {
         // ignore
@@ -114,9 +113,9 @@ function initTerminal() {
   term.open(terminalEl.value)
   fitAddon.fit()
 
+  const encoder = new TextEncoder()
   term.onData((data: string) => {
     if (ws?.readyState === WebSocket.OPEN) {
-      const encoder = new TextEncoder()
       ws.send(encoder.encode(data))
     }
   })

@@ -9,9 +9,13 @@ const emit = defineEmits<{
   split: [direction: 'horizontal' | 'vertical']
 }>()
 
-function handleNewTab() {
+async function handleNewTab() {
   const cwd = projectsStore.currentProject?.path || ''
-  terminalStore.addTab(cwd)
+  try {
+    await terminalStore.addTab(cwd)
+  } catch {
+    // max sessions reached or backend unavailable
+  }
 }
 </script>
 

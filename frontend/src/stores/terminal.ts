@@ -88,7 +88,7 @@ export const useTerminalStore = defineStore('terminal', () => {
     const pane = tab.panes.find((p) => p.id === paneId)
     if (!pane) return
 
-    await destroySession(pane.sessionId)
+    try { await destroySession(pane.sessionId) } catch { /* best-effort */ }
     tab.panes = tab.panes.filter((p) => p.id !== paneId)
 
     if (tab.panes.length <= 1) {
@@ -97,6 +97,32 @@ export const useTerminalStore = defineStore('terminal', () => {
 
     if (tab.panes.length === 0) {
       await closeTab(tabId)
+    }
+  }
+
+  // Clean up orphan backend sessions (from page refresh / stale state)
+  async function cleanOrphans() {
+    try {
+      await fetch('/api/terminal/sessions', { method: 'DELETE' })
+    } catch { /* best-effort */ }
+  }
+
+  // Called when shell exits (PTY sends exit event)
+  function handleSessionExit(sessionId: string) {
+    sessions.value.delete(sessionId)
+    // Find and close any tab/pane using this session
+    for (const tab of [...tabs.value]) {
+      const pane = tab.panes.find((p) => p.sessionId === sessionId)
+      if (pane) {
+        tab.panes = tab.panes.filter((p) => p.id !== pane.id)
+        if (tab.panes.length <= 1) tab.splitDirection = null
+        if (tab.panes.length === 0) {
+          tabs.value = tabs.value.filter((t) => t.id !== tab.id)
+          if (activeTabId.value === tab.id) {
+            activeTabId.value = tabs.value.length > 0 ? tabs.value[tabs.value.length - 1].id : null
+          }
+        }
+      }
     }
   }
 
@@ -110,5 +136,7 @@ export const useTerminalStore = defineStore('terminal', () => {
     setActiveTab,
     splitPane,
     closePane,
+    cleanOrphans,
+    handleSessionExit,
   }
 })
