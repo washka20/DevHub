@@ -45,27 +45,42 @@ func BuildGraphRows(commits []Commit) ([]Commit, error) {
 		return commits, nil
 	}
 
-	// Собираем set всех хешей в наборе — parent'ы за пределами набора
-	// вызывают панику в git2graph (index out of range)
+	// Собираем set всех хешей в наборе
 	knownHashes := make(map[string]struct{}, len(commits))
 	for _, c := range commits {
 		knownHashes[c.Hash] = struct{}{}
 	}
 
-	// Конвертируем коммиты в формат ввода git2graph,
-	// фильтруя parent'ов которых нет в наборе (при пагинации)
-	input := make([]map[string]interface{}, len(commits))
-	for i, c := range commits {
-		parents := make([]interface{}, 0, len(c.Parents))
+	// Собираем parent'ов которых нет в наборе — для них создадим stub-узлы,
+	// чтобы git2graph видел полный граф и генерировал правильные линии
+	missingParents := make(map[string]struct{})
+	for _, c := range commits {
 		for _, p := range c.Parents {
-			if _, ok := knownHashes[p]; ok {
-				parents = append(parents, p)
+			if _, ok := knownHashes[p]; !ok {
+				missingParents[p] = struct{}{}
 			}
 		}
-		input[i] = map[string]interface{}{
+	}
+
+	// Конвертируем коммиты в формат ввода git2graph
+	input := make([]map[string]interface{}, 0, len(commits)+len(missingParents))
+	for _, c := range commits {
+		parents := make([]interface{}, len(c.Parents))
+		for j, p := range c.Parents {
+			parents[j] = p
+		}
+		input = append(input, map[string]interface{}{
 			"id":      c.Hash,
 			"parents": parents,
-		}
+		})
+	}
+
+	// Добавляем stub-узлы для parent'ов за пределами набора (без родителей)
+	for hash := range missingParents {
+		input = append(input, map[string]interface{}{
+			"id":      hash,
+			"parents": make([]interface{}, 0),
+		})
 	}
 
 	// Сериализуем в JSON для git2graph
