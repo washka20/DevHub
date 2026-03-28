@@ -5,7 +5,7 @@ import CommandButton from '../CommandButton.vue'
 describe('CommandButton', () => {
   it('renders the command name', () => {
     const wrapper = mount(CommandButton, {
-      props: { name: 'make build' },
+      props: { name: 'build' },
     })
 
     expect(wrapper.find('.cmd-name').text()).toBe('make build')

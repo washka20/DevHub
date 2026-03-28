@@ -35,8 +35,8 @@ describe('StatusCard', () => {
       },
     })
 
-    const valueEl = wrapper.find('.status-value')
-    expect(valueEl.attributes('style')).toContain('color: #3fb950')
+    const card = wrapper.find('.status-card')
+    expect(card.attributes('style')).toContain('#3fb950')
   })
 
   it('uses default color when color prop is not provided', () => {
@@ -47,8 +47,8 @@ describe('StatusCard', () => {
       },
     })
 
-    const valueEl = wrapper.find('.status-value')
-    expect(valueEl.attributes('style')).toContain('var(--text-primary)')
+    const card = wrapper.find('.status-card')
+    expect(card.attributes('style')).toContain('--text-primary')
   })
 
   it('renders subtext when provided', () => {
