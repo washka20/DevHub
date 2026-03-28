@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProject } from '../composables/useProject'
-import type { GitStatus, CommitDetail, BranchInfo, CommitMeta } from '../types'
+import type { GitStatus, CommitDetail, BranchInfo, CommitMeta, Commit } from '../types'
 
 interface TopoNode {
   id: string
@@ -20,6 +20,7 @@ export const useGitStore = defineStore('git', () => {
     behind: 0,
   })
   const branches = ref<BranchInfo[]>([])
+  const log = ref<Commit[]>([])
   const diff = ref('')
   const selectedFile = ref<string | null>(null)
 
@@ -167,6 +168,25 @@ export const useGitStore = defineStore('git', () => {
       error.value = (e as Error).message
     } finally {
       loading.value.branches = false
+    }
+  }
+
+  async function fetchLog() {
+    loading.value.log = true
+    try {
+      const res = await fetch(`${projectApiUrl.value}/git/log/metadata?offset=0&limit=5`)
+      if (!res.ok) throw new Error(await res.text())
+      const data: CommitMeta[] = await res.json()
+      log.value = data.map(m => ({
+        hash: m.hash,
+        message: m.message,
+        author: m.author,
+        date: m.date,
+      }))
+    } catch (e) {
+      error.value = (e as Error).message
+    } finally {
+      loading.value.log = false
     }
   }
 
@@ -371,6 +391,7 @@ export const useGitStore = defineStore('git', () => {
   return {
     status,
     branches,
+    log,
     diff,
     selectedFile,
     activeTab,
@@ -392,6 +413,7 @@ export const useGitStore = defineStore('git', () => {
     isLocallyStaged,
     fetchStatus,
     fetchBranches,
+    fetchLog,
     graphNodes,
     metadataMap,
     metadataLoaded,

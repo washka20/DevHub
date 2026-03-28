@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue'
 import { useGitStore } from '../stores/git'
+import { useProjectsStore } from '../stores/projects'
 import type { DiffLine } from '../types'
 
 const gitStore = useGitStore()
+const projectsStore = useProjectsStore()
 const selectedFile = ref<string | null>(null)
 const branchDropdownOpen = ref(false)
 const stagedCollapsed = ref(false)
@@ -264,7 +266,8 @@ async function viewCommitFileDiff(hash: string, filePath: string) {
   commitDiffFile.value = filePath
   showCommitDiffModal.value = true
   try {
-    const res = await fetch(`/api/projects/${encodeURIComponent(gitStore.status.branch || 'default')}/git/commits/${hash}/diff?file=${encodeURIComponent(filePath)}`)
+    const projectName = projectsStore.currentProject?.name || 'default'
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/git/commits/${hash}/diff?file=${encodeURIComponent(filePath)}`)
     if (!res.ok) throw new Error(await res.text())
     const data = await res.json()
     commitDiffContent.value = data.diff ?? ''

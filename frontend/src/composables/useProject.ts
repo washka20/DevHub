@@ -32,6 +32,7 @@ export function useProject() {
     if (project.is_git) {
       fetches.push(gitStore.fetchStatus())
       fetches.push(gitStore.fetchGraph())
+      fetches.push(gitStore.fetchLog())
     }
     if (project.has_docker) {
       fetches.push(dockerStore.fetchContainers())
