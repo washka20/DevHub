@@ -125,7 +125,11 @@ function initTerminal() {
     sendResize(cols, rows)
   })
 
-  resizeObserver = new ResizeObserver(() => {
+  resizeObserver = new ResizeObserver((entries) => {
+    // Don't fit when container is hidden (v-show=false → 0 dimensions)
+    const { width, height } = entries[0].contentRect
+    if (width === 0 || height === 0) return
+
     if (resizeTimer) clearTimeout(resizeTimer)
     resizeTimer = setTimeout(() => fitAddon?.fit(), 50)
   })
