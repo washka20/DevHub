@@ -215,67 +215,6 @@ func (g *GitService) Log(dir string, limit int, offset int) ([]Commit, error) {
 	return commits, nil
 }
 
-// LogWithGraph возвращает коммиты со всех веток с данными графа от git2graph.
-// В отличие от Log(), не использует --graph, а вычисляет граф через библиотеку git2graph.
-func (g *GitService) LogWithGraph(dir string, limit int, offset int) ([]Commit, error) {
-	args := []string{"log", "--all", "--topo-order",
-		"--format=%H|%h|%s|%an|%ar|%D|%P", "-n", strconv.Itoa(limit)}
-	if offset > 0 {
-		args = append(args, "--skip", strconv.Itoa(offset))
-	}
-	out, err := g.runner.Run(dir, "git", args...)
-	if err != nil {
-		return nil, err
-	}
-
-	var commits []Commit
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		parts := strings.SplitN(line, "|", 7)
-		if len(parts) < 7 {
-			continue
-		}
-
-		var refs []string
-		if strings.TrimSpace(parts[5]) != "" {
-			for _, ref := range strings.Split(parts[5], ", ") {
-				ref = strings.TrimSpace(ref)
-				if ref != "" {
-					refs = append(refs, ref)
-				}
-			}
-		}
-
-		var parents []string
-		if strings.TrimSpace(parts[6]) != "" {
-			for _, p := range strings.Fields(parts[6]) {
-				parents = append(parents, p)
-			}
-		}
-
-		commits = append(commits, Commit{
-			Hash:      parts[0],
-			ShortHash: parts[1],
-			Message:   parts[2],
-			Author:    parts[3],
-			Date:      parts[4],
-			Refs:      refs,
-			Parents:   parents,
-		})
-	}
-
-	// Вычисляем данные графа через git2graph
-	commits, err = BuildGraphRows(commits)
-	if err != nil {
-		return nil, fmt.Errorf("ошибка построения графа: %w", err)
-	}
-
-	return commits, nil
-}
 
 // TopologyNode содержит минимальные данные коммита для построения графа.
 type TopologyNode struct {

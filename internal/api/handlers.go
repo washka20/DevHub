@@ -251,7 +251,7 @@ func (h *Handlers) GitLog(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	commits, err := h.Git.LogWithGraph(path, limit, offset)
+	commits, err := h.Git.Log(path, limit, offset)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -260,6 +260,7 @@ func (h *Handlers) GitLog(w http.ResponseWriter, r *http.Request) {
 }
 
 // GitGraph handles GET /api/projects/{id}/git/graph
+// Возвращает topology (id + parents) — layout вычисляется на фронтенде.
 func (h *Handlers) GitGraph(w http.ResponseWriter, r *http.Request) {
 	path, err := h.projectPath(r)
 	if err != nil {
@@ -273,13 +274,7 @@ func (h *Handlers) GitGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := git.BuildFullGraph(topology)
-	if err != nil {
-		jsonError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	jsonResponse(w, result)
+	jsonResponse(w, topology)
 }
 
 // GitLogMetadata handles GET /api/projects/{id}/git/log/metadata

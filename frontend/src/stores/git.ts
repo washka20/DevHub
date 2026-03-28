@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProject } from '../composables/useProject'
 import type { GitStatus, Commit, CommitDetail, BranchInfo, GraphData, GraphNodeOut, FullGraphResponse, CommitMeta } from '../types'
+import { computeGraphLayout, type TopoNode, type GraphLayoutNode } from '../lib/graph-layout'
 
 export const useGitStore = defineStore('git', () => {
   const { projectApiUrl } = useProject()
@@ -167,16 +168,27 @@ export const useGitStore = defineStore('git', () => {
 
   const LOG_PAGE_SIZE = 50
 
-  // Граф — загружается один раз
-  const graphNodes = ref<GraphNodeOut[]>([])
+  // Topology — загружается один раз
+  const topoNodes = ref<TopoNode[]>([])
+  // Graph layout — вычисляется на клиенте
+  const graphLayout = ref<GraphLayoutNode[]>([])
   const graphMaxWidth = ref(32)
+
+  // Совмещённый вид для рендеринга (topology + layout)
+  const graphNodes = computed<GraphNodeOut[]>(() =>
+    topoNodes.value.map((t, i) => ({
+      id: t.id,
+      parents: t.parents,
+      graph_data: graphLayout.value[i] ?? { column: 0, color: '#58a6ff', lines: [] },
+    }))
+  )
 
   // Метаданные — загружаются порциями
   const metadataMap = ref<Map<string, CommitMeta>>(new Map())
   const metadataLoaded = ref(0)
   const metadataLoading = ref(false)
 
-  const totalCommits = computed(() => graphNodes.value.length)
+  const totalCommits = computed(() => topoNodes.value.length)
 
   async function fetchGraph() {
     loading.value.log = true
@@ -184,9 +196,12 @@ export const useGitStore = defineStore('git', () => {
     try {
       const res = await fetch(`${projectApiUrl.value}/git/graph`)
       if (!res.ok) throw new Error(await res.text())
-      const data: FullGraphResponse = await res.json()
-      graphNodes.value = data.nodes
-      graphMaxWidth.value = data.max_width
+      const data: TopoNode[] = await res.json()
+      topoNodes.value = data
+      // Вычисляем layout на клиенте (свой алгоритм вместо git2graph)
+      const { layout, maxWidth } = computeGraphLayout(topoNodes.value)
+      graphLayout.value = layout
+      graphMaxWidth.value = maxWidth
       metadataMap.value = new Map()
       metadataLoaded.value = 0
       // Сразу подгружаем первую порцию
