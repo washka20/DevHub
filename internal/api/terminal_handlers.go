@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 
+	"devhub/internal/config"
 	"devhub/internal/terminal"
 
 	"github.com/gorilla/mux"
@@ -16,6 +17,7 @@ import (
 // TerminalHandlers manages REST endpoints for terminal sessions.
 type TerminalHandlers struct {
 	Manager *terminal.Manager
+	Cfg     *config.Config
 }
 
 type createSessionRequest struct {
@@ -44,7 +46,10 @@ func (th *TerminalHandlers) CreateSession(w http.ResponseWriter, r *http.Request
 		cwd, _ = os.UserHomeDir()
 	}
 
-	shell := os.Getenv("SHELL")
+	shell := th.Cfg.Terminal.Shell
+	if shell == "" {
+		shell = os.Getenv("SHELL")
+	}
 	if shell == "" {
 		shell = "/bin/bash"
 	}

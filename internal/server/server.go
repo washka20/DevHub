@@ -73,12 +73,18 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/{action}", h.DockerAction).Methods("POST")
 
 	// Terminal
-	th := &api.TerminalHandlers{Manager: termManager}
+	th := &api.TerminalHandlers{Manager: termManager, Cfg: cfg}
 	apiRouter.HandleFunc("/terminal/sessions", th.CreateSession).Methods("POST")
 	apiRouter.HandleFunc("/terminal/sessions", th.ListSessions).Methods("GET")
 	apiRouter.HandleFunc("/terminal/sessions", th.DestroyAllSessions).Methods("DELETE")
 	apiRouter.HandleFunc("/terminal/sessions/{id}", th.DestroySession).Methods("DELETE")
 	apiRouter.HandleFunc("/terminal/ws/{id}", api.HandleTerminalWS(termManager))
+
+	// Settings
+	settingsH := &api.SettingsHandlers{Cfg: cfg}
+	apiRouter.HandleFunc("/settings", settingsH.GetSettings).Methods("GET")
+	apiRouter.HandleFunc("/settings", settingsH.UpdateSettings).Methods("PUT")
+	apiRouter.HandleFunc("/settings/shells", settingsH.ListShells).Methods("GET")
 
 	// WebSocket (on apiRouter so it matches /api/ws path used by frontend)
 	apiRouter.HandleFunc("/ws", hub.HandleWS)
