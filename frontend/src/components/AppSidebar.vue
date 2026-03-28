@@ -49,6 +49,10 @@ const dockerRunning = computed(() =>
         Docker
         <span v-if="dockerRunning > 0" class="badge badge-green">{{ dockerRunning }}</span>
       </router-link>
+      <router-link to="/console" class="nav-item" active-class="active">
+        <span class="nav-icon">&#9002;</span>
+        Console
+      </router-link>
     </nav>
 
     <div class="sidebar-footer">

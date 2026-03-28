@@ -114,3 +114,21 @@ export interface MakeCommand {
   description: string
   category: string
 }
+
+export interface TerminalSession {
+  id: string
+  label: string
+  cwd: string
+}
+
+export interface TerminalPane {
+  id: string
+  sessionId: string
+}
+
+export interface TerminalTab {
+  id: string
+  label: string
+  panes: TerminalPane[]
+  splitDirection: 'horizontal' | 'vertical' | null
+}

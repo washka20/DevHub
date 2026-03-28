@@ -33,8 +33,10 @@ onMounted(async () => {
   <div class="app-layout">
     <AppSidebar />
     <main class="main-content">
-      <router-view v-slot="{ Component }">
-        <component :is="Component" class="route-view" />
+      <router-view v-slot="{ Component, route }">
+        <keep-alive include="ConsoleView">
+          <component :is="Component" :key="route.name" class="route-view" />
+        </keep-alive>
       </router-view>
     </main>
   </div>
