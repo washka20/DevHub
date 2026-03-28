@@ -16,8 +16,8 @@ const categoryColors: Record<string, string> = {
   NPM: 'var(--accent-blue)',
   Composer: 'var(--accent-purple)',
   PHP: 'var(--accent-orange)',
-  Git: '#79c0ff',
-  Init: '#d29922',
+  Git: 'var(--accent-blue)',
+  Init: 'var(--accent-orange)',
 }
 
 function getColor(category?: string): string {
