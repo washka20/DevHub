@@ -18,6 +18,7 @@ let term: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let ws: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
+let resizeTimer: ReturnType<typeof setTimeout> | null = null
 
 function connectWs(sessionId: string) {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -125,7 +126,8 @@ function initTerminal() {
   })
 
   resizeObserver = new ResizeObserver(() => {
-    fitAddon?.fit()
+    if (resizeTimer) clearTimeout(resizeTimer)
+    resizeTimer = setTimeout(() => fitAddon?.fit(), 50)
   })
   resizeObserver.observe(terminalEl.value)
 
@@ -137,6 +139,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (resizeTimer) clearTimeout(resizeTimer)
   resizeObserver?.disconnect()
   ws?.close()
   term?.dispose()
@@ -144,6 +147,7 @@ onBeforeUnmount(() => {
   ws = null
   fitAddon = null
   resizeObserver = null
+  resizeTimer = null
 })
 
 watch(

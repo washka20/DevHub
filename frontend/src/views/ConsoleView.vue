@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'ConsoleView' })
 
-import { onMounted } from 'vue'
+import { onActivated } from 'vue'
 import { Splitpanes, Pane } from 'splitpanes'
 import 'splitpanes/dist/splitpanes.css'
 import TerminalTabBar from '../components/TerminalTabBar.vue'
@@ -12,10 +12,15 @@ import { useProjectsStore } from '../stores/projects'
 const terminalStore = useTerminalStore()
 const projectsStore = useProjectsStore()
 
-onMounted(async () => {
+// onActivated fires on first mount AND on re-activation from keep-alive
+onActivated(async () => {
   if (terminalStore.tabs.length === 0) {
     const cwd = projectsStore.currentProject?.path || ''
-    await terminalStore.addTab(cwd)
+    try {
+      await terminalStore.addTab(cwd)
+    } catch {
+      // session creation may fail on first load before backend is ready
+    }
   }
 })
 
@@ -35,37 +40,35 @@ function handlePaneClose(paneId: string) {
   <div class="console-view">
     <TerminalTabBar @split="handleSplit" />
 
-    <div class="terminal-area" v-if="terminalStore.activeTab">
-      <template v-if="terminalStore.activeTab.panes.length === 1">
-        <WebTerminal :session-id="terminalStore.activeTab.panes[0].sessionId" />
-      </template>
-
-      <template v-else-if="terminalStore.activeTab.panes.length > 1">
-        <Splitpanes
-          :horizontal="terminalStore.activeTab.splitDirection === 'vertical'"
-          class="default-theme"
-        >
-          <Pane
-            v-for="pane in terminalStore.activeTab.panes"
-            :key="pane.id"
-          >
-            <div class="pane-container">
-              <div class="pane-header">
-                <span class="pane-title">
-                  {{ terminalStore.sessions.get(pane.sessionId)?.label || 'shell' }}
-                </span>
-                <span class="pane-close" @click="handlePaneClose(pane.id)">&#10005;</span>
-              </div>
-              <div class="pane-body">
-                <WebTerminal :session-id="pane.sessionId" />
-              </div>
+    <!-- Render ALL tabs, show only active via v-show (keeps xterm alive) -->
+    <div
+      v-for="tab in terminalStore.tabs"
+      :key="tab.id"
+      v-show="tab.id === terminalStore.activeTabId"
+      class="terminal-area"
+    >
+      <!-- Always use Splitpanes (even for 1 pane) to avoid DOM restructuring -->
+      <Splitpanes
+        :horizontal="tab.splitDirection === 'vertical'"
+        class="default-theme"
+      >
+        <Pane v-for="pane in tab.panes" :key="pane.id">
+          <div class="pane-container">
+            <div v-show="tab.panes.length > 1" class="pane-header">
+              <span class="pane-title">
+                {{ terminalStore.sessions.get(pane.sessionId)?.label || 'shell' }}
+              </span>
+              <span class="pane-close" @click="handlePaneClose(pane.id)">&#10005;</span>
             </div>
-          </Pane>
-        </Splitpanes>
-      </template>
+            <div class="pane-body">
+              <WebTerminal :session-id="pane.sessionId" />
+            </div>
+          </div>
+        </Pane>
+      </Splitpanes>
     </div>
 
-    <div v-else class="empty-state">
+    <div v-if="terminalStore.tabs.length === 0" class="empty-state">
       <p>No terminal sessions. Click + to open one.</p>
     </div>
   </div>
@@ -147,6 +150,11 @@ function handlePaneClose(paneId: string) {
 
 :deep(.splitpanes.default-theme .splitpanes__splitter::before),
 :deep(.splitpanes.default-theme .splitpanes__splitter::after) {
+  display: none;
+}
+
+/* Hide splitter when there's only 1 pane */
+:deep(.splitpanes.default-theme .splitpanes__pane:only-child + .splitpanes__splitter) {
   display: none;
 }
 </style>
