@@ -277,6 +277,98 @@ func (g *GitService) LogWithGraph(dir string, limit int, offset int) ([]Commit, 
 	return commits, nil
 }
 
+// TopologyNode содержит минимальные данные коммита для построения графа.
+type TopologyNode struct {
+	Hash    string   `json:"id"`
+	Parents []string `json:"parents"`
+}
+
+// LogTopology возвращает полную топологию коммитов (только hash и parents).
+func (g *GitService) LogTopology(dir string) ([]TopologyNode, error) {
+	out, err := g.runner.Run(dir, "git", "log", "--all", "--topo-order", "--format=%H|%P")
+	if err != nil {
+		return nil, err
+	}
+
+	var nodes []TopologyNode
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 2)
+		if len(parts) < 1 || parts[0] == "" {
+			continue
+		}
+
+		var parents []string
+		if len(parts) == 2 && strings.TrimSpace(parts[1]) != "" {
+			for _, p := range strings.Fields(parts[1]) {
+				parents = append(parents, p)
+			}
+		}
+
+		nodes = append(nodes, TopologyNode{
+			Hash:    parts[0],
+			Parents: parents,
+		})
+	}
+	return nodes, nil
+}
+
+// CommitMeta содержит метаданные коммита без графа.
+type CommitMeta struct {
+	Hash      string   `json:"hash"`
+	ShortHash string   `json:"short_hash"`
+	Message   string   `json:"message"`
+	Author    string   `json:"author"`
+	Date      string   `json:"date"`
+	Refs      []string `json:"refs"`
+}
+
+// LogMetadata возвращает метаданные коммитов порциями (без графа).
+func (g *GitService) LogMetadata(dir string, limit int, offset int) ([]CommitMeta, error) {
+	args := []string{"log", "--all", "--topo-order",
+		"--format=%H|%h|%s|%an|%ar|%D", "-n", strconv.Itoa(limit)}
+	if offset > 0 {
+		args = append(args, "--skip", strconv.Itoa(offset))
+	}
+	out, err := g.runner.Run(dir, "git", args...)
+	if err != nil {
+		return nil, err
+	}
+
+	var metas []CommitMeta
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 6)
+		if len(parts) < 6 {
+			continue
+		}
+
+		var refs []string
+		if strings.TrimSpace(parts[5]) != "" {
+			for _, ref := range strings.Split(parts[5], ", ") {
+				ref = strings.TrimSpace(ref)
+				if ref != "" {
+					refs = append(refs, ref)
+				}
+			}
+		}
+
+		metas = append(metas, CommitMeta{
+			Hash:      parts[0],
+			ShortHash: parts[1],
+			Message:   parts[2],
+			Author:    parts[3],
+			Date:      parts[4],
+			Refs:      refs,
+		})
+	}
+	return metas, nil
+}
+
 // Diff returns the full diff of unstaged changes.
 func (g *GitService) Diff(dir string) (string, error) {
 	return g.runner.Run(dir, "git", "diff")

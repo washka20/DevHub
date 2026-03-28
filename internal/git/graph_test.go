@@ -81,3 +81,62 @@ func TestBuildGraphRows_Empty(t *testing.T) {
 		t.Errorf("ожидался nil, получено %v", result)
 	}
 }
+
+// --- Тесты для BuildFullGraph ---
+
+func TestBuildFullGraph_LinearHistory(t *testing.T) {
+	topo := []TopologyNode{
+		{Hash: "aaa", Parents: []string{"bbb"}},
+		{Hash: "bbb", Parents: []string{"ccc"}},
+		{Hash: "ccc", Parents: nil},
+	}
+	result, err := BuildFullGraph(topo)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Nodes) != 3 {
+		t.Fatalf("expected 3 nodes, got %d", len(result.Nodes))
+	}
+	for i, n := range result.Nodes {
+		if n.GraphData.Color == "" {
+			t.Errorf("node %d: expected non-empty color", i)
+		}
+		if n.GraphData.Column != 0 {
+			t.Errorf("node %d: expected column 0, got %d", i, n.GraphData.Column)
+		}
+	}
+}
+
+func TestBuildFullGraph_WithMerge(t *testing.T) {
+	topo := []TopologyNode{
+		{Hash: "m1", Parents: []string{"a1", "b1"}},
+		{Hash: "a1", Parents: []string{"root"}},
+		{Hash: "b1", Parents: []string{"root"}},
+		{Hash: "root", Parents: nil},
+	}
+	result, err := BuildFullGraph(topo)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Nodes) != 4 {
+		t.Fatalf("expected 4 nodes, got %d", len(result.Nodes))
+	}
+	// Merge коммит должен иметь линии
+	if len(result.Nodes[0].GraphData.Lines) == 0 {
+		t.Error("merge commit should have lines")
+	}
+	// MaxWidth должен быть > 0 (ветвление)
+	if result.MaxWidth == 0 {
+		t.Error("expected MaxWidth > 0 for branching graph")
+	}
+}
+
+func TestBuildFullGraph_Empty(t *testing.T) {
+	result, err := BuildFullGraph(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Nodes) != 0 {
+		t.Fatalf("expected 0 nodes, got %d", len(result.Nodes))
+	}
+}

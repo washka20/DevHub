@@ -259,6 +259,58 @@ func (h *Handlers) GitLog(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, commits)
 }
 
+// GitGraph handles GET /api/projects/{id}/git/graph
+func (h *Handlers) GitGraph(w http.ResponseWriter, r *http.Request) {
+	path, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	topology, err := h.Git.LogTopology(path)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	result, err := git.BuildFullGraph(topology)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonResponse(w, result)
+}
+
+// GitLogMetadata handles GET /api/projects/{id}/git/log/metadata
+func (h *Handlers) GitLogMetadata(w http.ResponseWriter, r *http.Request) {
+	path, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	limit := 50
+	offset := 0
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	metas, err := h.Git.LogMetadata(path, limit, offset)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, metas)
+}
+
 // GitDiff handles GET /api/projects/{id}/git/diff
 func (h *Handlers) GitDiff(w http.ResponseWriter, r *http.Request) {
 	path, err := h.projectPath(r)

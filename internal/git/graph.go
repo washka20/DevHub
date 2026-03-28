@@ -22,6 +22,168 @@ type GraphData struct {
 	Lines  []GraphLine `json:"lines"`
 }
 
+// GraphNodeOut — узел графа с данными для фронтенда.
+type GraphNodeOut struct {
+	ID        string    `json:"id"`
+	Parents   []string  `json:"parents"`
+	GraphData GraphData `json:"graph_data"`
+}
+
+// FullGraphResult — полный граф для фронтенда.
+type FullGraphResult struct {
+	Nodes    []GraphNodeOut `json:"nodes"`
+	MaxWidth int            `json:"max_width"`
+}
+
+// BuildFullGraph вычисляет полный граф для всех коммитов через git2graph.
+func BuildFullGraph(topology []TopologyNode) (*FullGraphResult, error) {
+	if len(topology) == 0 {
+		return &FullGraphResult{Nodes: []GraphNodeOut{}, MaxWidth: 0}, nil
+	}
+
+	// Конвертируем в формат git2graph
+	input := make([]map[string]interface{}, len(topology))
+	for i, t := range topology {
+		parents := make([]interface{}, len(t.Parents))
+		for j, p := range t.Parents {
+			parents[j] = p
+		}
+		if parents == nil {
+			parents = make([]interface{}, 0)
+		}
+		input[i] = map[string]interface{}{
+			"id":      t.Hash,
+			"parents": parents,
+		}
+	}
+
+	jsonData, err := json.Marshal(input)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка маршалинга: %w", err)
+	}
+
+	nodes, err := git2graph.GetInputNodesFromJSON(jsonData)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка парсинга git2graph: %w", err)
+	}
+
+	out, err := git2graph.GetRows(nodes)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка вычисления графа: %w", err)
+	}
+
+	result := &FullGraphResult{
+		Nodes: make([]GraphNodeOut, len(topology)),
+	}
+	maxWidth := 0
+
+	for idx, node := range out.Nodes {
+		if idx >= len(topology) {
+			break
+		}
+
+		gno := GraphNodeOut{
+			ID:      topology[idx].Hash,
+			Parents: topology[idx].Parents,
+		}
+		if gno.Parents == nil {
+			gno.Parents = []string{}
+		}
+
+		gRaw, ok := (*node)["g"]
+		if !ok {
+			result.Nodes[idx] = gno
+			continue
+		}
+
+		gd := parseGraphData(gRaw)
+		if gd != nil {
+			gno.GraphData = *gd
+
+			// Считаем maxWidth
+			col := gd.Column
+			if col > maxWidth {
+				maxWidth = col
+			}
+			for _, line := range gd.Lines {
+				if line.X1 > maxWidth {
+					maxWidth = line.X1
+				}
+				if line.X2 > maxWidth {
+					maxWidth = line.X2
+				}
+			}
+		}
+
+		result.Nodes[idx] = gno
+	}
+
+	// maxWidth — это максимальная колонка, ширина = (maxCol + 1) * colWidth + padding
+	result.MaxWidth = maxWidth
+
+	return result, nil
+}
+
+// parseGraphData парсит поле "g" из git2graph GetRows.
+// Формат: [x, color, lines] где lines = [[x1, x2, type, color], ...]
+func parseGraphData(gRaw interface{}) *GraphData {
+	gJSON, err := json.Marshal(gRaw)
+	if err != nil {
+		return nil
+	}
+
+	var gArr []json.RawMessage
+	if err := json.Unmarshal(gJSON, &gArr); err != nil {
+		return nil
+	}
+	if len(gArr) < 3 {
+		return nil
+	}
+
+	var column float64
+	if err := json.Unmarshal(gArr[0], &column); err != nil {
+		return nil
+	}
+
+	var color string
+	if err := json.Unmarshal(gArr[1], &color); err != nil {
+		return nil
+	}
+
+	var rawLines []json.RawMessage
+	if err := json.Unmarshal(gArr[2], &rawLines); err != nil {
+		return nil
+	}
+
+	lines := make([]GraphLine, 0, len(rawLines))
+	for _, rl := range rawLines {
+		var lineArr []json.RawMessage
+		if err := json.Unmarshal(rl, &lineArr); err != nil || len(lineArr) < 4 {
+			continue
+		}
+
+		var x1, x2, lineType float64
+		var lineColor string
+		json.Unmarshal(lineArr[0], &x1)
+		json.Unmarshal(lineArr[1], &x2)
+		json.Unmarshal(lineArr[2], &lineType)
+		json.Unmarshal(lineArr[3], &lineColor)
+
+		lines = append(lines, GraphLine{
+			X1:    int(x1),
+			X2:    int(x2),
+			Type:  int(lineType),
+			Color: lineColor,
+		})
+	}
+
+	return &GraphData{
+		Column: int(column),
+		Color:  color,
+		Lines:  lines,
+	}
+}
+
 // toInt безопасно конвертирует interface{} в int.
 // Поддерживает float64 (стандартный тип JSON), int и json.Number.
 func toInt(v interface{}) int {

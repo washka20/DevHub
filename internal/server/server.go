@@ -49,6 +49,8 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/git/status", h.GitStatus).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/git/branches", h.GitBranches).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/git/log", h.GitLog).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/graph", h.GitGraph).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/log/metadata", h.GitLogMetadata).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/git/diff", h.GitDiff).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/git/commit", h.GitCommit).Methods("POST")
 	apiRouter.HandleFunc("/projects/{id}/git/checkout", h.GitCheckout).Methods("POST")
