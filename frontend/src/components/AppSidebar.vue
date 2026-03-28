@@ -138,9 +138,10 @@ const dockerRunning = computed(() =>
 }
 
 .nav-icon {
-  font-size: 16px;
-  width: 20px;
+  font-size: 18px;
+  width: 22px;
   text-align: center;
+  line-height: 1;
 }
 
 .badge {
