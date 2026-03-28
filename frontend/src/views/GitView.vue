@@ -414,6 +414,50 @@ function onClickOutside() {
   branchDropdownOpen.value = false
 }
 
+// ----- Branch filter sidebar (Log tab) -----
+
+const branchSearch = ref('')
+const filteredBranches = computed(() => {
+  const q = branchSearch.value.toLowerCase()
+  return gitStore.branches.filter(b => !q || b.name.toLowerCase().includes(q))
+})
+
+// ----- Branch cards (Branches tab) -----
+
+const expandedBranch = ref<string | null>(null)
+const branchTabSearch = ref('')
+const branchTabFilter = ref<'local' | 'remote' | 'all'>('local')
+const showCheckoutConfirm = ref<string | null>(null)
+
+const filteredBranchCards = computed(() => {
+  const q = branchTabSearch.value.toLowerCase()
+  return gitStore.branches.filter(b => {
+    if (q && !b.name.toLowerCase().includes(q)) return false
+    if (branchTabFilter.value === 'local') return !b.name.startsWith('remotes/')
+    if (branchTabFilter.value === 'remote') return b.name.startsWith('remotes/')
+    return true
+  })
+})
+
+function toggleBranchExpand(name: string) {
+  if (expandedBranch.value === name) {
+    expandedBranch.value = null
+  } else {
+    expandedBranch.value = name
+    gitStore.fetchBranchCommits(name)
+  }
+}
+
+function viewBranchLog(name: string) {
+  gitStore.setViewingBranch(name)
+  gitStore.activeTab = 'log'
+}
+
+async function confirmCheckout(name: string) {
+  showCheckoutConfirm.value = null
+  await gitStore.checkout(name)
+}
+
 // ----- Lifecycle -----
 
 onMounted(() => {
@@ -469,6 +513,13 @@ watch(() => gitStore.status.branch, () => {
           </div>
         </div>
         <span class="status-text">{{ statusSummary }}</span>
+        <span v-if="gitStore.viewingBranch" class="viewing-indicator">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0">
+            <path d="M1.5 8a6.5 6.5 0 1 1 13 0 6.5 6.5 0 0 1-13 0zM8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm.75 4.75a.75.75 0 0 0-1.5 0v2.5h-2.5a.75.75 0 0 0 0 1.5h2.5v2.5a.75.75 0 0 0 1.5 0v-2.5h2.5a.75.75 0 0 0 0-1.5h-2.5v-2.5z"/>
+          </svg>
+          viewing: {{ gitStore.viewingBranch }}
+          <span class="viewing-clear" @click.stop="gitStore.setViewingBranch('')">&times;</span>
+        </span>
       </div>
       <div class="top-bar-actions">
         <button
@@ -730,7 +781,46 @@ watch(() => gitStore.status.branch, () => {
 
       <!-- ==================== TAB: LOG ==================== -->
       <div v-if="gitStore.activeTab === 'log'" class="log-layout">
+        <!-- Branch filter sidebar -->
+        <div class="branch-filter-sidebar">
+          <div class="sidebar-header">Branches</div>
+          <input
+            class="sidebar-search"
+            v-model="branchSearch"
+            placeholder="Filter..."
+          />
+          <div class="sidebar-list">
+            <div
+              class="sidebar-item"
+              :class="{ 'sidebar-item-active': gitStore.viewingBranch === '' }"
+              @click="gitStore.setViewingBranch('')"
+            >
+              <span class="sidebar-dot dot-blue"></span>
+              All branches
+            </div>
+            <div
+              v-for="b in filteredBranches"
+              :key="b.name"
+              class="sidebar-item"
+              :class="{ 'sidebar-item-active': gitStore.viewingBranch === b.name }"
+              @click="gitStore.setViewingBranch(b.name)"
+            >
+              <span class="sidebar-dot" :class="b.is_current ? 'dot-green' : 'dot-purple'"></span>
+              <span class="sidebar-item-name">{{ b.name }}</span>
+              <span v-if="b.is_current" class="sidebar-badge">HEAD</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Log content -->
         <div class="log-main" @scroll="onLogScroll" ref="scrollContainerRef">
+          <div v-if="gitStore.viewingBranch" class="log-branch-banner">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0">
+              <path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.492 2.492 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25zM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM3.5 3.25a.75.75 0 1 1 1.5 0 .75.75 0 0 1-1.5 0z"/>
+            </svg>
+            <span>Showing commits from <strong>{{ gitStore.viewingBranch }}</strong></span>
+            <button class="log-banner-clear" @click="gitStore.setViewingBranch('')">&times;</button>
+          </div>
           <div v-if="gitStore.totalCommits === 0 && !gitStore.loading.log" class="empty-state">
             <span class="empty-text">No commits</span>
           </div>
@@ -850,22 +940,58 @@ watch(() => gitStore.status.branch, () => {
 
       <!-- ==================== TAB: BRANCHES ==================== -->
       <div v-if="gitStore.activeTab === 'branches'" class="branches-layout">
-        <div v-if="gitStore.branches.length === 0" class="empty-state">
+        <!-- Search and filter bar -->
+        <div class="branches-toolbar">
+          <input
+            class="branches-search"
+            v-model="branchTabSearch"
+            placeholder="Search branches..."
+          />
+          <div class="branches-filter-group">
+            <button
+              class="branches-filter-btn"
+              :class="{ 'branches-filter-active': branchTabFilter === 'local' }"
+              @click="branchTabFilter = 'local'"
+            >Local</button>
+            <button
+              class="branches-filter-btn"
+              :class="{ 'branches-filter-active': branchTabFilter === 'remote' }"
+              @click="branchTabFilter = 'remote'"
+            >Remote</button>
+            <button
+              class="branches-filter-btn"
+              :class="{ 'branches-filter-active': branchTabFilter === 'all' }"
+              @click="branchTabFilter = 'all'"
+            >All</button>
+          </div>
+        </div>
+
+        <div v-if="filteredBranchCards.length === 0" class="empty-state">
           <span class="empty-text">No branches</span>
         </div>
         <div v-else class="branches-list">
           <div
-            v-for="branch in gitStore.branches"
+            v-for="branch in filteredBranchCards"
             :key="branch.name"
             class="branch-card"
-            :class="{ 'branch-card-current': branch.is_current }"
+            :class="{
+              'branch-card-current': branch.is_current,
+              'branch-card-expanded': expandedBranch === branch.name,
+            }"
           >
-            <div class="branch-card-top">
-              <div class="branch-card-name">
+            <div class="branch-card-top" @click="toggleBranchExpand(branch.name)">
+              <div class="branch-card-left">
+                <svg
+                  width="10" height="10" viewBox="0 0 12 12" fill="currentColor"
+                  class="branch-expand-chevron"
+                  :class="{ 'branch-expand-chevron-open': expandedBranch === branch.name }"
+                >
+                  <path d="M4.7 2.4a.5.5 0 0 1 .7 0l3.15 3.15a.5.5 0 0 1 0 .7L5.4 9.4a.5.5 0 0 1-.7-.7L7.54 5.85 4.7 3.1a.5.5 0 0 1 0-.7z"/>
+                </svg>
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" class="branch-card-icon">
                   <path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.492 2.492 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25zM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM3.5 3.25a.75.75 0 1 1 1.5 0 .75.75 0 0 1-1.5 0z"/>
                 </svg>
-                <span>{{ branch.name }}</span>
+                <span class="branch-card-name-text">{{ branch.name }}</span>
               </div>
               <div class="branch-card-badges">
                 <span v-if="branch.is_current" class="badge badge-current">CURRENT</span>
@@ -874,38 +1000,81 @@ watch(() => gitStore.status.branch, () => {
                 <span v-if="branch.behind > 0" class="badge badge-behind">{{ branch.behind }} behind</span>
               </div>
             </div>
+
             <div v-if="branch.message || branch.date" class="branch-card-meta">
               <span v-if="branch.short_hash" class="branch-card-hash">{{ branch.short_hash }}</span>
               <span v-if="branch.message" class="branch-card-msg">{{ branch.message }}</span>
               <span v-if="branch.date" class="branch-card-date">{{ formatRelativeTime(branch.date) }}</span>
               <span v-if="branch.author" class="branch-card-author">{{ branch.author }}</span>
             </div>
-            <div class="branch-card-actions">
-              <button
-                v-if="!branch.is_current"
-                class="btn btn-sm"
-                @click="selectBranch(branch.name)"
-              >
-                Checkout
-              </button>
-              <button
-                v-if="!branch.is_current"
-                class="btn btn-sm"
-                @click="gitStore.activeTab = 'log'"
-              >
-                Log
-              </button>
-              <button
-                v-if="branch.is_merged && !branch.is_current"
-                class="btn btn-sm btn-danger"
-              >
-                Delete
-              </button>
+
+            <!-- Expanded content: recent commits -->
+            <div v-if="expandedBranch === branch.name" class="branch-card-expanded-content">
+              <div class="branch-commits-header">Recent commits</div>
+              <div v-if="!gitStore.branchCommits.get(branch.name)" class="branch-commits-loading">
+                Loading...
+              </div>
+              <div v-else-if="gitStore.branchCommits.get(branch.name)!.length === 0" class="branch-commits-empty">
+                No commits
+              </div>
+              <div v-else class="branch-commits-preview">
+                <div
+                  v-for="c in gitStore.branchCommits.get(branch.name)"
+                  :key="c.hash"
+                  class="branch-commit-row"
+                  @click.stop="selectCommit(c.hash)"
+                >
+                  <span class="branch-commit-hash">{{ c.short_hash }}</span>
+                  <span class="branch-commit-msg">{{ c.message }}</span>
+                  <span class="branch-commit-date">{{ formatRelativeTime(c.date) }}</span>
+                </div>
+              </div>
+
+              <!-- Action buttons -->
+              <div class="branch-card-actions">
+                <button class="btn btn-sm btn-view-log" @click.stop="viewBranchLog(branch.name)">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M1.5 1.75V13.5h13.75a.75.75 0 0 1 0 1.5H.75a.75.75 0 0 1-.75-.75V1.75a.75.75 0 0 1 1.5 0zm14.28 2.53-5.25 5.25a.75.75 0 0 1-1.06 0L7 7.06 4.28 9.78a.75.75 0 0 1-1.06-1.06l3.25-3.25a.75.75 0 0 1 1.06 0L10 7.94l4.72-4.72a.75.75 0 1 1 1.06 1.06z"/>
+                  </svg>
+                  View Log
+                </button>
+                <button
+                  v-if="!branch.is_current"
+                  class="btn btn-sm btn-checkout-action"
+                  @click.stop="showCheckoutConfirm = branch.name"
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z"/>
+                  </svg>
+                  Checkout
+                </button>
+                <button
+                  v-if="branch.is_merged && !branch.is_current"
+                  class="btn btn-sm btn-danger"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Checkout confirmation dialog -->
+    <Teleport to="body">
+      <div v-if="showCheckoutConfirm" class="confirm-overlay" @click.self="showCheckoutConfirm = null">
+        <div class="confirm-dialog">
+          <div class="confirm-title">Checkout branch</div>
+          <div class="confirm-text">Switch to <code>{{ showCheckoutConfirm }}</code>?</div>
+          <div class="confirm-warning">Uncommitted changes may be lost</div>
+          <div class="confirm-actions">
+            <button class="btn" @click="showCheckoutConfirm = null">Cancel</button>
+            <button class="btn btn-checkout" @click="confirmCheckout(showCheckoutConfirm!)">Checkout</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Commit diff modal -->
     <div v-if="showCommitDiffModal" class="modal-overlay" @click.self="closeCommitDiffModal">
@@ -2006,12 +2175,233 @@ watch(() => gitStore.status.branch, () => {
   white-space: nowrap;
 }
 
+/* ===== Branch Filter Sidebar (Log tab) ===== */
+
+.branch-filter-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  background: #161b22;
+  border-right: 1px solid #30363d;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #30363d;
+  flex-shrink: 0;
+}
+
+.sidebar-search {
+  width: 100%;
+  padding: 6px 12px;
+  background: #0d1117;
+  border: none;
+  border-bottom: 1px solid #30363d;
+  color: #f0f6fc;
+  font-size: 12px;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.sidebar-search::placeholder {
+  color: #484f58;
+}
+
+.sidebar-search:focus {
+  background: #161b22;
+}
+
+.sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #c9d1d9;
+  cursor: pointer;
+  transition: background 0.1s;
+  overflow: hidden;
+}
+
+.sidebar-item:hover {
+  background: #1c2128;
+}
+
+.sidebar-item-active {
+  background: rgba(88, 166, 255, 0.1);
+  color: #58a6ff;
+  border-left: 2px solid #58a6ff;
+  padding-left: 10px;
+}
+
+.sidebar-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.sidebar-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-green { background: #3fb950; }
+.dot-purple { background: #bc8cff; }
+.dot-blue { background: #58a6ff; }
+
+.sidebar-badge {
+  font-size: 9px;
+  font-weight: 700;
+  background: rgba(63, 185, 80, 0.2);
+  color: #3fb950;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+/* Viewing indicator (top bar) */
+.viewing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  background: rgba(88, 166, 255, 0.1);
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  border-radius: 12px;
+  font-size: 12px;
+  color: #58a6ff;
+  white-space: nowrap;
+}
+
+.viewing-clear {
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.viewing-clear:hover {
+  opacity: 1;
+}
+
+/* Log branch banner */
+.log-branch-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(88, 166, 255, 0.06);
+  border-bottom: 1px solid rgba(88, 166, 255, 0.15);
+  color: #58a6ff;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.log-branch-banner strong {
+  font-weight: 600;
+}
+
+.log-banner-clear {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: #58a6ff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+  padding: 0 4px;
+  transition: opacity 0.15s;
+}
+
+.log-banner-clear:hover {
+  opacity: 1;
+}
+
 /* ===== Branches Layout ===== */
 
 .branches-layout {
   height: 100%;
   overflow-y: auto;
   padding: 16px;
+}
+
+.branches-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.branches-search {
+  flex: 1;
+  height: 32px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 0 12px;
+  color: #f0f6fc;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.branches-search::placeholder {
+  color: #484f58;
+}
+
+.branches-search:focus {
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.15);
+}
+
+.branches-filter-group {
+  display: flex;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.branches-filter-btn {
+  padding: 5px 12px;
+  background: #21262d;
+  border: none;
+  border-right: 1px solid #30363d;
+  color: #8b949e;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.branches-filter-btn:last-child {
+  border-right: none;
+}
+
+.branches-filter-btn:hover {
+  color: #f0f6fc;
+}
+
+.branches-filter-active {
+  background: rgba(88, 166, 255, 0.15);
+  color: #58a6ff;
 }
 
 .branches-list {
@@ -2033,6 +2423,11 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .branch-card-current {
+  border-color: #3fb950;
+  border-left: 3px solid #3fb950;
+}
+
+.branch-card-expanded {
   border-color: #58a6ff;
 }
 
@@ -2041,15 +2436,33 @@ watch(() => gitStore.status.branch, () => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  cursor: pointer;
 }
 
-.branch-card-name {
+.branch-card-left {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+
+.branch-expand-chevron {
+  color: #484f58;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.branch-expand-chevron-open {
+  transform: rotate(90deg);
+}
+
+.branch-card-name-text {
   font-size: 14px;
   font-weight: 600;
   color: #f0f6fc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .branch-card-icon {
@@ -2075,8 +2488,8 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .badge-current {
-  background: rgba(88, 166, 255, 0.15);
-  color: #58a6ff;
+  background: rgba(63, 185, 80, 0.15);
+  color: #3fb950;
 }
 
 .badge-merged {
@@ -2125,10 +2538,174 @@ watch(() => gitStore.status.branch, () => {
   flex-shrink: 0;
 }
 
+/* Branch card expanded content */
+.branch-card-expanded-content {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #21262d;
+}
+
+.branch-commits-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.branch-commits-loading,
+.branch-commits-empty {
+  font-size: 12px;
+  color: #484f58;
+  padding: 8px 0;
+}
+
+.branch-commits-loading {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.branch-commits-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.branch-commit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.branch-commit-row:hover {
+  background: #1c2128;
+}
+
+.branch-commit-hash {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #58a6ff;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.branch-commit-msg {
+  flex: 1;
+  font-size: 12px;
+  color: #c9d1d9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.branch-commit-date {
+  font-size: 11px;
+  color: #484f58;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .branch-card-actions {
   display: flex;
   gap: 6px;
   margin-top: 10px;
+}
+
+.btn-view-log {
+  background: rgba(88, 166, 255, 0.1);
+  border-color: rgba(88, 166, 255, 0.3);
+  color: #58a6ff;
+}
+
+.btn-view-log:hover:not(:disabled) {
+  background: rgba(88, 166, 255, 0.2);
+}
+
+.btn-checkout-action {
+  background: rgba(63, 185, 80, 0.1);
+  border-color: rgba(63, 185, 80, 0.3);
+  color: #3fb950;
+}
+
+.btn-checkout-action:hover:not(:disabled) {
+  background: rgba(63, 185, 80, 0.2);
+}
+
+/* ===== Checkout Confirm Dialog ===== */
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+}
+
+.confirm-dialog {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 24px;
+  width: 380px;
+  max-width: 90vw;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+
+.confirm-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f0f6fc;
+  margin-bottom: 12px;
+}
+
+.confirm-text {
+  font-size: 14px;
+  color: #c9d1d9;
+  margin-bottom: 8px;
+}
+
+.confirm-text code {
+  font-family: var(--font-mono);
+  background: rgba(88, 166, 255, 0.1);
+  color: #58a6ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.confirm-warning {
+  font-size: 12px;
+  color: #d29922;
+  margin-bottom: 20px;
+  padding: 8px 10px;
+  background: rgba(210, 153, 34, 0.1);
+  border-radius: 6px;
+  border-left: 2px solid #d29922;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn-checkout {
+  background: rgba(63, 185, 80, 0.15);
+  border-color: #3fb950;
+  color: #3fb950;
+  font-weight: 600;
+}
+
+.btn-checkout:hover:not(:disabled) {
+  background: rgba(63, 185, 80, 0.25);
 }
 
 /* ===== Modal ===== */

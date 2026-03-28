@@ -24,6 +24,10 @@ export const useGitStore = defineStore('git', () => {
   const diff = ref('')
   const selectedFile = ref<string | null>(null)
 
+  // Branch browsing state
+  const viewingBranch = ref<string>('') // empty = all branches
+  const branchCommits = ref<Map<string, CommitMeta[]>>(new Map())
+
   // New state for tabs and commit details
   const activeTab = ref<'changes' | 'log' | 'branches'>('changes')
   const selectedCommit = ref<CommitDetail | null>(null)
@@ -229,7 +233,11 @@ export const useGitStore = defineStore('git', () => {
     if (metadataLoading.value) return
     metadataLoading.value = true
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/log/metadata?offset=${offset}&limit=${limit}`)
+      let url = `${projectApiUrl.value}/git/log/metadata?offset=${offset}&limit=${limit}`
+      if (viewingBranch.value) {
+        url += `&branch=${encodeURIComponent(viewingBranch.value)}`
+      }
+      const res = await fetch(url)
       if (!res.ok) throw new Error(await res.text())
       const data: CommitMeta[] = await res.json()
       const map = new Map(metadataMap.value)
@@ -388,12 +396,36 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // Set viewing branch and refetch metadata
+  function setViewingBranch(branch: string) {
+    viewingBranch.value = branch
+    metadataMap.value = new Map()
+    metadataLoaded.value = 0
+    fetchMetadata(0, 50)
+  }
+
+  // Fetch recent commits for a specific branch (for card expansion)
+  async function fetchBranchCommits(branch: string) {
+    try {
+      const res = await fetch(`${projectApiUrl.value}/git/branches/${encodeURIComponent(branch)}/commits?limit=5`)
+      if (!res.ok) throw new Error(await res.text())
+      const data: CommitMeta[] = await res.json()
+      const map = new Map(branchCommits.value)
+      map.set(branch, data)
+      branchCommits.value = map
+    } catch (e) {
+      error.value = (e as Error).message
+    }
+  }
+
   return {
     status,
     branches,
     log,
     diff,
     selectedFile,
+    viewingBranch,
+    branchCommits,
     activeTab,
     selectedCommit,
     commitMessage,
@@ -430,5 +462,7 @@ export const useGitStore = defineStore('git', () => {
     checkout,
     pull,
     push,
+    setViewingBranch,
+    fetchBranchCommits,
   }
 })
