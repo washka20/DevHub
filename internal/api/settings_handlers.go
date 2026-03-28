@@ -15,9 +15,33 @@ type SettingsHandlers struct {
 	Cfg *config.Config
 }
 
+type settingsResponse struct {
+	Port           int                      `json:"port"`
+	ProjectsDir    string                   `json:"projects_dir"`
+	DefaultProject string                   `json:"default_project"`
+	Terminal       terminalSettingsResponse  `json:"terminal"`
+}
+
+type terminalSettingsResponse struct {
+	MaxSessions int    `json:"max_sessions"`
+	Shell       string `json:"shell"`
+}
+
+func settingsFromConfig(cfg *config.Config) settingsResponse {
+	return settingsResponse{
+		Port:           cfg.Port,
+		ProjectsDir:    cfg.ProjectsDir,
+		DefaultProject: cfg.DefaultProject,
+		Terminal: terminalSettingsResponse{
+			MaxSessions: cfg.Terminal.MaxSessions,
+			Shell:       cfg.Terminal.Shell,
+		},
+	}
+}
+
 // GetSettings handles GET /api/settings.
 func (sh *SettingsHandlers) GetSettings(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, sh.Cfg)
+	jsonResponse(w, settingsFromConfig(sh.Cfg))
 }
 
 type updateTerminalRequest struct {
@@ -64,7 +88,7 @@ func (sh *SettingsHandlers) UpdateSettings(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	jsonResponse(w, sh.Cfg)
+	jsonResponse(w, settingsFromConfig(sh.Cfg))
 }
 
 // ListShells handles GET /api/settings/shells.
