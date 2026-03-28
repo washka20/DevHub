@@ -62,7 +62,7 @@ function onScroll() {
 }
 
 .terminal {
-  background: #0d1117;
+  background: var(--bg-primary);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px 16px;
@@ -72,12 +72,12 @@ function onScroll() {
   min-height: 120px;
   max-height: 500px;
   overflow-y: auto;
-  color: #c9d1d9;
+  color: var(--text-primary);
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .terminal-placeholder {
-  color: #484f58;
+  color: var(--text-secondary);
   font-style: italic;
 }
 
@@ -87,7 +87,7 @@ function onScroll() {
 }
 
 .running {
-  color: #3fb950;
+  color: var(--accent-green);
 }
 
 .spinner {

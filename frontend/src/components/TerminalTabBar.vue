@@ -63,7 +63,7 @@ async function handleNewTab() {
 .tab-bar {
   display: flex;
   align-items: center;
-  background: #161b22;
+  background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
   padding: 0 8px;
   height: 36px;
@@ -93,9 +93,9 @@ async function handleNewTab() {
 }
 
 .tab.active {
-  background: #0d1117;
+  background: var(--bg-primary);
   border: 1px solid var(--border);
-  border-bottom: 1px solid #0d1117;
+  border-bottom: 1px solid var(--bg-primary);
   margin-bottom: -1px;
   color: var(--text-primary);
 }

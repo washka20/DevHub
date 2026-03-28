@@ -77,7 +77,7 @@ const dockerRunning = computed(() =>
   position: fixed;
   top: 0;
   left: 0;
-  background: linear-gradient(180deg, var(--bg-secondary) 0%, #12161c 100%);
+  background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;

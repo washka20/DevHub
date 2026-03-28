@@ -165,7 +165,7 @@ onUnmounted(() => {
 
 .feature-badge[title="Git"] {
   background: rgba(248, 129, 102, 0.2);
-  color: #f78166;
+  color: var(--accent-orange);
 }
 
 .feature-badge[title="Makefile"] {

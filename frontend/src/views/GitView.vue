@@ -1133,8 +1133,8 @@ watch(() => gitStore.status.branch, () => {
   justify-content: space-between;
   gap: 12px;
   padding: 10px 16px;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -1147,13 +1147,13 @@ watch(() => gitStore.status.branch, () => {
 .top-bar-title {
   font-size: 14px;
   font-weight: 600;
-  color: #f0f6fc;
+  color: var(--text-primary);
   white-space: nowrap;
 }
 
 .status-text {
   font-size: 13px;
-  color: #8b949e;
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -1172,21 +1172,21 @@ watch(() => gitStore.status.branch, () => {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: #21262d;
-  border: 1px solid #30363d;
+  background: var(--border);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: #f0f6fc;
+  color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
   transition: border-color 0.15s;
 }
 
 .branch-button:hover {
-  border-color: #58a6ff;
+  border-color: var(--accent-blue);
 }
 
 .branch-icon {
-  color: #8b949e;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -1199,7 +1199,7 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .chevron {
-  color: #8b949e;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -1210,8 +1210,8 @@ watch(() => gitStore.status.branch, () => {
   min-width: 220px;
   max-height: 300px;
   overflow-y: auto;
-  background: #161b22;
-  border: 1px solid #30363d;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   z-index: 100;
@@ -1221,8 +1221,8 @@ watch(() => gitStore.status.branch, () => {
   padding: 8px 12px;
   font-size: 11px;
   font-weight: 600;
-  color: #8b949e;
-  border-bottom: 1px solid #30363d;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -1235,14 +1235,14 @@ watch(() => gitStore.status.branch, () => {
   padding: 8px 12px;
   background: transparent;
   border: none;
-  color: #f0f6fc;
+  color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
   text-align: left;
 }
 
 .branch-option:hover {
-  background: #21262d;
+  background: var(--border);
 }
 
 .branch-active {
@@ -1250,7 +1250,7 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .check-icon {
-  color: #58a6ff;
+  color: var(--accent-blue);
   flex-shrink: 0;
 }
 
@@ -1264,8 +1264,8 @@ watch(() => gitStore.status.branch, () => {
 .sub-tabs {
   display: flex;
   gap: 0;
-  background: #0d1117;
-  border-bottom: 1px solid #30363d;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   padding: 0 16px;
 }
@@ -1278,7 +1278,7 @@ watch(() => gitStore.status.branch, () => {
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  color: #8b949e;
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -1287,17 +1287,17 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .sub-tab:hover {
-  color: #f0f6fc;
+  color: var(--text-primary);
 }
 
 .sub-tab-active {
-  color: #f0f6fc;
-  border-bottom-color: #f78166;
+  color: var(--text-primary);
+  border-bottom-color: var(--accent-orange);
 }
 
 .tab-count {
-  background: #30363d;
-  color: #f0f6fc;
+  background: var(--border);
+  color: var(--text-primary);
   padding: 0 6px;
   border-radius: 10px;
   font-size: 11px;
@@ -1325,14 +1325,14 @@ watch(() => gitStore.status.branch, () => {
 .files-panel {
   grid-row: 1;
   grid-column: 1;
-  background: #161b22;
+  background: var(--bg-secondary);
   overflow-y: auto;
 }
 
 .resize-handle {
   grid-row: 1;
   grid-column: 2;
-  background: #30363d;
+  background: var(--border);
   cursor: col-resize;
   transition: background 0.15s;
   position: relative;
@@ -1353,7 +1353,7 @@ watch(() => gitStore.status.branch, () => {
   grid-column: 3;
   display: flex;
   flex-direction: column;
-  background: #0d1117;
+  background: var(--bg-primary);
   overflow: hidden;
   min-width: 0;
 }
@@ -1365,15 +1365,15 @@ watch(() => gitStore.status.branch, () => {
   align-items: center;
   gap: 10px;
   padding: 8px 16px;
-  background: #161b22;
-  border-top: 1px solid #30363d;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .btn-stage {
   padding: 4px 12px;
-  background: #238636;
-  border: 1px solid #2ea043;
+  background: var(--accent-green);
+  border: 1px solid var(--accent-green);
   border-radius: 6px;
   color: #fff;
   font-size: 12px;
@@ -1382,12 +1382,12 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .btn-stage:hover {
-  background: #2ea043;
+  background: var(--accent-green);
 }
 
 /* File groups */
 .file-group {
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--border);
 }
 
 .file-group:last-child {
@@ -1401,10 +1401,10 @@ watch(() => gitStore.status.branch, () => {
   padding: 8px 12px;
   font-size: 11px;
   font-weight: 700;
-  color: #8b949e;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  background: #0d1117;
+  background: var(--bg-primary);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -1413,7 +1413,7 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .file-group-header:hover {
-  background: #161b22;
+  background: var(--bg-secondary);
 }
 
 .file-group-header-left {
@@ -1440,19 +1440,19 @@ watch(() => gitStore.status.branch, () => {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 4px;
-  color: #8b949e;
+  color: var(--text-secondary);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 
 .file-group-action:hover {
-  background: #21262d;
-  color: #f0f6fc;
+  background: var(--border);
+  color: var(--text-primary);
 }
 
 .file-count {
-  background: #30363d;
-  color: #f0f6fc;
+  background: var(--border);
+  color: var(--text-primary);
   padding: 0 6px;
   border-radius: 10px;
   font-size: 11px;
@@ -1470,19 +1470,19 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .file-item:hover {
-  background: #1c2128;
+  background: var(--bg-tertiary);
 }
 
 .file-active {
-  background: #1c2128;
-  border-left: 2px solid #58a6ff;
+  background: var(--bg-tertiary);
+  border-left: 2px solid var(--accent-blue);
   padding-left: 10px;
 }
 
 .file-checkbox {
   width: 14px;
   height: 14px;
-  accent-color: #58a6ff;
+  accent-color: var(--accent-blue);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -1512,14 +1512,14 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .file-name {
-  color: #f0f6fc;
+  color: var(--text-primary);
   font-weight: 500;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .file-dir {
-  color: #484f58;
+  color: var(--text-secondary);
   font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
@@ -1531,15 +1531,15 @@ watch(() => gitStore.status.branch, () => {
 /* Diff viewer */
 .diff-header {
   padding: 8px 16px;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .diff-filename {
   font-family: var(--font-mono);
   font-size: 13px;
-  color: #f0f6fc;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -1564,7 +1564,7 @@ watch(() => gitStore.status.branch, () => {
   min-width: 50px;
   text-align: right;
   padding-right: 8px;
-  color: #484f58;
+  color: var(--text-secondary);
   user-select: none;
   flex-shrink: 0;
   font-size: 12px;
@@ -1589,36 +1589,36 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .diff-line-add {
-  background: #1b3a2a;
-  color: #3fb950;
+  background: rgba(63, 185, 80, 0.15);
+  color: var(--accent-green);
 }
 
 .diff-line-add .diff-line-no {
   background: rgba(63, 185, 80, 0.1);
-  color: #3fb950;
+  color: var(--accent-green);
 }
 
 .diff-line-add .diff-line-prefix {
-  color: #3fb950;
+  color: var(--accent-green);
 }
 
 .diff-line-remove {
-  background: #3d1e20;
-  color: #f85149;
+  background: rgba(248, 81, 73, 0.15);
+  color: var(--accent-red);
 }
 
 .diff-line-remove .diff-line-no {
   background: rgba(248, 81, 73, 0.1);
-  color: #f85149;
+  color: var(--accent-red);
 }
 
 .diff-line-remove .diff-line-prefix {
-  color: #f85149;
+  color: var(--accent-red);
 }
 
 .diff-line-header {
   background: rgba(88, 166, 255, 0.1);
-  color: #58a6ff;
+  color: var(--accent-blue);
   font-weight: 600;
   padding: 4px 0;
 }
@@ -1628,13 +1628,13 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .diff-line-context {
-  color: #8b949e;
+  color: var(--text-secondary);
 }
 
 .diff-loading {
   padding: 24px;
   text-align: center;
-  color: #8b949e;
+  color: var(--text-secondary);
 }
 
 .diff-placeholder {
@@ -1644,7 +1644,7 @@ watch(() => gitStore.status.branch, () => {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: #484f58;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
@@ -1654,19 +1654,19 @@ watch(() => gitStore.status.branch, () => {
 
 .placeholder-title {
   font-size: 14px;
-  color: #484f58;
+  color: var(--text-secondary);
 }
 
 .placeholder-summary {
   font-size: 12px;
-  color: #30363d;
+  color: var(--border);
   font-family: var(--font-mono);
 }
 
 /* Commit bar */
 .commit-bar-staged {
   font-size: 12px;
-  color: #8b949e;
+  color: var(--text-secondary);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -1677,17 +1677,17 @@ watch(() => gitStore.status.branch, () => {
   justify-content: center;
   width: 32px;
   height: 32px;
-  background: #21262d;
-  border: 1px solid #30363d;
+  background: var(--border);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: #f0f6fc;
+  color: var(--text-primary);
   cursor: pointer;
   flex-shrink: 0;
   transition: border-color 0.15s, background 0.15s;
 }
 
 .btn-generate:hover:not(:disabled) {
-  border-color: #58a6ff;
+  border-color: var(--accent-blue);
 }
 
 .btn-generate:disabled {
@@ -1712,23 +1712,23 @@ watch(() => gitStore.status.branch, () => {
 .commit-bar .commit-input {
   flex: 1;
   height: 32px;
-  background: #0d1117;
-  border: 1px solid #30363d;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0 12px;
-  color: #f0f6fc;
+  color: var(--text-primary);
   font-size: 13px;
   min-width: 0;
 }
 
 .commit-bar .commit-input:focus {
-  border-color: #58a6ff;
+  border-color: var(--accent-blue);
   box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
   outline: none;
 }
 
 .commit-bar .commit-input::placeholder {
-  color: #484f58;
+  color: var(--text-secondary);
 }
 
 /* Buttons */
@@ -1737,10 +1737,10 @@ watch(() => gitStore.status.branch, () => {
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
-  background: #21262d;
-  border: 1px solid #30363d;
+  background: var(--border);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: #f0f6fc;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -1749,7 +1749,7 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .btn:hover:not(:disabled) {
-  background: #30363d;
+  background: var(--border);
 }
 
 .btn:disabled {
@@ -1769,8 +1769,8 @@ watch(() => gitStore.status.branch, () => {
 .btn-commit {
   padding: 6px 20px;
   background: rgba(63, 185, 80, 0.15);
-  border: 1px solid #3fb950;
-  color: #3fb950;
+  border: 1px solid var(--accent-green);
+  color: var(--accent-green);
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -1785,8 +1785,8 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .btn-danger {
-  color: #f85149;
-  border-color: #f85149;
+  color: var(--accent-red);
+  border-color: var(--accent-red);
   background: rgba(248, 81, 73, 0.1);
 }
 
@@ -1825,12 +1825,12 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .log-row:hover {
-  background: #1c2128;
+  background: var(--bg-tertiary);
 }
 
 .log-row-selected {
   background: rgba(31, 111, 235, 0.08);
-  border-bottom-color: #30363d;
+  border-bottom-color: var(--border);
 }
 
 .log-commit-col {
@@ -1845,7 +1845,7 @@ watch(() => gitStore.status.branch, () => {
 .log-hash {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: #58a6ff;
+  color: var(--accent-blue);
   flex-shrink: 0;
   font-weight: 500;
 }
@@ -1855,7 +1855,7 @@ watch(() => gitStore.status.branch, () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #f0f6fc;
+  color: var(--text-primary);
   font-size: 13px;
 }
 
@@ -1869,7 +1869,7 @@ watch(() => gitStore.status.branch, () => {
 
 .log-author {
   font-size: 12px;
-  color: #8b949e;
+  color: var(--text-secondary);
   white-space: nowrap;
   max-width: 120px;
   overflow: hidden;
@@ -1878,7 +1878,7 @@ watch(() => gitStore.status.branch, () => {
 
 .log-time {
   font-size: 12px;
-  color: #484f58;
+  color: var(--text-secondary);
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -1889,7 +1889,7 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .skeleton-text {
-  color: #30363d;
+  color: var(--border);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -1912,25 +1912,25 @@ watch(() => gitStore.status.branch, () => {
 
 .ref-branch {
   background: rgba(88, 166, 255, 0.15);
-  color: #58a6ff;
+  color: var(--accent-blue);
   border: 1px solid rgba(88, 166, 255, 0.3);
 }
 
 .ref-tag {
   background: rgba(63, 185, 80, 0.15);
-  color: #3fb950;
+  color: var(--accent-green);
   border: 1px solid rgba(63, 185, 80, 0.3);
 }
 
 .ref-hotfix {
   background: rgba(248, 81, 73, 0.15);
-  color: #f85149;
+  color: var(--accent-red);
   border: 1px solid rgba(248, 81, 73, 0.3);
 }
 
 .ref-head {
   background: rgba(188, 140, 255, 0.15);
-  color: #bc8cff;
+  color: var(--accent-purple);
   border: 1px solid rgba(188, 140, 255, 0.3);
 }
 
@@ -1938,8 +1938,8 @@ watch(() => gitStore.status.branch, () => {
 .commit-detail-panel {
   width: 350px;
   flex-shrink: 0;
-  background: #161b22;
-  border-left: 1px solid #30363d;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1950,14 +1950,14 @@ watch(() => gitStore.status.branch, () => {
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .commit-detail-title {
   font-size: 13px;
   font-weight: 700;
-  color: #8b949e;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -1970,14 +1970,14 @@ watch(() => gitStore.status.branch, () => {
   height: 24px;
   background: transparent;
   border: none;
-  color: #8b949e;
+  color: var(--text-secondary);
   cursor: pointer;
   border-radius: 4px;
 }
 
 .commit-detail-close:hover {
-  background: #21262d;
-  color: #f0f6fc;
+  background: var(--border);
+  color: var(--text-primary);
 }
 
 .commit-detail-body {
@@ -1989,27 +1989,27 @@ watch(() => gitStore.status.branch, () => {
 .detail-message {
   font-size: 15px;
   font-weight: 600;
-  color: #f0f6fc;
+  color: var(--text-primary);
   line-height: 1.4;
   margin-bottom: 8px;
 }
 
 .detail-body-text {
   font-size: 13px;
-  color: #8b949e;
+  color: var(--text-secondary);
   white-space: pre-wrap;
   line-height: 1.5;
   margin-bottom: 12px;
   padding: 8px 10px;
   background: rgba(0,0,0,0.2);
   border-radius: 6px;
-  border-left: 2px solid #30363d;
+  border-left: 2px solid var(--border);
 }
 
 .detail-meta {
   padding: 10px 0;
   margin-bottom: 4px;
-  border-bottom: 1px solid #21262d;
+  border-bottom: 1px solid var(--border);
 }
 
 .detail-meta-row {
@@ -2022,7 +2022,7 @@ watch(() => gitStore.status.branch, () => {
 .detail-hash {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: #58a6ff;
+  color: var(--accent-blue);
   background: rgba(88,166,255,0.1);
   padding: 2px 8px;
   border-radius: 4px;
@@ -2036,7 +2036,7 @@ watch(() => gitStore.status.branch, () => {
 
 .detail-date {
   font-size: 12px;
-  color: #8b949e;
+  color: var(--text-secondary);
 }
 
 .detail-author-row {
@@ -2048,12 +2048,12 @@ watch(() => gitStore.status.branch, () => {
 .detail-author-name {
   font-size: 13px;
   font-weight: 600;
-  color: #f0f6fc;
+  color: var(--text-primary);
 }
 
 .detail-author-email {
   font-size: 11px;
-  color: #8b949e;
+  color: var(--text-secondary);
 }
 
 .detail-stats {
@@ -2062,7 +2062,7 @@ watch(() => gitStore.status.branch, () => {
 
 .detail-stats-summary {
   font-weight: 400;
-  color: #6e7681;
+  color: var(--text-secondary);
   margin-left: 8px;
   font-size: 10px;
   text-transform: none;
@@ -2081,13 +2081,13 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .detail-stat-line:hover {
-  background: #1c2128;
+  background: var(--bg-tertiary);
 }
 
 .detail-stat-file {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: #c9d1d9;
+  color: var(--text-primary);
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -2103,14 +2103,14 @@ watch(() => gitStore.status.branch, () => {
 
 .stat-add {
   height: 8px;
-  background: #3fb950;
+  background: var(--accent-green);
   border-radius: 2px 0 0 2px;
   min-width: 0;
 }
 
 .stat-del {
   height: 8px;
-  background: #f85149;
+  background: var(--accent-red);
   border-radius: 0 2px 2px 0;
   min-width: 0;
 }
@@ -2123,18 +2123,18 @@ watch(() => gitStore.status.branch, () => {
   text-align: right;
 }
 
-.stat-num-add { color: #3fb950; }
-.stat-num-del { color: #f85149; margin-left: 4px; }
+.stat-num-add { color: var(--accent-green); }
+.stat-num-del { color: var(--accent-red); margin-left: 4px; }
 
 .detail-files-header {
   font-size: 11px;
   font-weight: 700;
-  color: #8b949e;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   padding: 8px 0;
   margin-top: 8px;
-  border-top: 1px solid #30363d;
+  border-top: 1px solid var(--border);
 }
 
 .detail-file-item {
@@ -2150,7 +2150,7 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .detail-file-item:hover {
-  background: #1c2128;
+  background: var(--bg-tertiary);
 }
 
 .detail-file-status {
@@ -2169,7 +2169,7 @@ watch(() => gitStore.status.branch, () => {
 .detail-file-path {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: #f0f6fc;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2180,8 +2180,8 @@ watch(() => gitStore.status.branch, () => {
 .branch-filter-sidebar {
   width: 200px;
   flex-shrink: 0;
-  background: #161b22;
-  border-right: 1px solid #30363d;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2191,31 +2191,31 @@ watch(() => gitStore.status.branch, () => {
   padding: 10px 12px;
   font-size: 11px;
   font-weight: 700;
-  color: #8b949e;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .sidebar-search {
   width: 100%;
   padding: 6px 12px;
-  background: #0d1117;
+  background: var(--bg-primary);
   border: none;
-  border-bottom: 1px solid #30363d;
-  color: #f0f6fc;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
   font-size: 12px;
   outline: none;
   flex-shrink: 0;
 }
 
 .sidebar-search::placeholder {
-  color: #484f58;
+  color: var(--text-secondary);
 }
 
 .sidebar-search:focus {
-  background: #161b22;
+  background: var(--bg-secondary);
 }
 
 .sidebar-list {
@@ -2229,20 +2229,20 @@ watch(() => gitStore.status.branch, () => {
   gap: 8px;
   padding: 6px 12px;
   font-size: 12px;
-  color: #c9d1d9;
+  color: var(--text-primary);
   cursor: pointer;
   transition: background 0.1s;
   overflow: hidden;
 }
 
 .sidebar-item:hover {
-  background: #1c2128;
+  background: var(--bg-tertiary);
 }
 
 .sidebar-item-active {
   background: rgba(88, 166, 255, 0.1);
-  color: #58a6ff;
-  border-left: 2px solid #58a6ff;
+  color: var(--accent-blue);
+  border-left: 2px solid var(--accent-blue);
   padding-left: 10px;
 }
 
@@ -2261,15 +2261,15 @@ watch(() => gitStore.status.branch, () => {
   flex-shrink: 0;
 }
 
-.dot-green { background: #3fb950; }
-.dot-purple { background: #bc8cff; }
-.dot-blue { background: #58a6ff; }
+.dot-green { background: var(--accent-green); }
+.dot-purple { background: var(--accent-purple); }
+.dot-blue { background: var(--accent-blue); }
 
 .sidebar-badge {
   font-size: 9px;
   font-weight: 700;
   background: rgba(63, 185, 80, 0.2);
-  color: #3fb950;
+  color: var(--accent-green);
   padding: 1px 5px;
   border-radius: 3px;
   flex-shrink: 0;
@@ -2285,7 +2285,7 @@ watch(() => gitStore.status.branch, () => {
   border: 1px solid rgba(88, 166, 255, 0.3);
   border-radius: 12px;
   font-size: 12px;
-  color: #58a6ff;
+  color: var(--accent-blue);
   white-space: nowrap;
 }
 
@@ -2309,7 +2309,7 @@ watch(() => gitStore.status.branch, () => {
   padding: 8px 14px;
   background: rgba(88, 166, 255, 0.06);
   border-bottom: 1px solid rgba(88, 166, 255, 0.15);
-  color: #58a6ff;
+  color: var(--accent-blue);
   font-size: 12px;
   flex-shrink: 0;
 }
@@ -2322,7 +2322,7 @@ watch(() => gitStore.status.branch, () => {
   margin-left: auto;
   background: none;
   border: none;
-  color: #58a6ff;
+  color: var(--accent-blue);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -2353,28 +2353,28 @@ watch(() => gitStore.status.branch, () => {
 .branches-search {
   flex: 1;
   height: 32px;
-  background: #0d1117;
-  border: 1px solid #30363d;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0 12px;
-  color: #f0f6fc;
+  color: var(--text-primary);
   font-size: 13px;
   outline: none;
   transition: border-color 0.15s;
 }
 
 .branches-search::placeholder {
-  color: #484f58;
+  color: var(--text-secondary);
 }
 
 .branches-search:focus {
-  border-color: #58a6ff;
+  border-color: var(--accent-blue);
   box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.15);
 }
 
 .branches-filter-group {
   display: flex;
-  border: 1px solid #30363d;
+  border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
   flex-shrink: 0;
@@ -2382,10 +2382,10 @@ watch(() => gitStore.status.branch, () => {
 
 .branches-filter-btn {
   padding: 5px 12px;
-  background: #21262d;
+  background: var(--border);
   border: none;
-  border-right: 1px solid #30363d;
-  color: #8b949e;
+  border-right: 1px solid var(--border);
+  color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
@@ -2396,12 +2396,12 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .branches-filter-btn:hover {
-  color: #f0f6fc;
+  color: var(--text-primary);
 }
 
 .branches-filter-active {
   background: rgba(88, 166, 255, 0.15);
-  color: #58a6ff;
+  color: var(--accent-blue);
 }
 
 .branches-list {
@@ -2411,24 +2411,24 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .branch-card {
-  background: #161b22;
-  border: 1px solid #30363d;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px 16px;
   transition: border-color 0.15s;
 }
 
 .branch-card:hover {
-  border-color: #484f58;
+  border-color: var(--text-secondary);
 }
 
 .branch-card-current {
-  border-color: #3fb950;
-  border-left: 3px solid #3fb950;
+  border-color: var(--accent-green);
+  border-left: 3px solid var(--accent-green);
 }
 
 .branch-card-expanded {
-  border-color: #58a6ff;
+  border-color: var(--accent-blue);
 }
 
 .branch-card-top {
@@ -2447,7 +2447,7 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .branch-expand-chevron {
-  color: #484f58;
+  color: var(--text-secondary);
   flex-shrink: 0;
   transition: transform 0.2s ease;
 }
@@ -2459,14 +2459,14 @@ watch(() => gitStore.status.branch, () => {
 .branch-card-name-text {
   font-size: 14px;
   font-weight: 600;
-  color: #f0f6fc;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .branch-card-icon {
-  color: #8b949e;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -2489,22 +2489,22 @@ watch(() => gitStore.status.branch, () => {
 
 .badge-current {
   background: rgba(63, 185, 80, 0.15);
-  color: #3fb950;
+  color: var(--accent-green);
 }
 
 .badge-merged {
   background: rgba(188, 140, 255, 0.15);
-  color: #bc8cff;
+  color: var(--accent-purple);
 }
 
 .badge-ahead {
   background: rgba(63, 185, 80, 0.15);
-  color: #3fb950;
+  color: var(--accent-green);
 }
 
 .badge-behind {
   background: rgba(210, 153, 34, 0.15);
-  color: #d29922;
+  color: var(--accent-orange);
 }
 
 .branch-card-meta {
@@ -2513,12 +2513,12 @@ watch(() => gitStore.status.branch, () => {
   gap: 10px;
   margin-top: 8px;
   font-size: 12px;
-  color: #8b949e;
+  color: var(--text-secondary);
 }
 
 .branch-card-hash {
   font-family: var(--font-mono);
-  color: #58a6ff;
+  color: var(--accent-blue);
 }
 
 .branch-card-msg {
@@ -2529,12 +2529,12 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .branch-card-date {
-  color: #484f58;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
 .branch-card-author {
-  color: #8b949e;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -2542,13 +2542,13 @@ watch(() => gitStore.status.branch, () => {
 .branch-card-expanded-content {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #21262d;
+  border-top: 1px solid var(--border);
 }
 
 .branch-commits-header {
   font-size: 11px;
   font-weight: 700;
-  color: #8b949e;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 8px;
@@ -2557,7 +2557,7 @@ watch(() => gitStore.status.branch, () => {
 .branch-commits-loading,
 .branch-commits-empty {
   font-size: 12px;
-  color: #484f58;
+  color: var(--text-secondary);
   padding: 8px 0;
 }
 
@@ -2583,13 +2583,13 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .branch-commit-row:hover {
-  background: #1c2128;
+  background: var(--bg-tertiary);
 }
 
 .branch-commit-hash {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: #58a6ff;
+  color: var(--accent-blue);
   flex-shrink: 0;
   font-weight: 500;
 }
@@ -2597,7 +2597,7 @@ watch(() => gitStore.status.branch, () => {
 .branch-commit-msg {
   flex: 1;
   font-size: 12px;
-  color: #c9d1d9;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2606,7 +2606,7 @@ watch(() => gitStore.status.branch, () => {
 
 .branch-commit-date {
   font-size: 11px;
-  color: #484f58;
+  color: var(--text-secondary);
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -2620,7 +2620,7 @@ watch(() => gitStore.status.branch, () => {
 .btn-view-log {
   background: rgba(88, 166, 255, 0.1);
   border-color: rgba(88, 166, 255, 0.3);
-  color: #58a6ff;
+  color: var(--accent-blue);
 }
 
 .btn-view-log:hover:not(:disabled) {
@@ -2630,7 +2630,7 @@ watch(() => gitStore.status.branch, () => {
 .btn-checkout-action {
   background: rgba(63, 185, 80, 0.1);
   border-color: rgba(63, 185, 80, 0.3);
-  color: #3fb950;
+  color: var(--accent-green);
 }
 
 .btn-checkout-action:hover:not(:disabled) {
@@ -2650,8 +2650,8 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .confirm-dialog {
-  background: #161b22;
-  border: 1px solid #30363d;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 24px;
   width: 380px;
@@ -2662,20 +2662,20 @@ watch(() => gitStore.status.branch, () => {
 .confirm-title {
   font-size: 16px;
   font-weight: 600;
-  color: #f0f6fc;
+  color: var(--text-primary);
   margin-bottom: 12px;
 }
 
 .confirm-text {
   font-size: 14px;
-  color: #c9d1d9;
+  color: var(--text-primary);
   margin-bottom: 8px;
 }
 
 .confirm-text code {
   font-family: var(--font-mono);
   background: rgba(88, 166, 255, 0.1);
-  color: #58a6ff;
+  color: var(--accent-blue);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 13px;
@@ -2683,12 +2683,12 @@ watch(() => gitStore.status.branch, () => {
 
 .confirm-warning {
   font-size: 12px;
-  color: #d29922;
+  color: var(--accent-orange);
   margin-bottom: 20px;
   padding: 8px 10px;
   background: rgba(210, 153, 34, 0.1);
   border-radius: 6px;
-  border-left: 2px solid #d29922;
+  border-left: 2px solid var(--accent-orange);
 }
 
 .confirm-actions {
@@ -2699,8 +2699,8 @@ watch(() => gitStore.status.branch, () => {
 
 .btn-checkout {
   background: rgba(63, 185, 80, 0.15);
-  border-color: #3fb950;
-  color: #3fb950;
+  border-color: var(--accent-green);
+  color: var(--accent-green);
   font-weight: 600;
 }
 
@@ -2721,8 +2721,8 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .modal-content {
-  background: #0d1117;
-  border: 1px solid #30363d;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
   border-radius: 12px;
   width: 80vw;
   max-width: 900px;
@@ -2738,15 +2738,15 @@ watch(() => gitStore.status.branch, () => {
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .modal-title {
   font-family: var(--font-mono);
   font-size: 13px;
-  color: #f0f6fc;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -2758,14 +2758,14 @@ watch(() => gitStore.status.branch, () => {
   height: 28px;
   background: transparent;
   border: none;
-  color: #8b949e;
+  color: var(--text-secondary);
   cursor: pointer;
   border-radius: 4px;
 }
 
 .modal-close:hover {
-  background: #21262d;
-  color: #f0f6fc;
+  background: var(--border);
+  color: var(--text-primary);
 }
 
 .modal-body {
@@ -2781,7 +2781,7 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .empty-text {
-  color: #484f58;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
@@ -2794,9 +2794,9 @@ watch(() => gitStore.status.branch, () => {
   transform: translateX(-50%);
   padding: 10px 20px;
   background: rgba(248, 81, 73, 0.15);
-  border: 1px solid #f85149;
+  border: 1px solid var(--accent-red);
   border-radius: 8px;
-  color: #f85149;
+  color: var(--accent-red);
   font-size: 13px;
   cursor: pointer;
   z-index: 200;

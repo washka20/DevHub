@@ -380,12 +380,12 @@ onUnmounted(() => {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--border);
 }
 
 .containers-table td {
   padding: 10px 12px;
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
 
@@ -395,7 +395,7 @@ onUnmounted(() => {
 }
 
 .containers-table tbody tr:hover td {
-  background: #161b22;
+  background: var(--bg-secondary);
 }
 
 .containers-table tbody tr.row-active td {
@@ -423,7 +423,7 @@ onUnmounted(() => {
 }
 
 .dot-running {
-  background: #3fb950;
+  background: var(--accent-green);
   box-shadow: 0 0 6px rgba(63, 185, 80, 0.5);
   animation: pulse-green 2s ease-in-out infinite;
 }
@@ -434,11 +434,11 @@ onUnmounted(() => {
 }
 
 .dot-exited {
-  background: #f85149;
+  background: var(--accent-red);
 }
 
 .dot-restarting {
-  background: #d29922;
+  background: var(--accent-orange);
   box-shadow: 0 0 6px rgba(210, 153, 34, 0.5);
   animation: pulse-orange 1.5s ease-in-out infinite;
 }
@@ -482,17 +482,17 @@ onUnmounted(() => {
 
 .state-running {
   background: rgba(63, 185, 80, 0.15);
-  color: #3fb950;
+  color: var(--accent-green);
 }
 
 .state-exited {
   background: rgba(248, 81, 73, 0.15);
-  color: #f85149;
+  color: var(--accent-red);
 }
 
 .state-restarting {
   background: rgba(210, 153, 34, 0.15);
-  color: #d29922;
+  color: var(--accent-orange);
 }
 
 .cell-actions {
@@ -521,23 +521,23 @@ onUnmounted(() => {
 }
 
 .action-start:hover:not(:disabled) {
-  color: #3fb950;
-  border-color: #3fb950;
+  color: var(--accent-green);
+  border-color: var(--accent-green);
 }
 
 .action-stop:hover:not(:disabled) {
-  color: #f85149;
-  border-color: #f85149;
+  color: var(--accent-red);
+  border-color: var(--accent-red);
 }
 
 .action-restart:hover:not(:disabled) {
-  color: #d29922;
-  border-color: #d29922;
+  color: var(--accent-orange);
+  border-color: var(--accent-orange);
 }
 
 .action-terminal:hover:not(:disabled) {
-  color: #58a6ff;
-  border-color: #58a6ff;
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
 }
 
 /* Docker exec terminal modal */
@@ -554,8 +554,8 @@ onUnmounted(() => {
 .docker-term-modal {
   width: 80vw;
   height: 70vh;
-  background: #0d1117;
-  border: 1px solid #30363d;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
   border-radius: 10px;
   display: flex;
   flex-direction: column;
@@ -568,22 +568,22 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 14px;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .docker-term-title {
   font-size: 13px;
   font-weight: 600;
-  color: #58a6ff;
+  color: var(--accent-blue);
   font-family: var(--font-mono);
 }
 
 .docker-term-close {
   background: none;
   border: none;
-  color: #8b949e;
+  color: var(--text-secondary);
   font-size: 20px;
   cursor: pointer;
   padding: 0 4px;
@@ -591,7 +591,7 @@ onUnmounted(() => {
 }
 
 .docker-term-close:hover {
-  color: #f85149;
+  color: var(--accent-red);
 }
 
 .docker-term-body {
@@ -601,7 +601,7 @@ onUnmounted(() => {
 
 /* Logs panel */
 .logs-section {
-  border: 1px solid #30363d;
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -612,7 +612,7 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 10px 16px;
   background: var(--bg-secondary);
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--border);
 }
 
 .logs-header h2 {
@@ -635,7 +635,7 @@ onUnmounted(() => {
 }
 
 .logs-container {
-  background: #0d1117;
+  background: var(--bg-primary);
   height: 400px;
   overflow-y: auto;
   overflow-x: hidden;

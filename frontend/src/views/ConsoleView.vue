@@ -87,7 +87,7 @@ function handlePaneClose(paneId: string) {
   flex-direction: column;
   height: 100%;
   margin: -16px -32px;
-  background: #0d1117;
+  background: var(--bg-primary);
 }
 
 .terminal-area {
@@ -107,8 +107,8 @@ function handlePaneClose(paneId: string) {
   align-items: center;
   justify-content: space-between;
   padding: 2px 8px;
-  background: #161b22;
-  border-bottom: 1px solid #21262d;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
   font-size: 11px;
   color: var(--text-secondary);
   flex-shrink: 0;
@@ -146,7 +146,7 @@ function handlePaneClose(paneId: string) {
 }
 
 :deep(.splitpanes.default-theme .splitpanes__splitter) {
-  background: #30363d;
+  background: var(--border);
   min-width: 4px;
   min-height: 4px;
 }
