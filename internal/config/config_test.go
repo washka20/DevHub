@@ -92,7 +92,7 @@ func TestExpandHome(t *testing.T) {
 		t.Skip("cannot get home dir")
 	}
 
-	result := expandHome("~/project")
+	result := ExpandHome("~/project")
 	expected := filepath.Join(home, "project")
 	if result != expected {
 		t.Errorf("expected %s, got %s", expected, result)
@@ -100,7 +100,7 @@ func TestExpandHome(t *testing.T) {
 }
 
 func TestExpandHomeNoTilde(t *testing.T) {
-	result := expandHome("/absolute/path")
+	result := ExpandHome("/absolute/path")
 	if result != "/absolute/path" {
 		t.Errorf("expected /absolute/path, got %s", result)
 	}
