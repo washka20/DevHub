@@ -265,8 +265,13 @@ type CommitMeta struct {
 }
 
 // LogMetadata возвращает метаданные коммитов порциями (без графа).
-func (g *GitService) LogMetadata(dir string, limit int, offset int) ([]CommitMeta, error) {
-	args := []string{"log", "--all", "--topo-order",
+// Если branch не пустой, фильтрует по этой ветке вместо --all.
+func (g *GitService) LogMetadata(dir string, limit int, offset int, branch string) ([]CommitMeta, error) {
+	ref := "--all"
+	if branch != "" {
+		ref = branch
+	}
+	args := []string{"log", ref, "--topo-order",
 		"--format=%H|%h|%s|%an|%ar|%D", "-n", strconv.Itoa(limit)}
 	if offset > 0 {
 		args = append(args, "--skip", strconv.Itoa(offset))

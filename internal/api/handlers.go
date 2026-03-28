@@ -298,7 +298,37 @@ func (h *Handlers) GitLogMetadata(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	metas, err := h.Git.LogMetadata(path, limit, offset)
+	branch := r.URL.Query().Get("branch")
+	metas, err := h.Git.LogMetadata(path, limit, offset, branch)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, metas)
+}
+
+// GitBranchCommits handles GET /api/projects/{id}/git/branches/{name:.+}/commits
+func (h *Handlers) GitBranchCommits(w http.ResponseWriter, r *http.Request) {
+	path, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	branchName := mux.Vars(r)["name"]
+	if branchName == "" {
+		jsonError(w, "branch name required", http.StatusBadRequest)
+		return
+	}
+
+	limit := 5
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	metas, err := h.Git.LogMetadata(path, limit, 0, branchName)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
