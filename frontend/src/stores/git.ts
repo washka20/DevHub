@@ -1,8 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProject } from '../composables/useProject'
-import type { GitStatus, Commit, CommitDetail, BranchInfo, GraphData, GraphNodeOut, FullGraphResponse, CommitMeta } from '../types'
-import { computeGraphLayout, type TopoNode, type GraphLayoutNode } from '../lib/graph-layout'
+import type { GitStatus, CommitDetail, BranchInfo, CommitMeta } from '../types'
+
+interface TopoNode {
+  id: string
+  parents: string[]
+}
 
 export const useGitStore = defineStore('git', () => {
   const { projectApiUrl } = useProject()
@@ -170,18 +174,9 @@ export const useGitStore = defineStore('git', () => {
 
   // Topology — загружается один раз
   const topoNodes = ref<TopoNode[]>([])
-  // Graph layout — вычисляется на клиенте
-  const graphLayout = ref<GraphLayoutNode[]>([])
-  const graphMaxWidth = ref(32)
 
-  // Совмещённый вид для рендеринга (topology + layout)
-  const graphNodes = computed<GraphNodeOut[]>(() =>
-    topoNodes.value.map((t, i) => ({
-      id: t.id,
-      parents: t.parents,
-      graph_data: graphLayout.value[i] ?? { column: 0, color: '#58a6ff', lines: [] },
-    }))
-  )
+  // Простой вид для рендеринга
+  const graphNodes = computed(() => topoNodes.value)
 
   // Метаданные — загружаются порциями
   const metadataMap = ref<Map<string, CommitMeta>>(new Map())
@@ -197,11 +192,8 @@ export const useGitStore = defineStore('git', () => {
       const res = await fetch(`${projectApiUrl.value}/git/graph`)
       if (!res.ok) throw new Error(await res.text())
       const data: TopoNode[] = await res.json()
-      topoNodes.value = data
-      // Вычисляем layout на клиенте (свой алгоритм вместо git2graph)
-      const { layout, maxWidth } = computeGraphLayout(topoNodes.value)
-      graphLayout.value = layout
-      graphMaxWidth.value = maxWidth
+      // Нормализуем parents: null → []
+      topoNodes.value = data.map(n => ({ id: n.id, parents: n.parents ?? [] }))
       metadataMap.value = new Map()
       metadataLoaded.value = 0
       // Сразу подгружаем первую порцию
@@ -401,7 +393,6 @@ export const useGitStore = defineStore('git', () => {
     fetchStatus,
     fetchBranches,
     graphNodes,
-    graphMaxWidth,
     metadataMap,
     metadataLoaded,
     metadataLoading,

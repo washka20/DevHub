@@ -159,47 +159,31 @@ const tabCounts = computed(() => ({
   branches: gitStore.branches.length,
 }))
 
-// ----- Virtual scroll + Git graph rendering -----
+// ----- Virtual scroll -----
 
-const GRAPH_COL_WIDTH = 16
-const GRAPH_ROW_HEIGHT = 28
+const ROW_HEIGHT = 28
 const OVERSCAN = 10
 
 const scrollContainerRef = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const containerHeight = ref(600)
 
-// Типы линий от git2graph
-const LINE_BOTTOM_HALF = 0
-const LINE_TOP_HALF = 1
-const LINE_FULL = 2
-const LINE_FORK = 3
-const LINE_MERGE_BACK = 4
-
-// Ширина графа в пикселях
-const graphPixelWidth = computed(() => (gitStore.graphMaxWidth + 1) * GRAPH_COL_WIDTH + 8)
-
-// Virtual scroll range
-const totalHeight = computed(() => gitStore.totalCommits * GRAPH_ROW_HEIGHT)
+const totalHeight = computed(() => gitStore.totalCommits * ROW_HEIGHT)
 
 const visibleRange = computed(() => {
-  const startIdx = Math.max(0, Math.floor(scrollTop.value / GRAPH_ROW_HEIGHT) - OVERSCAN)
+  const startIdx = Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - OVERSCAN)
   const endIdx = Math.min(
     gitStore.totalCommits,
-    Math.ceil((scrollTop.value + containerHeight.value) / GRAPH_ROW_HEIGHT) + OVERSCAN
+    Math.ceil((scrollTop.value + containerHeight.value) / ROW_HEIGHT) + OVERSCAN
   )
   return { startIdx, endIdx }
 })
 
-const offsetY = computed(() => visibleRange.value.startIdx * GRAPH_ROW_HEIGHT)
+const offsetY = computed(() => visibleRange.value.startIdx * ROW_HEIGHT)
 
 const visibleNodes = computed(() =>
   gitStore.graphNodes.slice(visibleRange.value.startIdx, visibleRange.value.endIdx)
 )
-
-// Highlight ancestors state
-const highlightedCommits = ref<Set<string>>(new Set())
-const highlightActive = ref(false)
 
 // ----- Ref badge helpers -----
 
@@ -309,34 +293,6 @@ function onLogScroll(e: Event) {
   if (endIdx > gitStore.metadataLoaded - 20 && !gitStore.metadataLoading) {
     gitStore.fetchMetadata(gitStore.metadataLoaded, 50)
   }
-}
-
-function highlightAncestors(hash: string) {
-  if (highlightActive.value && highlightedCommits.value.has(hash)) {
-    // Повторный клик — снять подсветку
-    highlightedCommits.value = new Set()
-    highlightActive.value = false
-    return
-  }
-
-  const ancestors = new Set<string>()
-  const queue = [hash]
-  // Построить индекс parents
-  const parentIndex = new Map<string, string[]>()
-  for (const n of gitStore.graphNodes) {
-    parentIndex.set(n.id, n.parents)
-  }
-
-  while (queue.length > 0) {
-    const current = queue.pop()!
-    if (ancestors.has(current)) continue
-    ancestors.add(current)
-    const parents = parentIndex.get(current) || []
-    queue.push(...parents)
-  }
-
-  highlightedCommits.value = ancestors
-  highlightActive.value = true
 }
 
 function copyToClipboard(text: string) {
@@ -738,50 +694,9 @@ watch(() => gitStore.status.branch, () => {
                 class="log-row"
                 :class="{
                   'log-row-selected': gitStore.selectedCommit?.hash === node.id,
-                  'log-row-dimmed': highlightActive && !highlightedCommits.has(node.id),
                 }"
                 @click="selectCommit(node.id)"
-                @dblclick="highlightAncestors(node.id)"
               >
-                <div class="log-graph-col" :style="{ width: graphPixelWidth + 'px' }">
-                  <svg :width="graphPixelWidth" :height="GRAPH_ROW_HEIGHT" class="graph-svg">
-                    <template v-if="node.graph_data">
-                      <!-- Lines -->
-                      <template v-for="(line, li) in node.graph_data.lines" :key="li">
-                        <line v-if="line.type === LINE_FULL && line.x1 === line.x2"
-                          :x1="line.x1 * GRAPH_COL_WIDTH + 8" y1="0"
-                          :x2="line.x2 * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT"
-                          :stroke="line.color" stroke-width="2" stroke-linecap="round" />
-                        <line v-else-if="line.type === LINE_BOTTOM_HALF && line.x1 === line.x2"
-                          :x1="line.x1 * GRAPH_COL_WIDTH + 8" :y1="GRAPH_ROW_HEIGHT / 2"
-                          :x2="line.x2 * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT"
-                          :stroke="line.color" stroke-width="2" stroke-linecap="round" />
-                        <line v-else-if="line.type === LINE_TOP_HALF && line.x1 === line.x2"
-                          :x1="line.x1 * GRAPH_COL_WIDTH + 8" y1="0"
-                          :x2="line.x2 * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT / 2"
-                          :stroke="line.color" stroke-width="2" stroke-linecap="round" />
-                        <path v-else-if="line.type === LINE_FORK"
-                          :d="`M ${line.x1 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT / 2} C ${line.x1 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.8} ${line.x2 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.8} ${line.x2 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT}`"
-                          :stroke="line.color" stroke-width="2" fill="none" stroke-linecap="round" />
-                        <path v-else-if="line.type === LINE_MERGE_BACK"
-                          :d="`M ${line.x2 * GRAPH_COL_WIDTH + 8},0 C ${line.x2 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.2} ${line.x1 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.2} ${line.x1 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT / 2}`"
-                          :stroke="line.color" stroke-width="2" fill="none" stroke-linecap="round" />
-                        <line v-else
-                          :x1="line.x1 * GRAPH_COL_WIDTH + 8" y1="0"
-                          :x2="line.x2 * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT"
-                          :stroke="line.color" stroke-width="2" stroke-linecap="round" />
-                      </template>
-                      <!-- Commit node -->
-                      <circle
-                        :cx="node.graph_data.column * GRAPH_COL_WIDTH + 8"
-                        :cy="GRAPH_ROW_HEIGHT / 2"
-                        :r="node.parents.length > 1 ? 5 : 4"
-                        :fill="node.parents.length > 1 ? '#0d1117' : node.graph_data.color"
-                        :stroke="node.graph_data.color"
-                        :stroke-width="node.parents.length > 1 ? 2 : 0" />
-                    </template>
-                  </svg>
-                </div>
                 <div class="log-commit-col">
                   <template v-if="gitStore.getMetadata(node.id)">
                     <span class="log-hash">{{ gitStore.getMetadata(node.id)!.short_hash }}</span>
@@ -1682,18 +1597,6 @@ watch(() => gitStore.status.branch, () => {
   border-bottom-color: #30363d;
 }
 
-.log-graph-col {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  min-width: 32px;
-}
-
-.graph-svg {
-  display: block;
-  overflow: visible;
-}
-
 .log-commit-col {
   flex: 1;
   display: flex;
@@ -1747,11 +1650,6 @@ watch(() => gitStore.status.branch, () => {
 
 .log-virtual-container {
   will-change: transform;
-}
-
-.log-row-dimmed {
-  opacity: 0.2;
-  transition: opacity 0.15s;
 }
 
 .skeleton-text {
