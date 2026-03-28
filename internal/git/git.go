@@ -575,9 +575,17 @@ func (g *GitService) CommitDiff(dir string, hash string, file string) (string, e
 	var out string
 	var err error
 	if file != "" {
-		out, err = g.runner.Run(dir, "git", "show", hash, "--", file)
+		out, err = g.runner.Run(dir, "git", "diff", hash+"~1", hash, "--", file)
 	} else {
-		out, err = g.runner.Run(dir, "git", "show", hash)
+		out, err = g.runner.Run(dir, "git", "diff", hash+"~1", hash)
+	}
+	// Fallback for initial commit (no parent)
+	if err != nil {
+		if file != "" {
+			out, err = g.runner.Run(dir, "git", "show", "--format=", hash, "--", file)
+		} else {
+			out, err = g.runner.Run(dir, "git", "show", "--format=", hash)
+		}
 	}
 	if err != nil {
 		return "", err
