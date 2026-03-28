@@ -31,7 +31,7 @@ export function useProject() {
     const fetches: Promise<void>[] = []
     if (project.is_git) {
       fetches.push(gitStore.fetchStatus())
-      fetches.push(gitStore.fetchLog())
+      fetches.push(gitStore.fetchGraph())
     }
     if (project.has_docker) {
       fetches.push(dockerStore.fetchContainers())

@@ -23,7 +23,7 @@ onMounted(async () => {
     }
     if (event.type === 'git:update') {
       gitStore.fetchStatus()
-      gitStore.fetchLog()
+      gitStore.fetchGraph()
     }
   })
 })
