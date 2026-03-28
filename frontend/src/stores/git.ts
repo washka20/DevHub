@@ -213,14 +213,17 @@ export const useGitStore = defineStore('git', () => {
     if (logLoadingMore.value || !logHasMore.value) return
     logLoadingMore.value = true
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/log?limit=${LOG_PAGE_SIZE}&offset=${logOffset.value}`)
+      // Запрашиваем ВСЕ коммиты с увеличенным limit, чтобы git2graph
+      // посчитал граф для полного набора (иначе линии обрываются на границе страниц)
+      const newLimit = logOffset.value + LOG_PAGE_SIZE
+      const res = await fetch(`${projectApiUrl.value}/git/log?limit=${newLimit}&offset=0`)
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
-      const newCommits = parseCommits(data)
-      commits.value = [...commits.value, ...newCommits]
-      log.value = commits.value
-      logOffset.value += newCommits.length
-      if (newCommits.length < LOG_PAGE_SIZE) logHasMore.value = false
+      const allCommits = parseCommits(data)
+      commits.value = allCommits
+      log.value = allCommits
+      logHasMore.value = allCommits.length >= newLimit
+      logOffset.value = allCommits.length
     } catch (e) {
       error.value = (e as Error).message
     } finally {
