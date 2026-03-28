@@ -1004,7 +1004,7 @@ watch(() => gitStore.status.branch, () => {
             <div v-if="branch.message || branch.date" class="branch-card-meta">
               <span v-if="branch.short_hash" class="branch-card-hash">{{ branch.short_hash }}</span>
               <span v-if="branch.message" class="branch-card-msg">{{ branch.message }}</span>
-              <span v-if="branch.date" class="branch-card-date">{{ formatRelativeTime(branch.date) }}</span>
+              <span v-if="branch.date" class="branch-card-date">{{ branch.date }}</span>
               <span v-if="branch.author" class="branch-card-author">{{ branch.author }}</span>
             </div>
 
@@ -1022,11 +1022,11 @@ watch(() => gitStore.status.branch, () => {
                   v-for="c in gitStore.branchCommits.get(branch.name)"
                   :key="c.hash"
                   class="branch-commit-row"
-                  @click.stop="selectCommit(c.hash)"
+                  @click.stop="gitStore.activeTab = 'log'; selectCommit(c.hash)"
                 >
                   <span class="branch-commit-hash">{{ c.short_hash }}</span>
                   <span class="branch-commit-msg">{{ c.message }}</span>
-                  <span class="branch-commit-date">{{ formatRelativeTime(c.date) }}</span>
+                  <span class="branch-commit-date">{{ c.date }}</span>
                 </div>
               </div>
 
