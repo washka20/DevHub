@@ -243,7 +243,7 @@ function selectTheme(key: string) {
           :key="key"
           class="theme-card"
           :class="{ active: localUI.siteThemeName === key }"
-          @click="localUI.siteThemeName = key as string"
+          @click="localUI.siteThemeName = key as string; settingsStore.updateUI({ siteThemeName: key as string })"
         >
           <div
             class="theme-preview site-theme-preview"
