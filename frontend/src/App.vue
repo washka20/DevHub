@@ -5,8 +5,11 @@ import { useProject } from './composables/useProject'
 import { useWebSocket } from './composables/useWebSocket'
 import { useDockerStore } from './stores/docker'
 import { useGitStore } from './stores/git'
+import { useSettingsStore } from './stores/settings'
 
 const { initProject } = useProject()
+// Initialize settings store early so site theme applies on page load
+useSettingsStore()
 const { connect, onMessage } = useWebSocket()
 const dockerStore = useDockerStore()
 const gitStore = useGitStore()
