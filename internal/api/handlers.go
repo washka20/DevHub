@@ -325,6 +325,13 @@ func (h *Handlers) GitDiff(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Limit diff size to prevent browser freezing on huge files (e.g. SQL dumps)
+	const maxDiffBytes = 512 * 1024 // 512KB
+	if len(diff) > maxDiffBytes {
+		diff = diff[:maxDiffBytes] + "\n\n... (diff truncated, file too large to display)"
+	}
+
 	jsonResponse(w, map[string]string{"diff": diff})
 }
 
@@ -550,6 +557,12 @@ func (h *Handlers) GitCommitDiff(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	const maxDiffBytes = 512 * 1024
+	if len(diff) > maxDiffBytes {
+		diff = diff[:maxDiffBytes] + "\n\n... (diff truncated, file too large to display)"
+	}
+
 	jsonResponse(w, map[string]string{"diff": diff})
 }
 
