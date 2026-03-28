@@ -89,6 +89,26 @@ export interface DiffHunk {
   lines: DiffLine[]
 }
 
+export interface GraphNodeOut {
+  id: string
+  parents: string[]
+  graph_data: GraphData
+}
+
+export interface FullGraphResponse {
+  nodes: GraphNodeOut[]
+  max_width: number
+}
+
+export interface CommitMeta {
+  hash: string
+  short_hash: string
+  message: string
+  author: string
+  date: string
+  refs: string[]
+}
+
 export interface MakeCommand {
   name: string
   description: string

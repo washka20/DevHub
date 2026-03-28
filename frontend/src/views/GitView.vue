@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue'
 import { useGitStore } from '../stores/git'
-import type { DiffLine, GraphData } from '../types'
+import type { DiffLine } from '../types'
 
 const gitStore = useGitStore()
 const selectedFile = ref<string | null>(null)
@@ -155,44 +155,51 @@ function parseDiff(raw: string): DiffLine[] {
 
 const tabCounts = computed(() => ({
   changes: totalChanges.value,
-  log: gitStore.commits.length,
+  log: gitStore.totalCommits,
   branches: gitStore.branches.length,
 }))
 
-// ----- Git graph rendering (git2graph-based) -----
+// ----- Virtual scroll + Git graph rendering -----
 
 const GRAPH_COL_WIDTH = 16
 const GRAPH_ROW_HEIGHT = 28
+const OVERSCAN = 10
 
-// Line types from git2graph GetRows
+const scrollContainerRef = ref<HTMLElement | null>(null)
+const scrollTop = ref(0)
+const containerHeight = ref(600)
+
+// Типы линий от git2graph
 const LINE_BOTTOM_HALF = 0
 const LINE_TOP_HALF = 1
 const LINE_FULL = 2
 const LINE_FORK = 3
 const LINE_MERGE_BACK = 4
 
-// Calculate SVG width from graph_data
-function graphDataWidth(gd: GraphData | undefined): number {
-  if (!gd) return 32
-  let maxCol = gd.column
-  for (const line of gd.lines) {
-    if (line.x1 > maxCol) maxCol = line.x1
-    if (line.x2 > maxCol) maxCol = line.x2
-  }
-  return (maxCol + 1) * GRAPH_COL_WIDTH + 8
-}
+// Ширина графа в пикселях
+const graphPixelWidth = computed(() => (gitStore.graphMaxWidth + 1) * GRAPH_COL_WIDTH + 8)
 
-// Max graph width across all commits for alignment
-const graphMaxWidth = computed(() => {
-  let max = 32
-  for (const c of gitStore.commits) {
-    if (c.graph_data) {
-      const w = graphDataWidth(c.graph_data)
-      if (w > max) max = w
-    }
-  }
-  return max
+// Virtual scroll range
+const totalHeight = computed(() => gitStore.totalCommits * GRAPH_ROW_HEIGHT)
+
+const visibleRange = computed(() => {
+  const startIdx = Math.max(0, Math.floor(scrollTop.value / GRAPH_ROW_HEIGHT) - OVERSCAN)
+  const endIdx = Math.min(
+    gitStore.totalCommits,
+    Math.ceil((scrollTop.value + containerHeight.value) / GRAPH_ROW_HEIGHT) + OVERSCAN
+  )
+  return { startIdx, endIdx }
 })
+
+const offsetY = computed(() => visibleRange.value.startIdx * GRAPH_ROW_HEIGHT)
+
+const visibleNodes = computed(() =>
+  gitStore.graphNodes.slice(visibleRange.value.startIdx, visibleRange.value.endIdx)
+)
+
+// Highlight ancestors state
+const highlightedCommits = ref<Set<string>>(new Set())
+const highlightActive = ref(false)
 
 // ----- Ref badge helpers -----
 
@@ -294,9 +301,42 @@ async function doGenerateCommit() {
 
 function onLogScroll(e: Event) {
   const el = e.target as HTMLElement
-  if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
-    gitStore.fetchMoreLog()
+  scrollTop.value = el.scrollTop
+  containerHeight.value = el.clientHeight
+
+  // Предзагрузка метаданных
+  const { endIdx } = visibleRange.value
+  if (endIdx > gitStore.metadataLoaded - 20 && !gitStore.metadataLoading) {
+    gitStore.fetchMetadata(gitStore.metadataLoaded, 50)
   }
+}
+
+function highlightAncestors(hash: string) {
+  if (highlightActive.value && highlightedCommits.value.has(hash)) {
+    // Повторный клик — снять подсветку
+    highlightedCommits.value = new Set()
+    highlightActive.value = false
+    return
+  }
+
+  const ancestors = new Set<string>()
+  const queue = [hash]
+  // Построить индекс parents
+  const parentIndex = new Map<string, string[]>()
+  for (const n of gitStore.graphNodes) {
+    parentIndex.set(n.id, n.parents)
+  }
+
+  while (queue.length > 0) {
+    const current = queue.pop()!
+    if (ancestors.has(current)) continue
+    ancestors.add(current)
+    const parents = parentIndex.get(current) || []
+    queue.push(...parents)
+  }
+
+  highlightedCommits.value = ancestors
+  highlightActive.value = true
 }
 
 function copyToClipboard(text: string) {
@@ -375,7 +415,7 @@ function onClickOutside() {
 onMounted(() => {
   gitStore.fetchStatus()
   gitStore.fetchBranches()
-  gitStore.fetchLog()
+  gitStore.fetchGraph()
 })
 
 // Refetch when the branch changes
@@ -686,77 +726,81 @@ watch(() => gitStore.status.branch, () => {
 
       <!-- ==================== TAB: LOG ==================== -->
       <div v-if="gitStore.activeTab === 'log'" class="log-layout">
-        <div class="log-main" @scroll="onLogScroll">
-          <div v-if="gitStore.commits.length === 0" class="empty-state">
+        <div class="log-main" @scroll="onLogScroll" ref="scrollContainerRef">
+          <div v-if="gitStore.totalCommits === 0 && !gitStore.loading.log" class="empty-state">
             <span class="empty-text">No commits</span>
           </div>
-          <div v-else class="log-list">
-            <template v-for="(c, idx) in gitStore.commits" :key="c.hash || idx">
-              <div v-if="!c.graph_only" class="log-row"
-                :class="{ 'log-row-selected': gitStore.selectedCommit?.hash === c.hash }"
-                @click="selectCommit(c.hash)">
-                <div class="log-graph-col" :style="{ width: graphMaxWidth + 'px' }">
-                  <svg :width="graphMaxWidth" :height="GRAPH_ROW_HEIGHT" class="graph-svg">
-                    <template v-if="c.graph_data">
+          <div v-else class="log-virtual-container" :style="{ height: totalHeight + 'px', position: 'relative' }">
+            <div :style="{ transform: `translateY(${offsetY}px)` }">
+              <div
+                v-for="node in visibleNodes"
+                :key="node.id"
+                class="log-row"
+                :class="{
+                  'log-row-selected': gitStore.selectedCommit?.hash === node.id,
+                  'log-row-dimmed': highlightActive && !highlightedCommits.has(node.id),
+                }"
+                @click="selectCommit(node.id)"
+                @dblclick="highlightAncestors(node.id)"
+              >
+                <div class="log-graph-col" :style="{ width: graphPixelWidth + 'px' }">
+                  <svg :width="graphPixelWidth" :height="GRAPH_ROW_HEIGHT" class="graph-svg">
+                    <template v-if="node.graph_data">
                       <!-- Lines -->
-                      <template v-for="(line, li) in c.graph_data.lines" :key="li">
-                        <!-- Full vertical line (same column) -->
+                      <template v-for="(line, li) in node.graph_data.lines" :key="li">
                         <line v-if="line.type === LINE_FULL && line.x1 === line.x2"
                           :x1="line.x1 * GRAPH_COL_WIDTH + 8" y1="0"
                           :x2="line.x2 * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT"
                           :stroke="line.color" stroke-width="2" stroke-linecap="round" />
-                        <!-- Bottom half (center to bottom, same column) -->
                         <line v-else-if="line.type === LINE_BOTTOM_HALF && line.x1 === line.x2"
                           :x1="line.x1 * GRAPH_COL_WIDTH + 8" :y1="GRAPH_ROW_HEIGHT / 2"
                           :x2="line.x2 * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT"
                           :stroke="line.color" stroke-width="2" stroke-linecap="round" />
-                        <!-- Top half (top to center, same column) -->
                         <line v-else-if="line.type === LINE_TOP_HALF && line.x1 === line.x2"
                           :x1="line.x1 * GRAPH_COL_WIDTH + 8" y1="0"
                           :x2="line.x2 * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT / 2"
                           :stroke="line.color" stroke-width="2" stroke-linecap="round" />
-                        <!-- Fork (branch splits) — curve from x1 center down to x2 bottom -->
                         <path v-else-if="line.type === LINE_FORK"
                           :d="`M ${line.x1 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT / 2} C ${line.x1 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.8} ${line.x2 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.8} ${line.x2 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT}`"
                           :stroke="line.color" stroke-width="2" fill="none" stroke-linecap="round" />
-                        <!-- MergeBack — curve from x2 top down to x1 center -->
                         <path v-else-if="line.type === LINE_MERGE_BACK"
                           :d="`M ${line.x2 * GRAPH_COL_WIDTH + 8},0 C ${line.x2 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.2} ${line.x1 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.2} ${line.x1 * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT / 2}`"
                           :stroke="line.color" stroke-width="2" fill="none" stroke-linecap="round" />
-                        <!-- Fallback: diagonal for cross-column -->
                         <line v-else
                           :x1="line.x1 * GRAPH_COL_WIDTH + 8" y1="0"
                           :x2="line.x2 * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT"
                           :stroke="line.color" stroke-width="2" stroke-linecap="round" />
                       </template>
-                      <!-- Commit node circle -->
+                      <!-- Commit node -->
                       <circle
-                        :cx="c.graph_data.column * GRAPH_COL_WIDTH + 8"
+                        :cx="node.graph_data.column * GRAPH_COL_WIDTH + 8"
                         :cy="GRAPH_ROW_HEIGHT / 2"
-                        :r="(c.parents?.length ?? 0) > 1 ? 5 : 4"
-                        :fill="(c.parents?.length ?? 0) > 1 ? '#0d1117' : c.graph_data.color"
-                        :stroke="c.graph_data.color"
-                        :stroke-width="(c.parents?.length ?? 0) > 1 ? 2 : 0" />
+                        :r="node.parents.length > 1 ? 5 : 4"
+                        :fill="node.parents.length > 1 ? '#0d1117' : node.graph_data.color"
+                        :stroke="node.graph_data.color"
+                        :stroke-width="node.parents.length > 1 ? 2 : 0" />
                     </template>
                   </svg>
                 </div>
                 <div class="log-commit-col">
-                  <span class="log-hash">{{ c.short_hash }}</span>
-                  <span v-for="r in c.refs" :key="r" class="ref-badge" :class="getRefClass(r)">{{ getRefLabel(r) }}</span>
-                  <span class="log-msg">{{ c.message }}</span>
+                  <template v-if="gitStore.getMetadata(node.id)">
+                    <span class="log-hash">{{ gitStore.getMetadata(node.id)!.short_hash }}</span>
+                    <span v-for="r in (gitStore.getMetadata(node.id)!.refs || [])" :key="r" class="ref-badge" :class="getRefClass(r)">{{ getRefLabel(r) }}</span>
+                    <span class="log-msg">{{ gitStore.getMetadata(node.id)!.message }}</span>
+                  </template>
+                  <template v-else>
+                    <span class="log-hash skeleton-text">-------</span>
+                    <span class="log-msg skeleton-text">Loading...</span>
+                  </template>
                 </div>
                 <div class="log-meta-col">
-                  <span class="log-author">{{ c.author }}</span>
-                  <span class="log-time">{{ c.date }}</span>
+                  <template v-if="gitStore.getMetadata(node.id)">
+                    <span class="log-author">{{ gitStore.getMetadata(node.id)!.author }}</span>
+                    <span class="log-time">{{ gitStore.getMetadata(node.id)!.date }}</span>
+                  </template>
                 </div>
               </div>
-            </template>
-          </div>
-          <div v-if="gitStore.logLoadingMore" class="log-loading-more">
-            Loading more commits...
-          </div>
-          <div v-else-if="!gitStore.logHasMore && gitStore.commits.length > 0" class="log-end">
-            End of history
+            </div>
           </div>
         </div>
 
@@ -1701,16 +1745,23 @@ watch(() => gitStore.status.branch, () => {
 }
 
 
-.log-loading-more,
-.log-end {
-  padding: 12px;
-  text-align: center;
-  font-size: 12px;
-  color: #484f58;
+.log-virtual-container {
+  will-change: transform;
 }
 
-.log-loading-more {
-  color: var(--accent-blue);
+.log-row-dimmed {
+  opacity: 0.2;
+  transition: opacity 0.15s;
+}
+
+.skeleton-text {
+  color: #30363d;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
 }
 
 /* Ref badges */

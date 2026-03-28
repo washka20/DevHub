@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProject } from '../composables/useProject'
-import type { GitStatus, Commit, CommitDetail, BranchInfo, GraphData } from '../types'
+import type { GitStatus, Commit, CommitDetail, BranchInfo, GraphData, GraphNodeOut, FullGraphResponse, CommitMeta } from '../types'
 
 export const useGitStore = defineStore('git', () => {
   const { projectApiUrl } = useProject()
@@ -15,13 +15,11 @@ export const useGitStore = defineStore('git', () => {
     behind: 0,
   })
   const branches = ref<BranchInfo[]>([])
-  const log = ref<Commit[]>([])
   const diff = ref('')
   const selectedFile = ref<string | null>(null)
 
   // New state for tabs and commit details
   const activeTab = ref<'changes' | 'log' | 'branches'>('changes')
-  const commits = ref<Commit[]>([])
   const selectedCommit = ref<CommitDetail | null>(null)
   const commitMessage = ref('')
   const generatingMessage = ref(false)
@@ -168,40 +166,31 @@ export const useGitStore = defineStore('git', () => {
   }
 
   const LOG_PAGE_SIZE = 50
-  const logOffset = ref(0)
-  const logHasMore = ref(true)
-  const logLoadingMore = ref(false)
 
-  function parseCommits(data: unknown[]): Commit[] {
-    return (data ?? []).map((item: unknown) => {
-      const c = item as Record<string, unknown>
-      return {
-      hash: (c.hash ?? '') as string,
-      short_hash: (c.short_hash ?? (typeof c.hash === 'string' ? (c.hash as string).slice(0, 7) : '')) as string,
-      message: (c.message ?? '') as string,
-      author: (c.author ?? '') as string,
-      date: (c.date ?? '') as string,
-      refs: Array.isArray(c.refs) ? c.refs as string[] : [],
-      parents: Array.isArray(c.parents) ? c.parents as string[] : [],
-      graph: typeof c.graph === 'string' ? c.graph as string : '',
-      graph_only: !!c.graph_only,
-      graph_data: c.graph_data as GraphData | undefined,
-    }})
-  }
+  // Граф — загружается один раз
+  const graphNodes = ref<GraphNodeOut[]>([])
+  const graphMaxWidth = ref(32)
 
-  async function fetchLog() {
+  // Метаданные — загружаются порциями
+  const metadataMap = ref<Map<string, CommitMeta>>(new Map())
+  const metadataLoaded = ref(0)
+  const metadataLoading = ref(false)
+
+  const totalCommits = computed(() => graphNodes.value.length)
+
+  async function fetchGraph() {
     loading.value.log = true
-    logOffset.value = 0
-    logHasMore.value = true
+    error.value = null
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/log?limit=${LOG_PAGE_SIZE}&offset=0`)
+      const res = await fetch(`${projectApiUrl.value}/git/graph`)
       if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
-      const rawCommits = parseCommits(data)
-      log.value = rawCommits
-      commits.value = rawCommits
-      logOffset.value = rawCommits.length
-      logHasMore.value = rawCommits.length >= LOG_PAGE_SIZE
+      const data: FullGraphResponse = await res.json()
+      graphNodes.value = data.nodes
+      graphMaxWidth.value = data.max_width
+      metadataMap.value = new Map()
+      metadataLoaded.value = 0
+      // Сразу подгружаем первую порцию
+      await fetchMetadata(0, LOG_PAGE_SIZE)
     } catch (e) {
       error.value = (e as Error).message
     } finally {
@@ -209,26 +198,28 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
-  async function fetchMoreLog() {
-    if (logLoadingMore.value || !logHasMore.value) return
-    logLoadingMore.value = true
+  async function fetchMetadata(offset: number, limit: number) {
+    if (metadataLoading.value) return
+    metadataLoading.value = true
     try {
-      // Запрашиваем ВСЕ коммиты с увеличенным limit, чтобы git2graph
-      // посчитал граф для полного набора (иначе линии обрываются на границе страниц)
-      const newLimit = logOffset.value + LOG_PAGE_SIZE
-      const res = await fetch(`${projectApiUrl.value}/git/log?limit=${newLimit}&offset=0`)
+      const res = await fetch(`${projectApiUrl.value}/git/log/metadata?offset=${offset}&limit=${limit}`)
       if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
-      const allCommits = parseCommits(data)
-      commits.value = allCommits
-      log.value = allCommits
-      logHasMore.value = allCommits.length >= newLimit
-      logOffset.value = allCommits.length
+      const data: CommitMeta[] = await res.json()
+      const map = new Map(metadataMap.value)
+      for (const m of data) {
+        map.set(m.hash, m)
+      }
+      metadataMap.value = map
+      metadataLoaded.value = offset + data.length
     } catch (e) {
       error.value = (e as Error).message
     } finally {
-      logLoadingMore.value = false
+      metadataLoading.value = false
     }
+  }
+
+  function getMetadata(hash: string): CommitMeta | undefined {
+    return metadataMap.value.get(hash)
   }
 
   async function fetchDiff(file?: string) {
@@ -312,7 +303,7 @@ export const useGitStore = defineStore('git', () => {
       })
       if (!res.ok) throw new Error(await res.text())
       commitMessage.value = ''
-      await Promise.all([fetchStatus(), fetchLog()])
+      await Promise.all([fetchStatus(), fetchGraph()])
     } catch (e) {
       error.value = (e as Error).message
     } finally {
@@ -330,7 +321,7 @@ export const useGitStore = defineStore('git', () => {
         body: JSON.stringify({ branch }),
       })
       if (!res.ok) throw new Error(await res.text())
-      await Promise.all([fetchStatus(), fetchBranches(), fetchLog()])
+      await Promise.all([fetchStatus(), fetchBranches(), fetchGraph()])
     } catch (e) {
       error.value = (e as Error).message
     } finally {
@@ -346,7 +337,7 @@ export const useGitStore = defineStore('git', () => {
         method: 'POST',
       })
       if (!res.ok) throw new Error(await res.text())
-      await Promise.all([fetchStatus(), fetchLog()])
+      await Promise.all([fetchStatus(), fetchGraph()])
     } catch (e) {
       error.value = (e as Error).message
     } finally {
@@ -373,11 +364,9 @@ export const useGitStore = defineStore('git', () => {
   return {
     status,
     branches,
-    log,
     diff,
     selectedFile,
     activeTab,
-    commits,
     selectedCommit,
     commitMessage,
     generatingMessage,
@@ -396,10 +385,15 @@ export const useGitStore = defineStore('git', () => {
     isLocallyStaged,
     fetchStatus,
     fetchBranches,
-    fetchLog,
-    fetchMoreLog,
-    logHasMore,
-    logLoadingMore,
+    graphNodes,
+    graphMaxWidth,
+    metadataMap,
+    metadataLoaded,
+    metadataLoading,
+    totalCommits,
+    fetchGraph,
+    fetchMetadata,
+    getMetadata,
     fetchDiff,
     fetchCommitDetail,
     fetchCommitDiff,
