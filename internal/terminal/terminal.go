@@ -40,7 +40,7 @@ func (s *Session) Close() {
 	s.closed = true
 
 	if s.Cmd.Process != nil {
-		syscall.Kill(-s.Cmd.Process.Pid, syscall.SIGHUP)
+		s.Cmd.Process.Signal(syscall.SIGHUP)
 
 		done := make(chan struct{})
 		go func() {
@@ -51,7 +51,7 @@ func (s *Session) Close() {
 		select {
 		case <-done:
 		case <-time.After(2 * time.Second):
-			syscall.Kill(-s.Cmd.Process.Pid, syscall.SIGKILL)
+			s.Cmd.Process.Kill()
 			<-done
 		}
 	}
@@ -96,7 +96,6 @@ func (m *Manager) Create(id, shell, cwd string, cols, rows uint16) (*Session, er
 	cmd := exec.Command(shell)
 	cmd.Dir = cwd
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: cols, Rows: rows})
 	if err != nil {

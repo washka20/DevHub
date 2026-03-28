@@ -39,7 +39,9 @@ func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 		cleanup := func() {
 			closeOnce.Do(func() {
 				conn.Close()
-				manager.Destroy(id)
+				// Don't destroy the PTY session here -- the browser may
+				// reconnect after a split/remount.  Sessions are destroyed
+				// only via REST DELETE or server shutdown.
 			})
 		}
 		defer cleanup()
