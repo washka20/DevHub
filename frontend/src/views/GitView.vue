@@ -298,8 +298,53 @@ function onLogScroll(e: Event) {
   }
 }
 
+const hashCopied = ref(false)
+
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text)
+  hashCopied.value = true
+  setTimeout(() => { hashCopied.value = false }, 2000)
+}
+
+interface ParsedStatLine {
+  file: string
+  additions: number
+  deletions: number
+}
+
+function parseStats(stats: string): { lines: ParsedStatLine[], summary: string } {
+  if (!stats) return { lines: [], summary: '' }
+  const rawLines = stats.split('\n').filter(l => l.trim())
+  const parsed: ParsedStatLine[] = []
+  let summary = ''
+
+  for (const line of rawLines) {
+    // Summary line: "14 files changed, 1723 insertions(+), 19 deletions(-)"
+    if (line.includes('files changed') || line.includes('file changed')) {
+      summary = line.trim()
+      continue
+    }
+    // File line: " path/to/file | 380 ++++++++-----"
+    const match = line.match(/^\s*(.+?)\s*\|\s*(\d+)\s*([+-]*)/)
+    if (match) {
+      const file = match[1].trim()
+      const total = parseInt(match[2]) || 0
+      const symbols = match[3] || ''
+      const adds = (symbols.match(/\+/g) || []).length
+      const dels = (symbols.match(/-/g) || []).length
+      const ratio = adds + dels > 0 ? adds / (adds + dels) : 0.5
+      parsed.push({ file, additions: Math.round(total * ratio), deletions: Math.round(total * (1 - ratio)) })
+    }
+  }
+  return { lines: parsed, summary }
+}
+
+function formatDate(dateStr: string): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+  const months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}, ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -733,39 +778,58 @@ watch(() => gitStore.status.branch, () => {
             </button>
           </div>
           <div class="commit-detail-body">
-            <div class="detail-row">
-              <span class="detail-label">Hash</span>
-              <span
-                class="detail-value detail-hash-copyable"
-                title="Click to copy"
-                @click="copyToClipboard(gitStore.selectedCommit.hash)"
-              >
-                {{ gitStore.selectedCommit.hash }}
-              </span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Message</span>
-              <span class="detail-value">{{ gitStore.selectedCommit.message }}</span>
-            </div>
-            <div v-if="gitStore.selectedCommit.body" class="detail-row">
-              <span class="detail-label">Body</span>
-              <span class="detail-value detail-body">{{ gitStore.selectedCommit.body }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Author</span>
-              <span class="detail-value">{{ gitStore.selectedCommit.author }} &lt;{{ gitStore.selectedCommit.email }}&gt;</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Date</span>
-              <span class="detail-value">{{ gitStore.selectedCommit.date }}</span>
-            </div>
-            <div v-if="gitStore.selectedCommit.stats" class="detail-row">
-              <span class="detail-label">Stats</span>
-              <span class="detail-value">{{ gitStore.selectedCommit.stats }}</span>
+            <!-- Message as heading -->
+            <div class="detail-message">{{ gitStore.selectedCommit.message }}</div>
+
+            <!-- Body -->
+            <div v-if="gitStore.selectedCommit.body" class="detail-body-text">{{ gitStore.selectedCommit.body }}</div>
+
+            <!-- Meta row: hash + date + author -->
+            <div class="detail-meta">
+              <div class="detail-meta-row">
+                <span
+                  class="detail-hash"
+                  :title="hashCopied ? 'Copied!' : 'Click to copy full hash'"
+                  @click="copyToClipboard(gitStore.selectedCommit.hash)"
+                >
+                  {{ hashCopied ? 'Copied!' : gitStore.selectedCommit.hash.slice(0, 7) }}
+                </span>
+                <span class="detail-date">{{ formatDate(gitStore.selectedCommit.date) }}</span>
+              </div>
+              <div class="detail-author-row">
+                <span class="detail-author-name">{{ gitStore.selectedCommit.author }}</span>
+                <span class="detail-author-email">{{ gitStore.selectedCommit.email }}</span>
+              </div>
             </div>
 
-            <!-- Changed files -->
-            <div class="detail-files-header">Changed Files</div>
+            <!-- Stats - parsed into visual bars -->
+            <div v-if="gitStore.selectedCommit.stats" class="detail-stats">
+              <div class="detail-files-header">
+                Changes
+                <span v-if="parseStats(gitStore.selectedCommit.stats).summary" class="detail-stats-summary">
+                  {{ parseStats(gitStore.selectedCommit.stats).summary }}
+                </span>
+              </div>
+              <div
+                v-for="stat in parseStats(gitStore.selectedCommit.stats).lines"
+                :key="stat.file"
+                class="detail-stat-line"
+                @click="viewCommitFileDiff(gitStore.selectedCommit!.hash, stat.file)"
+              >
+                <span class="detail-stat-file">{{ stat.file.split('/').pop() }}</span>
+                <span class="detail-stat-bar">
+                  <span class="stat-add" :style="{ width: Math.min(stat.additions, 100) + 'px' }"></span>
+                  <span class="stat-del" :style="{ width: Math.min(stat.deletions, 100) + 'px' }"></span>
+                </span>
+                <span class="detail-stat-nums">
+                  <span v-if="stat.additions" class="stat-num-add">+{{ stat.additions }}</span>
+                  <span v-if="stat.deletions" class="stat-num-del">-{{ stat.deletions }}</span>
+                </span>
+              </div>
+            </div>
+
+            <!-- Changed files (fallback if no stats / always show full paths) -->
+            <div class="detail-files-header">Files</div>
             <div
               v-for="f in gitStore.selectedCommit.files"
               :key="f.path"
@@ -1750,44 +1814,148 @@ watch(() => gitStore.status.branch, () => {
 .commit-detail-body {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 14px;
+  padding: 14px;
 }
 
-.detail-row {
-  margin-bottom: 12px;
-}
-
-.detail-label {
-  display: block;
-  font-size: 11px;
+.detail-message {
+  font-size: 15px;
   font-weight: 600;
-  color: #8b949e;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 2px;
-}
-
-.detail-value {
-  font-size: 13px;
   color: #f0f6fc;
-  word-break: break-all;
+  line-height: 1.4;
+  margin-bottom: 8px;
 }
 
-.detail-hash-copyable {
+.detail-body-text {
+  font-size: 13px;
+  color: #8b949e;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 6px;
+  border-left: 2px solid #30363d;
+}
+
+.detail-meta {
+  padding: 10px 0;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #21262d;
+}
+
+.detail-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.detail-hash {
   font-family: var(--font-mono);
   font-size: 12px;
   color: #58a6ff;
+  background: rgba(88,166,255,0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
   cursor: pointer;
+  transition: all 0.15s;
 }
 
-.detail-hash-copyable:hover {
-  text-decoration: underline;
+.detail-hash:hover {
+  background: rgba(88,166,255,0.2);
 }
 
-.detail-body {
-  white-space: pre-wrap;
+.detail-date {
+  font-size: 12px;
   color: #8b949e;
 }
+
+.detail-author-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.detail-author-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f0f6fc;
+}
+
+.detail-author-email {
+  font-size: 11px;
+  color: #8b949e;
+}
+
+.detail-stats {
+  margin-bottom: 4px;
+}
+
+.detail-stats-summary {
+  font-weight: 400;
+  color: #6e7681;
+  margin-left: 8px;
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.detail-stat-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  margin: 0 -6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.detail-stat-line:hover {
+  background: #1c2128;
+}
+
+.detail-stat-file {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #c9d1d9;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-stat-bar {
+  display: flex;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.stat-add {
+  height: 8px;
+  background: #3fb950;
+  border-radius: 2px 0 0 2px;
+  min-width: 0;
+}
+
+.stat-del {
+  height: 8px;
+  background: #f85149;
+  border-radius: 0 2px 2px 0;
+  min-width: 0;
+}
+
+.detail-stat-nums {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  flex-shrink: 0;
+  min-width: 60px;
+  text-align: right;
+}
+
+.stat-num-add { color: #3fb950; }
+.stat-num-del { color: #f85149; margin-left: 4px; }
 
 .detail-files-header {
   font-size: 11px;
