@@ -53,6 +53,10 @@ const dockerRunning = computed(() =>
         <span class="nav-icon">&#9002;</span>
         Console
       </router-link>
+      <router-link to="/settings" class="nav-item" active-class="active">
+        <span class="nav-icon">&#9881;</span>
+        Settings
+      </router-link>
     </nav>
 
     <div class="sidebar-footer">

@@ -5,6 +5,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { useTerminalStore } from '../stores/terminal'
+import { useSettingsStore } from '../stores/settings'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
@@ -12,6 +13,7 @@ const props = defineProps<{
 }>()
 
 const terminalStore = useTerminalStore()
+const settingsStore = useSettingsStore()
 
 const terminalEl = ref<HTMLDivElement>()
 let term: Terminal | null = null
@@ -84,35 +86,14 @@ function initTerminal() {
 
   term = new Terminal({
     allowProposedApi: true,
-    cursorBlink: true,
     customGlyphs: true,
-    fontFamily: "'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
-    fontSize: 14,
+    cursorBlink: settingsStore.ui.cursorBlink,
+    fontFamily: settingsStore.ui.fontFamily,
+    fontSize: settingsStore.ui.fontSize,
     lineHeight: 1.0,
     letterSpacing: 0,
-    scrollback: 10000,
-    theme: {
-      background: '#0d1117',
-      foreground: '#c9d1d9',
-      cursor: '#58a6ff',
-      selectionBackground: 'rgba(88, 166, 255, 0.3)',
-      black: '#484f58',
-      red: '#ff7b72',
-      green: '#3fb950',
-      yellow: '#d29922',
-      blue: '#58a6ff',
-      magenta: '#bc8cff',
-      cyan: '#39d353',
-      white: '#b1bac4',
-      brightBlack: '#6e7681',
-      brightRed: '#ffa198',
-      brightGreen: '#56d364',
-      brightYellow: '#e3b341',
-      brightBlue: '#79c0ff',
-      brightMagenta: '#d2a8ff',
-      brightCyan: '#56d364',
-      brightWhite: '#f0f6fc',
-    },
+    scrollback: settingsStore.ui.scrollback,
+    theme: settingsStore.currentTheme,
   })
 
   fitAddon = new FitAddon()
@@ -150,6 +131,28 @@ function initTerminal() {
     }, 50)
   })
   resizeObserver.observe(terminalEl.value)
+
+  watch(() => settingsStore.currentTheme, (theme) => {
+    if (term) term.options.theme = theme
+  }, { deep: true })
+
+  watch(() => settingsStore.ui.fontSize, (size) => {
+    if (term) {
+      term.options.fontSize = size
+      fitAddon?.fit()
+    }
+  })
+
+  watch(() => settingsStore.ui.fontFamily, (font) => {
+    if (term) {
+      term.options.fontFamily = font
+      fitAddon?.fit()
+    }
+  })
+
+  watch(() => settingsStore.ui.cursorBlink, (blink) => {
+    if (term) term.options.cursorBlink = blink
+  })
 
   connectWs(props.sessionId)
 }
