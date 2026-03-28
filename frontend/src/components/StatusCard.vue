@@ -1,14 +1,28 @@
 <script setup lang="ts">
-defineProps<{
+import { useRouter } from 'vue-router'
+
+const props = defineProps<{
   label: string
   value: string | number
   subtext?: string
   color?: string
+  to?: string
 }>()
+
+const router = useRouter()
+
+function handleClick() {
+  if (props.to) router.push(props.to)
+}
 </script>
 
 <template>
-  <div class="status-card" :style="{ '--card-accent': color ?? 'var(--text-primary)' }">
+  <div
+    class="status-card"
+    :class="{ clickable: !!to }"
+    :style="{ '--card-accent': color ?? 'var(--text-primary)' }"
+    @click="handleClick"
+  >
     <div class="card-accent-line"></div>
     <div class="card-body">
       <div class="status-label">{{ label }}</div>
@@ -28,9 +42,17 @@ defineProps<{
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
+.status-card.clickable {
+  cursor: pointer;
+}
+
 .status-card:hover {
   border-color: var(--card-accent);
   box-shadow: 0 0 12px color-mix(in srgb, var(--card-accent) 20%, transparent);
+}
+
+.status-card.clickable:active {
+  transform: scale(0.98);
 }
 
 .card-accent-line {

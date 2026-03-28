@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useProjectsStore } from '../stores/projects'
 import { useGitStore } from '../stores/git'
 import { useDockerStore } from '../stores/docker'
 import StatusCard from '../components/StatusCard.vue'
 import CommandButton from '../components/CommandButton.vue'
 import type { MakeCommand } from '../types'
+
+const router = useRouter()
 
 const projectsStore = useProjectsStore()
 const gitStore = useGitStore()
@@ -108,18 +111,21 @@ async function executeCommand(name: string) {
         :value="gitStore.status.branch || '---'"
         :subtext="`${gitChanges} changes`"
         :color="gitCardColor"
+        to="/git"
       />
       <StatusCard
         label="Docker"
         :value="dockerUp"
         subtext="containers UP"
         :color="dockerCardColor"
+        to="/docker"
       />
       <StatusCard
         label="Last Commit"
         :value="lastCommitMessage"
         :subtext="lastCommitTime"
         color="var(--text-primary)"
+        to="/git"
       />
     </section>
 
@@ -144,8 +150,9 @@ async function executeCommand(name: string) {
         <span
           v-for="container in (dockerStore.containers || [])"
           :key="container.name"
-          class="pill"
+          class="pill clickable"
           :class="containerPillClass(container.state)"
+          @click="router.push('/docker')"
         >
           {{ container.name }}
         </span>
@@ -218,6 +225,10 @@ async function executeCommand(name: string) {
   font-family: var(--font-mono);
   transition: box-shadow var(--transition-fast), transform var(--transition-fast);
   cursor: default;
+}
+
+.pill.clickable {
+  cursor: pointer;
 }
 
 .pill:hover {
