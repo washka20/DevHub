@@ -132,3 +132,45 @@ export interface TerminalTab {
   panes: TerminalPane[]
   splitDirection: 'horizontal' | 'vertical' | null
 }
+
+// Settings
+export interface ServerSettings {
+  port: number
+  projects_dir: string
+  default_project: string
+  terminal: {
+    max_sessions: number
+    shell: string
+  }
+}
+
+export interface TerminalTheme {
+  background: string
+  foreground: string
+  cursor: string
+  selectionBackground: string
+  black: string
+  red: string
+  green: string
+  yellow: string
+  blue: string
+  magenta: string
+  cyan: string
+  white: string
+  brightBlack: string
+  brightRed: string
+  brightGreen: string
+  brightYellow: string
+  brightBlue: string
+  brightMagenta: string
+  brightCyan: string
+  brightWhite: string
+}
+
+export interface UISettings {
+  fontSize: number
+  fontFamily: string
+  scrollback: number
+  cursorBlink: boolean
+  themeName: string
+}
