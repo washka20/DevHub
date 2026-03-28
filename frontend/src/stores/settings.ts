@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { ServerSettings, UISettings, TerminalTheme } from '../types'
 import { terminalThemes } from '../data/terminal-themes'
+import { siteThemes } from '../data/site-themes'
 
 const UI_SETTINGS_KEY = 'devhub-ui-settings'
 
@@ -11,6 +12,7 @@ const defaultUI: UISettings = {
   scrollback: 10000,
   cursorBlink: true,
   themeName: 'github-dark',
+  siteThemeName: 'github-dark',
 }
 
 function loadUI(): UISettings {
@@ -58,5 +60,18 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(UI_SETTINGS_KEY, JSON.stringify(ui.value))
   }
 
-  return { server, ui, shells, currentTheme, fetchSettings, saveSettings, fetchShells, updateUI }
+  function applySiteTheme(themeName: string) {
+    const theme = siteThemes[themeName]
+    if (!theme) return
+    const root = document.documentElement
+    for (const [key, value] of Object.entries(theme)) {
+      root.style.setProperty(key, value)
+    }
+  }
+
+  // Apply site theme on init and when changed
+  applySiteTheme(ui.value.siteThemeName)
+  watch(() => ui.value.siteThemeName, (name) => applySiteTheme(name))
+
+  return { server, ui, shells, currentTheme, fetchSettings, saveSettings, fetchShells, updateUI, applySiteTheme }
 })

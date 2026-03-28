@@ -4,6 +4,7 @@ defineOptions({ name: 'SettingsView' })
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useSettingsStore } from '../stores/settings'
 import { terminalThemes, themeNames } from '../data/terminal-themes'
+import { siteThemes, siteThemeNames } from '../data/site-themes'
 import type { ServerSettings, UISettings } from '../types'
 
 const settingsStore = useSettingsStore()
@@ -22,6 +23,7 @@ const localUI = reactive<UISettings>({
   scrollback: 10000,
   cursorBlink: true,
   themeName: 'github-dark',
+  siteThemeName: 'github-dark',
 })
 
 function syncFromStore() {
@@ -229,10 +231,47 @@ function selectTheme(key: string) {
       </div>
     </div>
 
-    <!-- Theme Section -->
+    <!-- Site Theme Section -->
     <div class="settings-section">
       <div class="section-header">
-        <span class="section-icon">&#127912;</span> Terminal Theme
+        <span class="section-icon">&#127912;</span> Site Theme
+      </div>
+
+      <div class="theme-grid">
+        <div
+          v-for="(theme, key) in siteThemes"
+          :key="key"
+          class="theme-card"
+          :class="{ active: localUI.siteThemeName === key }"
+          @click="localUI.siteThemeName = key as string"
+        >
+          <div
+            class="theme-preview site-theme-preview"
+            :style="{ background: theme['--bg-primary'], color: theme['--text-primary'] }"
+          >
+            <div class="site-preview-sidebar" :style="{ background: theme['--bg-secondary'], borderColor: theme['--border'] }">
+              <div class="site-preview-dot" :style="{ background: theme['--accent-green'] }"></div>
+              <div class="site-preview-line" :style="{ background: theme['--accent-blue'] }"></div>
+              <div class="site-preview-line" :style="{ background: theme['--text-secondary'] }"></div>
+            </div>
+            <div class="site-preview-content">
+              <div class="site-preview-card" :style="{ borderColor: theme['--border'], background: theme['--bg-secondary'] }">
+                <div class="site-preview-accent" :style="{ background: theme['--accent-green'] }"></div>
+              </div>
+              <div class="site-preview-card" :style="{ borderColor: theme['--border'], background: theme['--bg-secondary'] }">
+                <div class="site-preview-accent" :style="{ background: theme['--accent-blue'] }"></div>
+              </div>
+            </div>
+          </div>
+          <div class="theme-name">{{ siteThemeNames[key] || key }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Terminal Theme Section -->
+    <div class="settings-section">
+      <div class="section-header">
+        <span class="section-icon">&#9002;</span> Terminal Theme
       </div>
 
       <div class="theme-grid">
@@ -430,6 +469,60 @@ function selectTheme(key: string) {
   background: var(--bg-secondary);
   border-top: 1px solid var(--border);
   text-align: center;
+}
+
+.site-theme-preview {
+  display: flex;
+  gap: 4px;
+  padding: 6px !important;
+  font-size: 0;
+}
+
+.site-preview-sidebar {
+  width: 24px;
+  border-right: 1px solid;
+  border-radius: 3px 0 0 3px;
+  padding: 4px 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.site-preview-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  margin-bottom: 2px;
+}
+
+.site-preview-line {
+  height: 2px;
+  border-radius: 1px;
+  opacity: 0.7;
+}
+
+.site-preview-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 2px;
+}
+
+.site-preview-card {
+  flex: 1;
+  border: 1px solid;
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+}
+
+.site-preview-accent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
 }
 
 /* Live Preview Terminal */

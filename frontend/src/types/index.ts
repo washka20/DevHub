@@ -173,4 +173,5 @@ export interface UISettings {
   scrollback: number
   cursorBlink: boolean
   themeName: string
+  siteThemeName: string
 }
