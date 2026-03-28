@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -16,6 +17,7 @@ type Session struct {
 	ID        string
 	Cmd       *exec.Cmd
 	Pty       *os.File
+	LogFile   *os.File // persistent log of all PTY output
 	CreatedAt time.Time
 	CWD       string
 	mu        sync.Mutex
@@ -78,6 +80,9 @@ func (s *Session) Close() {
 	}
 
 	s.Pty.Close()
+	if s.LogFile != nil {
+		s.LogFile.Close()
+	}
 }
 
 type SessionInfo struct {
@@ -123,8 +128,15 @@ func (m *Manager) Create(id, shell, cwd string, cols, rows uint16) (*Session, er
 		return nil, fmt.Errorf("pty start: %w", err)
 	}
 
+	// Create log file for persistent session output
+	var logFile *os.File
+	logDir := filepath.Join(os.TempDir(), "devhub-terminal-logs")
+	if err := os.MkdirAll(logDir, 0700); err == nil {
+		logFile, _ = os.Create(filepath.Join(logDir, id+".log"))
+	}
+
 	sess := &Session{
-		ID: id, Cmd: cmd, Pty: ptmx, CreatedAt: time.Now(), CWD: cwd,
+		ID: id, Cmd: cmd, Pty: ptmx, LogFile: logFile, CreatedAt: time.Now(), CWD: cwd,
 	}
 	m.sessions[id] = sess
 	return sess, nil

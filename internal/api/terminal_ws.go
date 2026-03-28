@@ -61,9 +61,14 @@ func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 
 				n, err := sess.Pty.Read(buf)
 				if n > 0 {
-					if wErr := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); wErr != nil {
+					data := buf[:n]
+					if wErr := conn.WriteMessage(websocket.BinaryMessage, data); wErr != nil {
 						cleanup()
 						return
+					}
+					// Persist output to log file (best-effort, ignore errors)
+					if sess.LogFile != nil {
+						sess.LogFile.Write(data)
 					}
 				}
 				if err != nil {

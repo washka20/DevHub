@@ -18,6 +18,10 @@ let fitAddon: FitAddon | null = null
 let ws: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
 let resizeTimer: ReturnType<typeof setTimeout> | null = null
+let disposed = false
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let reconnectAttempts = 0
+const MAX_RECONNECT_ATTEMPTS = 5
 
 function connectWs(sessionId: string) {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -28,6 +32,7 @@ function connectWs(sessionId: string) {
   ws.binaryType = 'arraybuffer'
 
   ws.onopen = () => {
+    reconnectAttempts = 0
     if (term && fitAddon) {
       fitAddon.fit()
       sendResize(term.cols, term.rows)
@@ -52,7 +57,19 @@ function connectWs(sessionId: string) {
 
   ws.onclose = () => {
     ws = null
+    if (!disposed) {
+      scheduleReconnect(sessionId)
+    }
   }
+}
+
+function scheduleReconnect(sessionId: string) {
+  if (disposed || reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return
+  const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000)
+  reconnectAttempts++
+  reconnectTimer = setTimeout(() => {
+    if (!disposed) connectWs(sessionId)
+  }, delay)
 }
 
 function sendResize(cols: number, rows: number) {
@@ -68,7 +85,7 @@ function initTerminal() {
     cursorBlink: true,
     fontFamily: "'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
     fontSize: 14,
-    lineHeight: 1.2,
+    lineHeight: 1.0,
     scrollback: 10000,
     theme: {
       background: '#0d1117',
@@ -98,18 +115,6 @@ function initTerminal() {
   term.loadAddon(fitAddon)
   term.loadAddon(new WebLinksAddon())
 
-  import('@xterm/addon-webgl')
-    .then(({ WebglAddon }) => {
-      if (term) {
-        try {
-          term.loadAddon(new WebglAddon())
-        } catch {
-          // WebGL not available, canvas renderer is fine
-        }
-      }
-    })
-    .catch(() => {})
-
   term.open(terminalEl.value)
   fitAddon.fit()
 
@@ -125,23 +130,30 @@ function initTerminal() {
   })
 
   resizeObserver = new ResizeObserver((entries) => {
-    // Don't fit when container is hidden (v-show=false → 0 dimensions)
     const { width, height } = entries[0].contentRect
     if (width === 0 || height === 0) return
 
     if (resizeTimer) clearTimeout(resizeTimer)
-    resizeTimer = setTimeout(() => fitAddon?.fit(), 50)
+    resizeTimer = setTimeout(() => {
+      if (fitAddon && term) {
+        fitAddon.fit()
+        sendResize(term.cols, term.rows)
+      }
+    }, 50)
   })
   resizeObserver.observe(terminalEl.value)
 
   connectWs(props.sessionId)
 }
 
-onMounted(() => {
-  initTerminal()
+onMounted(async () => {
+  await document.fonts.ready
+  if (!disposed) initTerminal()
 })
 
 onBeforeUnmount(() => {
+  disposed = true
+  if (reconnectTimer) clearTimeout(reconnectTimer)
   if (resizeTimer) clearTimeout(resizeTimer)
   resizeObserver?.disconnect()
   ws?.close()
@@ -151,6 +163,7 @@ onBeforeUnmount(() => {
   fitAddon = null
   resizeObserver = null
   resizeTimer = null
+  reconnectTimer = null
 })
 
 watch(
