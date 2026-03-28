@@ -4,6 +4,12 @@ import { useProjectsStore } from '../stores/projects'
 import { useDockerStore } from '../stores/docker'
 import { useGitStore } from '../stores/git'
 import ProjectSelector from './ProjectSelector.vue'
+import IconDashboard from './icons/IconDashboard.vue'
+import IconGit from './icons/IconGit.vue'
+import IconCommands from './icons/IconCommands.vue'
+import IconDocker from './icons/IconDocker.vue'
+import IconTerminal from './icons/IconTerminal.vue'
+import IconSettings from './icons/IconSettings.vue'
 
 const projectsStore = useProjectsStore()
 const dockerStore = useDockerStore()
@@ -32,29 +38,29 @@ const dockerRunning = computed(() =>
 
     <nav class="sidebar-nav">
       <router-link to="/" class="nav-item" exact-active-class="active">
-        <span class="nav-icon">&#9783;</span>
+        <IconDashboard class="nav-icon" />
         Dashboard
       </router-link>
       <router-link to="/git" class="nav-item" active-class="active">
-        <span class="nav-icon">&#9741;</span>
+        <IconGit class="nav-icon" />
         Git
         <span v-if="gitChanges > 0" class="badge badge-orange">{{ gitChanges }}</span>
       </router-link>
       <router-link to="/commands" class="nav-item" active-class="active">
-        <span class="nav-icon">&#9654;</span>
+        <IconCommands class="nav-icon" />
         Commands
       </router-link>
       <router-link to="/docker" class="nav-item" active-class="active">
-        <span class="nav-icon">&#9964;</span>
+        <IconDocker class="nav-icon" />
         Docker
         <span v-if="dockerRunning > 0" class="badge badge-green">{{ dockerRunning }}</span>
       </router-link>
       <router-link to="/console" class="nav-item" active-class="active">
-        <span class="nav-icon">&#9002;</span>
+        <IconTerminal class="nav-icon" />
         Console
       </router-link>
       <router-link to="/settings" class="nav-item" active-class="active">
-        <span class="nav-icon">&#9881;</span>
+        <IconSettings class="nav-icon" />
         Settings
       </router-link>
     </nav>
@@ -138,10 +144,9 @@ const dockerRunning = computed(() =>
 }
 
 .nav-icon {
-  font-size: 18px;
-  width: 22px;
-  text-align: center;
-  line-height: 1;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .badge {
