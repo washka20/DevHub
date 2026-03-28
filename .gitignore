@@ -1,0 +1,22 @@
+# Binary
+devhub
+
+# Frontend build
+frontend/dist
+frontend/node_modules
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Claude
+.claude/
+.superpowers/
+.playwright-mcp/
+
+# Config (contains paths)
+# ~/.devhub.yaml is in home dir, not here

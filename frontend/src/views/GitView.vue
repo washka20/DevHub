@@ -1,0 +1,2137 @@
+<script setup lang="ts">
+import { onMounted, ref, computed, watch } from 'vue'
+import { useGitStore } from '../stores/git'
+import type { DiffLine } from '../types'
+// ASCII graph rendering (hybrid approach: git --graph + parent hashes)
+
+const gitStore = useGitStore()
+const selectedFile = ref<string | null>(null)
+const branchDropdownOpen = ref(false)
+const stagedCollapsed = ref(false)
+const changesCollapsed = ref(false)
+const commitDiffContent = ref('')
+const commitDiffFile = ref<string | null>(null)
+
+// Resizable files panel
+const filesPanelWidth = ref(320)
+const isResizing = ref(false)
+
+function startResize(e: MouseEvent) {
+  isResizing.value = true
+  const startX = e.clientX
+  const startWidth = filesPanelWidth.value
+
+  function onMouseMove(ev: MouseEvent) {
+    const newWidth = startWidth + (ev.clientX - startX)
+    filesPanelWidth.value = Math.max(200, Math.min(600, newWidth))
+  }
+
+  function onMouseUp() {
+    isResizing.value = false
+    document.removeEventListener('mousemove', onMouseMove)
+    document.removeEventListener('mouseup', onMouseUp)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
+}
+
+// Split file path into dir + filename
+function splitPath(fullPath: string): { dir: string; name: string } {
+  const lastSlash = fullPath.lastIndexOf('/')
+  if (lastSlash === -1) return { dir: '', name: fullPath }
+  return {
+    dir: fullPath.substring(0, lastSlash + 1),
+    name: fullPath.substring(lastSlash + 1),
+  }
+}
+const showCommitDiffModal = ref(false)
+
+// ----- Computed: all changed files grouped -----
+
+interface FileEntry {
+  file: string
+  status: 'staged' | 'modified' | 'untracked'
+  statusChar: string
+}
+
+const stagedChanges = computed<FileEntry[]>(() =>
+  (gitStore.status.staged ?? []).map((f: string) => ({
+    file: f,
+    status: 'staged' as const,
+    statusChar: 'S',
+  })),
+)
+
+const unstagedChanges = computed<FileEntry[]>(() => {
+  const modified = (gitStore.status.modified ?? []).map((f: string) => ({
+    file: f,
+    status: 'modified' as const,
+    statusChar: 'M',
+  }))
+  const untracked = (gitStore.status.untracked ?? []).map((f: string) => ({
+    file: f,
+    status: 'untracked' as const,
+    statusChar: 'N',
+  }))
+  return [...modified, ...untracked]
+})
+
+const totalChanges = computed(() =>
+  (gitStore.status.modified?.length ?? 0)
+  + (gitStore.status.untracked?.length ?? 0)
+  + (gitStore.status.staged?.length ?? 0),
+)
+
+// ----- Status summary -----
+
+const statusSummary = computed(() => {
+  const parts: string[] = []
+  const modCount =
+    (gitStore.status.modified?.length ?? 0) +
+    (gitStore.status.untracked?.length ?? 0)
+  const stagedCount = gitStore.status.staged?.length ?? 0
+  const ahead = gitStore.status.ahead ?? 0
+  const behind = gitStore.status.behind ?? 0
+
+  if (modCount > 0) parts.push(`${modCount} modified`)
+  if (stagedCount > 0) parts.push(`${stagedCount} staged`)
+  if (ahead > 0) parts.push(`${ahead} ahead`)
+  if (behind > 0) parts.push(`${behind} behind`)
+
+  return parts.length > 0 ? parts.join(', ') : 'Clean'
+})
+
+// ----- Diff parsing -----
+
+const parsedDiff = computed<DiffLine[]>(() => {
+  if (!gitStore.diff) return []
+  return parseDiff(gitStore.diff)
+})
+
+const parsedCommitDiff = computed<DiffLine[]>(() => {
+  if (!commitDiffContent.value) return []
+  return parseDiff(commitDiffContent.value)
+})
+
+function parseDiff(raw: string): DiffLine[] {
+  const lines = raw.split('\n')
+  const result: DiffLine[] = []
+  let oldLine = 0
+  let newLine = 0
+
+  for (const line of lines) {
+    if (line.startsWith('@@')) {
+      const match = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
+      if (match) {
+        oldLine = parseInt(match[1], 10)
+        newLine = parseInt(match[2], 10)
+      }
+      result.push({ type: 'header', content: line, oldLineNo: null, newLineNo: null })
+    } else if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')) {
+      result.push({ type: 'header', content: line, oldLineNo: null, newLineNo: null })
+    } else if (line.startsWith('+')) {
+      result.push({ type: 'add', content: line.substring(1), oldLineNo: null, newLineNo: newLine })
+      newLine++
+    } else if (line.startsWith('-')) {
+      result.push({ type: 'remove', content: line.substring(1), oldLineNo: oldLine, newLineNo: null })
+      oldLine++
+    } else {
+      const content = line.startsWith(' ') ? line.substring(1) : line
+      if (line === '') continue
+      result.push({ type: 'context', content, oldLineNo: oldLine, newLineNo: newLine })
+      oldLine++
+      newLine++
+    }
+  }
+
+  return result
+}
+
+// ----- Tab counts -----
+
+const tabCounts = computed(() => ({
+  changes: totalChanges.value,
+  log: gitStore.commits.length,
+  branches: gitStore.branches.length,
+}))
+
+// ----- Git graph rendering (ASCII-based) -----
+
+const GRAPH_COLORS = [
+  '#58a6ff', '#3fb950', '#f0883e', '#bc8cff',
+  '#f85149', '#d29922', '#79c0ff', '#56d364',
+]
+const GRAPH_COL_WIDTH = 16
+const GRAPH_ROW_HEIGHT = 28
+const GRAPH_ONLY_HEIGHT = 14
+
+interface GraphCell {
+  type: 'commit' | 'pipe' | 'merge-down' | 'merge-up' | 'empty'
+  col: number
+  color: string
+  isMerge: boolean
+}
+
+function parseGraphLine(graph: string): GraphCell[] {
+  const cells: GraphCell[] = []
+  if (!graph) return cells
+  let col = 0
+  for (let i = 0; i < graph.length; i++) {
+    const ch = graph[i]
+    if (ch === ' ') { col++; continue }
+    const color = GRAPH_COLORS[col % GRAPH_COLORS.length]
+    if (ch === '*') {
+      cells.push({ type: 'commit', col, color, isMerge: false })
+    } else if (ch === '|') {
+      cells.push({ type: 'pipe', col, color, isMerge: false })
+    } else if (ch === '\\') {
+      cells.push({ type: 'merge-down', col, color, isMerge: false })
+    } else if (ch === '/') {
+      cells.push({ type: 'merge-up', col, color, isMerge: false })
+    }
+    col++
+  }
+  return cells
+}
+
+function graphSvgWidth(graph: string): number {
+  if (!graph) return 32
+  let maxCol = 0
+  let col = 0
+  for (const ch of graph) {
+    if (ch === ' ') { col++; continue }
+    if (col > maxCol) maxCol = col
+    col++
+  }
+  return (maxCol + 1) * GRAPH_COL_WIDTH + 8
+}
+
+// ----- Ref badge helpers -----
+
+function getRefType(refStr: string): 'branch' | 'tag' | 'hotfix' | 'head' {
+  if (refStr === 'HEAD') return 'head'
+  if (refStr.startsWith('tag:')) return 'tag'
+  if (refStr.includes('hotfix')) return 'hotfix'
+  return 'branch'
+}
+
+function getRefLabel(refStr: string): string {
+  return refStr.replace('tag: ', '').replace('HEAD -> ', '')
+}
+
+function getRefClass(refStr: string): string {
+  const t = getRefType(refStr)
+  switch (t) {
+    case 'tag': return 'ref-tag'
+    case 'hotfix': return 'ref-hotfix'
+    case 'head': return 'ref-head'
+    default: return 'ref-branch'
+  }
+}
+
+// ----- Actions -----
+
+function selectFile(file: string) {
+  selectedFile.value = file
+  gitStore.fetchDiff(file)
+}
+
+function toggleFileCheck(file: string) {
+  gitStore.toggleSelectFile(file)
+}
+
+function stageSelected() {
+  gitStore.stageSelected()
+}
+
+function selectAllForStage() {
+  gitStore.selectAllUnstaged()
+}
+
+function unstageAll() {
+  gitStore.unstageAll()
+}
+
+function canCommit(): boolean {
+  const hasMessage = gitStore.commitMessage.trim().length > 0
+  const hasFiles = (gitStore.status.staged?.length ?? 0) > 0
+  return hasMessage && hasFiles
+}
+
+async function doCommit() {
+  if (!canCommit()) return
+  const files = [
+    ...gitStore.stagedFiles,
+    ...(gitStore.status.staged ?? []),
+  ]
+  const unique = [...new Set(files)]
+  await gitStore.commit(gitStore.commitMessage, unique)
+  selectedFile.value = null
+  gitStore.diff = ''
+}
+
+async function selectBranch(branch: string) {
+  branchDropdownOpen.value = false
+  if (branch !== gitStore.status.branch) {
+    await gitStore.checkout(branch)
+  }
+}
+
+async function selectCommit(hash: string) {
+  await gitStore.fetchCommitDetail(hash)
+}
+
+async function viewCommitFileDiff(hash: string, filePath: string) {
+  commitDiffFile.value = filePath
+  showCommitDiffModal.value = true
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(gitStore.status.branch || 'default')}/git/commits/${hash}/diff?file=${encodeURIComponent(filePath)}`)
+    if (!res.ok) throw new Error(await res.text())
+    const data = await res.json()
+    commitDiffContent.value = data.diff ?? ''
+  } catch {
+    commitDiffContent.value = ''
+  }
+}
+
+function closeCommitDiffModal() {
+  showCommitDiffModal.value = false
+  commitDiffContent.value = ''
+  commitDiffFile.value = null
+}
+
+async function doGenerateCommit() {
+  await gitStore.generateCommitMessage()
+}
+
+function onLogScroll(e: Event) {
+  const el = e.target as HTMLElement
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
+    gitStore.fetchMoreLog()
+  }
+}
+
+function copyToClipboard(text: string) {
+  navigator.clipboard.writeText(text)
+}
+
+function formatRelativeTime(dateStr: string): string {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHour = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHour / 24)
+  const diffWeek = Math.floor(diffDay / 7)
+
+  if (diffMin < 1) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  if (diffHour < 24) return `${diffHour}h ago`
+  if (diffDay < 7) return `${diffDay}d ago`
+  if (diffWeek < 4) return `${diffWeek}w ago`
+  return date.toLocaleDateString()
+}
+
+function getFileStatusColor(statusChar: string): string {
+  switch (statusChar) {
+    case 'A': return '#3fb950'
+    case 'M': return '#d29922'
+    case 'D': return '#f85149'
+    default: return '#8b949e'
+  }
+}
+
+function getFileStatusBg(statusChar: string): string {
+  switch (statusChar) {
+    case 'A': return 'rgba(63, 185, 80, 0.15)'
+    case 'M': return 'rgba(210, 153, 34, 0.15)'
+    case 'D': return 'rgba(248, 81, 73, 0.15)'
+    default: return 'rgba(139, 148, 158, 0.15)'
+  }
+}
+
+function getStatusColor(entry: FileEntry): string {
+  switch (entry.status) {
+    case 'staged':
+      return 'var(--accent-blue)'
+    case 'modified':
+      return 'var(--accent-orange)'
+    case 'untracked':
+      return 'var(--accent-green)'
+    default:
+      return 'var(--text-secondary)'
+  }
+}
+
+function getStatusBgColor(entry: FileEntry): string {
+  switch (entry.status) {
+    case 'staged':
+      return 'rgba(88, 166, 255, 0.15)'
+    case 'modified':
+      return 'rgba(210, 153, 34, 0.15)'
+    case 'untracked':
+      return 'rgba(63, 185, 80, 0.15)'
+    default:
+      return 'rgba(139, 148, 158, 0.15)'
+  }
+}
+
+// Close dropdown when clicking outside
+function onClickOutside() {
+  branchDropdownOpen.value = false
+}
+
+// ----- Lifecycle -----
+
+onMounted(() => {
+  gitStore.fetchStatus()
+  gitStore.fetchBranches()
+  gitStore.fetchLog()
+})
+
+// Refetch when the branch changes
+watch(() => gitStore.status.branch, () => {
+  selectedFile.value = null
+  gitStore.diff = ''
+})
+</script>
+
+<template>
+  <div class="git-view" @click="onClickOutside">
+    <!-- TopBar -->
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <span class="top-bar-title">Source Control</span>
+        <div class="branch-selector" @click.stop>
+          <button
+            class="branch-button"
+            @click="branchDropdownOpen = !branchDropdownOpen"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" class="branch-icon">
+              <path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.492 2.492 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25zM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM3.5 3.25a.75.75 0 1 1 1.5 0 .75.75 0 0 1-1.5 0z"/>
+            </svg>
+            <span class="branch-name">{{ gitStore.status.branch || '...' }}</span>
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor" class="chevron">
+              <path d="M6 8.825a.5.5 0 0 1-.354-.146l-3.5-3.5a.5.5 0 1 1 .708-.708L6 7.618l3.146-3.147a.5.5 0 1 1 .708.708l-3.5 3.5A.5.5 0 0 1 6 8.825z"/>
+            </svg>
+          </button>
+          <div v-if="branchDropdownOpen" class="branch-dropdown">
+            <div class="branch-dropdown-header">Switch branch</div>
+            <button
+              v-for="branch in gitStore.branches"
+              :key="branch.name"
+              class="branch-option"
+              :class="{ 'branch-active': branch.is_current }"
+              @click="selectBranch(branch.name)"
+            >
+              <svg
+                v-if="branch.is_current"
+                width="14" height="14" viewBox="0 0 16 16" fill="currentColor" class="check-icon"
+              >
+                <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z"/>
+              </svg>
+              <span v-else class="check-placeholder" />
+              {{ branch.name }}
+            </button>
+          </div>
+        </div>
+        <span class="status-text">{{ statusSummary }}</span>
+      </div>
+      <div class="top-bar-actions">
+        <button
+          class="btn btn-action"
+          :disabled="gitStore.loading.pull"
+          @click.stop="gitStore.pull()"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M7.47 12.78a.75.75 0 0 0 1.06 0l3.25-3.25a.75.75 0 0 0-1.06-1.06L8.75 10.44V1.75a.75.75 0 0 0-1.5 0v8.69L5.28 8.47a.75.75 0 0 0-1.06 1.06l3.25 3.25zM3.75 13a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5z"/>
+          </svg>
+          {{ gitStore.loading.pull ? 'Pulling...' : 'Pull' }}
+        </button>
+        <button
+          class="btn btn-action"
+          :disabled="gitStore.loading.push"
+          @click.stop="gitStore.push()"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8.53 1.22a.75.75 0 0 0-1.06 0L4.22 4.47a.75.75 0 0 0 1.06 1.06L7.25 3.56v8.69a.75.75 0 0 0 1.5 0V3.56l1.97 1.97a.75.75 0 1 0 1.06-1.06L8.53 1.22zM3.75 13a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5z"/>
+          </svg>
+          {{ gitStore.loading.push ? 'Pushing...' : 'Push' }}
+        </button>
+      </div>
+    </header>
+
+    <!-- SubTabs -->
+    <nav class="sub-tabs">
+      <button
+        class="sub-tab"
+        :class="{ 'sub-tab-active': gitStore.activeTab === 'changes' }"
+        @click="gitStore.activeTab = 'changes'"
+      >
+        Changes
+        <span v-if="tabCounts.changes > 0" class="tab-count">{{ tabCounts.changes }}</span>
+      </button>
+      <button
+        class="sub-tab"
+        :class="{ 'sub-tab-active': gitStore.activeTab === 'log' }"
+        @click="gitStore.activeTab = 'log'"
+      >
+        Log
+        <span v-if="tabCounts.log > 0" class="tab-count">{{ tabCounts.log }}</span>
+      </button>
+      <button
+        class="sub-tab"
+        :class="{ 'sub-tab-active': gitStore.activeTab === 'branches' }"
+        @click="gitStore.activeTab = 'branches'"
+      >
+        Branches
+        <span v-if="tabCounts.branches > 0" class="tab-count">{{ tabCounts.branches }}</span>
+      </button>
+    </nav>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+
+      <!-- ==================== TAB: CHANGES ==================== -->
+      <div v-if="gitStore.activeTab === 'changes'" class="changes-layout" :style="{ 'grid-template-columns': filesPanelWidth + 'px 4px 1fr' }">
+        <!-- Left: File list -->
+        <div class="files-panel">
+          <div v-if="totalChanges === 0" class="empty-state">
+            <span class="empty-text">No changes</span>
+          </div>
+          <template v-else>
+            <!-- Staged Changes -->
+            <div v-if="stagedChanges.length > 0" class="file-group">
+              <div class="file-group-header" @click="stagedCollapsed = !stagedCollapsed">
+                <div class="file-group-header-left">
+                  <svg
+                    width="12" height="12" viewBox="0 0 12 12" fill="currentColor"
+                    class="collapse-chevron"
+                    :class="{ 'collapse-chevron-collapsed': stagedCollapsed }"
+                  >
+                    <path d="M6 8.825a.5.5 0 0 1-.354-.146l-3.5-3.5a.5.5 0 1 1 .708-.708L6 7.618l3.146-3.147a.5.5 0 1 1 .708.708l-3.5 3.5A.5.5 0 0 1 6 8.825z"/>
+                  </svg>
+                  Staged Changes
+                  <span class="file-count">{{ stagedChanges.length }}</span>
+                </div>
+                <button class="file-group-action" title="Unstage all" @click.stop="unstageAll">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z"/>
+                  </svg>
+                </button>
+              </div>
+              <template v-if="!stagedCollapsed">
+                <div
+                  v-for="entry in stagedChanges"
+                  :key="'staged-' + entry.file"
+                  class="file-item"
+                  :class="{ 'file-active': selectedFile === entry.file }"
+                  @click="selectFile(entry.file)"
+                >
+                  <input
+                    type="checkbox"
+                    class="file-checkbox"
+                    checked
+                    disabled
+                    title="Already staged"
+                  />
+                  <span
+                    class="file-badge"
+                    :style="{ color: getStatusColor(entry), backgroundColor: getStatusBgColor(entry) }"
+                  >
+                    {{ entry.statusChar }}
+                  </span>
+                  <span class="file-path" :title="entry.file">
+                    <span class="file-name">{{ splitPath(entry.file).name }}</span>
+                    <span class="file-dir">{{ splitPath(entry.file).dir }}</span>
+                  </span>
+                </div>
+              </template>
+            </div>
+
+            <!-- Unstaged Changes -->
+            <div v-if="unstagedChanges.length > 0" class="file-group">
+              <div class="file-group-header" @click="changesCollapsed = !changesCollapsed">
+                <div class="file-group-header-left">
+                  <svg
+                    width="12" height="12" viewBox="0 0 12 12" fill="currentColor"
+                    class="collapse-chevron"
+                    :class="{ 'collapse-chevron-collapsed': changesCollapsed }"
+                  >
+                    <path d="M6 8.825a.5.5 0 0 1-.354-.146l-3.5-3.5a.5.5 0 1 1 .708-.708L6 7.618l3.146-3.147a.5.5 0 1 1 .708.708l-3.5 3.5A.5.5 0 0 1 6 8.825z"/>
+                  </svg>
+                  Changes
+                  <span class="file-count">{{ unstagedChanges.length }}</span>
+                </div>
+                <button class="file-group-action" title="Select all" @click.stop="selectAllForStage">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z"/>
+                  </svg>
+                </button>
+              </div>
+              <template v-if="!changesCollapsed">
+                <div
+                  v-for="entry in unstagedChanges"
+                  :key="'unstaged-' + entry.file"
+                  class="file-item"
+                  :class="{ 'file-active': selectedFile === entry.file }"
+                  @click="selectFile(entry.file)"
+                >
+                  <input
+                    type="checkbox"
+                    class="file-checkbox"
+                    :checked="gitStore.isSelected(entry.file)"
+                    @click.stop
+                    @change="toggleFileCheck(entry.file)"
+                  />
+                  <span
+                    class="file-badge"
+                    :style="{ color: getStatusColor(entry), backgroundColor: getStatusBgColor(entry) }"
+                  >
+                    {{ entry.statusChar }}
+                  </span>
+                  <span class="file-path" :title="entry.file">
+                    <span class="file-name">{{ splitPath(entry.file).name }}</span>
+                    <span class="file-dir">{{ splitPath(entry.file).dir }}</span>
+                  </span>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <!-- Resize handle -->
+        <div class="resize-handle" @mousedown.prevent="startResize"></div>
+
+        <!-- Right: Diff viewer -->
+        <div class="diff-panel">
+          <template v-if="selectedFile && gitStore.diff">
+            <div class="diff-header">
+              <span class="diff-filename">{{ selectedFile }}</span>
+            </div>
+            <div class="diff-content">
+              <div v-if="gitStore.loading.diff" class="diff-loading">
+                Loading diff...
+              </div>
+              <template v-else>
+                <div
+                  v-for="(line, idx) in parsedDiff"
+                  :key="idx"
+                  class="diff-line"
+                  :class="{
+                    'diff-line-add': line.type === 'add',
+                    'diff-line-remove': line.type === 'remove',
+                    'diff-line-header': line.type === 'header',
+                    'diff-line-context': line.type === 'context',
+                  }"
+                >
+                  <span class="diff-line-no old-no">{{ line.oldLineNo ?? '' }}</span>
+                  <span class="diff-line-no new-no">{{ line.newLineNo ?? '' }}</span>
+                  <span class="diff-line-prefix">{{
+                    line.type === 'add' ? '+' : line.type === 'remove' ? '-' : line.type === 'header' ? '' : ' '
+                  }}</span>
+                  <span class="diff-line-text">{{ line.content }}</span>
+                </div>
+              </template>
+            </div>
+          </template>
+          <div v-else class="diff-placeholder">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" class="diff-placeholder-icon">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <span class="placeholder-title">Select a file to view diff</span>
+            <span v-if="totalChanges > 0" class="placeholder-summary">
+              {{ totalChanges }} file{{ totalChanges !== 1 ? 's' : '' }} changed
+            </span>
+            <span v-else class="placeholder-summary">Working tree is clean</span>
+          </div>
+        </div>
+
+        <!-- Bottom: Commit bar -->
+        <div class="commit-bar">
+          <button
+            v-if="gitStore.selectedFiles.size > 0"
+            class="btn btn-stage"
+            @click="stageSelected"
+          >
+            Add {{ gitStore.selectedFiles.size }} files
+          </button>
+          <span class="commit-bar-staged">
+            {{ gitStore.status.staged?.length ?? 0 }} staged
+          </span>
+          <button
+            class="btn-generate"
+            :disabled="gitStore.generatingMessage"
+            title="Generate commit message with Claude"
+            @click="doGenerateCommit"
+          >
+            <svg
+              v-if="gitStore.generatingMessage"
+              class="spinner"
+              width="14" height="14" viewBox="0 0 16 16" fill="none"
+            >
+              <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2" stroke-dasharray="28" stroke-dashoffset="8" />
+            </svg>
+            <span v-else class="generate-icon">&#10024;</span>
+          </button>
+          <input
+            v-model="gitStore.commitMessage"
+            class="commit-input"
+            type="text"
+            placeholder="fix: describe your changes"
+            @keydown.enter="doCommit"
+          />
+          <button
+            class="btn btn-commit"
+            :disabled="!canCommit() || gitStore.loading.commit"
+            @click="doCommit"
+          >
+            {{ gitStore.loading.commit ? 'Committing...' : 'Commit' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- ==================== TAB: LOG ==================== -->
+      <div v-if="gitStore.activeTab === 'log'" class="log-layout">
+        <div class="log-main" @scroll="onLogScroll">
+          <div v-if="gitStore.commits.length === 0" class="empty-state">
+            <span class="empty-text">No commits</span>
+          </div>
+          <div v-else class="log-list">
+            <template v-for="(c, idx) in gitStore.commits" :key="c.hash || 'g' + idx">
+              <!-- Graph-only rows (merge lines etc.) -->
+              <div v-if="c.graph_only" class="log-row log-row-graph-only">
+                <div class="log-graph-col" :style="{ width: graphSvgWidth(c.graph) + 'px' }">
+                  <svg :width="graphSvgWidth(c.graph)" :height="GRAPH_ONLY_HEIGHT" class="graph-svg">
+                    <template v-for="(cell, ci) in parseGraphLine(c.graph)" :key="ci">
+                      <line v-if="cell.type === 'pipe'"
+                        :x1="cell.col * GRAPH_COL_WIDTH + 8" y1="0"
+                        :x2="cell.col * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ONLY_HEIGHT"
+                        :stroke="cell.color" stroke-width="2" stroke-linecap="round" />
+                      <path v-else-if="cell.type === 'merge-down'"
+                        :d="`M ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},0 C ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},${GRAPH_ONLY_HEIGHT * 0.4} ${cell.col * GRAPH_COL_WIDTH + 8},${GRAPH_ONLY_HEIGHT * 0.6} ${cell.col * GRAPH_COL_WIDTH + 8},${GRAPH_ONLY_HEIGHT}`"
+                        :stroke="cell.color" stroke-width="2" fill="none" stroke-linecap="round" />
+                      <path v-else-if="cell.type === 'merge-up'"
+                        :d="`M ${cell.col * GRAPH_COL_WIDTH + 8},0 C ${cell.col * GRAPH_COL_WIDTH + 8},${GRAPH_ONLY_HEIGHT * 0.4} ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},${GRAPH_ONLY_HEIGHT * 0.6} ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},${GRAPH_ONLY_HEIGHT}`"
+                        :stroke="cell.color" stroke-width="2" fill="none" stroke-linecap="round" />
+                    </template>
+                  </svg>
+                </div>
+              </div>
+              <!-- Commit rows -->
+              <div v-else class="log-row"
+                :class="{ 'log-row-selected': gitStore.selectedCommit?.hash === c.hash }"
+                @click="selectCommit(c.hash)">
+                <div class="log-graph-col" :style="{ width: graphSvgWidth(c.graph) + 'px' }">
+                  <svg :width="graphSvgWidth(c.graph)" :height="GRAPH_ROW_HEIGHT" class="graph-svg">
+                    <template v-for="(cell, ci) in parseGraphLine(c.graph)" :key="ci">
+                      <line v-if="cell.type === 'pipe'"
+                        :x1="cell.col * GRAPH_COL_WIDTH + 8" y1="0"
+                        :x2="cell.col * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT"
+                        :stroke="cell.color" stroke-width="2" stroke-linecap="round" />
+                      <path v-else-if="cell.type === 'merge-down'"
+                        :d="`M ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},0 C ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.4} ${cell.col * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.6} ${cell.col * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT}`"
+                        :stroke="cell.color" stroke-width="2" fill="none" stroke-linecap="round" />
+                      <path v-else-if="cell.type === 'merge-up'"
+                        :d="`M ${cell.col * GRAPH_COL_WIDTH + 8},0 C ${cell.col * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.4} ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT * 0.6} ${(cell.col - 1) * GRAPH_COL_WIDTH + 8},${GRAPH_ROW_HEIGHT}`"
+                        :stroke="cell.color" stroke-width="2" fill="none" stroke-linecap="round" />
+                      <template v-if="cell.type === 'commit'">
+                        <line :x1="cell.col * GRAPH_COL_WIDTH + 8" y1="0"
+                          :x2="cell.col * GRAPH_COL_WIDTH + 8" :y2="GRAPH_ROW_HEIGHT"
+                          :stroke="cell.color" stroke-width="2" stroke-linecap="round" />
+                        <circle :cx="cell.col * GRAPH_COL_WIDTH + 8" :cy="GRAPH_ROW_HEIGHT / 2"
+                          :r="(c.parents?.length ?? 0) > 1 ? 5 : 4"
+                          :fill="(c.parents?.length ?? 0) > 1 ? '#0d1117' : cell.color"
+                          :stroke="cell.color"
+                          :stroke-width="(c.parents?.length ?? 0) > 1 ? 2 : 0" />
+                      </template>
+                    </template>
+                  </svg>
+                </div>
+                <div class="log-commit-col">
+                  <span class="log-hash">{{ c.short_hash }}</span>
+                  <span v-for="r in c.refs" :key="r" class="ref-badge" :class="getRefClass(r)">{{ getRefLabel(r) }}</span>
+                  <span class="log-msg">{{ c.message }}</span>
+                </div>
+                <div class="log-meta-col">
+                  <span class="log-author">{{ c.author }}</span>
+                  <span class="log-time">{{ c.date }}</span>
+                </div>
+              </div>
+            </template>
+          </div>
+          <div v-if="gitStore.logLoadingMore" class="log-loading-more">
+            Loading more commits...
+          </div>
+          <div v-else-if="!gitStore.logHasMore && gitStore.commits.length > 0" class="log-end">
+            End of history
+          </div>
+        </div>
+
+        <!-- Commit detail panel -->
+        <div v-if="gitStore.selectedCommit" class="commit-detail-panel">
+          <div class="commit-detail-header">
+            <span class="commit-detail-title">Commit Details</span>
+            <button class="commit-detail-close" @click="gitStore.selectedCommit = null">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="commit-detail-body">
+            <div class="detail-row">
+              <span class="detail-label">Hash</span>
+              <span
+                class="detail-value detail-hash-copyable"
+                title="Click to copy"
+                @click="copyToClipboard(gitStore.selectedCommit.hash)"
+              >
+                {{ gitStore.selectedCommit.hash }}
+              </span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Message</span>
+              <span class="detail-value">{{ gitStore.selectedCommit.message }}</span>
+            </div>
+            <div v-if="gitStore.selectedCommit.body" class="detail-row">
+              <span class="detail-label">Body</span>
+              <span class="detail-value detail-body">{{ gitStore.selectedCommit.body }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Author</span>
+              <span class="detail-value">{{ gitStore.selectedCommit.author }} &lt;{{ gitStore.selectedCommit.email }}&gt;</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Date</span>
+              <span class="detail-value">{{ gitStore.selectedCommit.date }}</span>
+            </div>
+            <div v-if="gitStore.selectedCommit.stats" class="detail-row">
+              <span class="detail-label">Stats</span>
+              <span class="detail-value">{{ gitStore.selectedCommit.stats }}</span>
+            </div>
+
+            <!-- Changed files -->
+            <div class="detail-files-header">Changed Files</div>
+            <div
+              v-for="f in gitStore.selectedCommit.files"
+              :key="f.path"
+              class="detail-file-item"
+              @click="viewCommitFileDiff(gitStore.selectedCommit!.hash, f.path)"
+            >
+              <span
+                class="detail-file-status"
+                :style="{ color: getFileStatusColor(f.status), backgroundColor: getFileStatusBg(f.status) }"
+              >
+                {{ f.status }}
+              </span>
+              <span class="detail-file-path">{{ f.path }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== TAB: BRANCHES ==================== -->
+      <div v-if="gitStore.activeTab === 'branches'" class="branches-layout">
+        <div v-if="gitStore.branches.length === 0" class="empty-state">
+          <span class="empty-text">No branches</span>
+        </div>
+        <div v-else class="branches-list">
+          <div
+            v-for="branch in gitStore.branches"
+            :key="branch.name"
+            class="branch-card"
+            :class="{ 'branch-card-current': branch.is_current }"
+          >
+            <div class="branch-card-top">
+              <div class="branch-card-name">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" class="branch-card-icon">
+                  <path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.492 2.492 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25zM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM3.5 3.25a.75.75 0 1 1 1.5 0 .75.75 0 0 1-1.5 0z"/>
+                </svg>
+                <span>{{ branch.name }}</span>
+              </div>
+              <div class="branch-card-badges">
+                <span v-if="branch.is_current" class="badge badge-current">CURRENT</span>
+                <span v-if="branch.is_merged" class="badge badge-merged">MERGED</span>
+                <span v-if="branch.ahead > 0" class="badge badge-ahead">{{ branch.ahead }} ahead</span>
+                <span v-if="branch.behind > 0" class="badge badge-behind">{{ branch.behind }} behind</span>
+              </div>
+            </div>
+            <div v-if="branch.message || branch.date" class="branch-card-meta">
+              <span v-if="branch.short_hash" class="branch-card-hash">{{ branch.short_hash }}</span>
+              <span v-if="branch.message" class="branch-card-msg">{{ branch.message }}</span>
+              <span v-if="branch.date" class="branch-card-date">{{ formatRelativeTime(branch.date) }}</span>
+              <span v-if="branch.author" class="branch-card-author">{{ branch.author }}</span>
+            </div>
+            <div class="branch-card-actions">
+              <button
+                v-if="!branch.is_current"
+                class="btn btn-sm"
+                @click="selectBranch(branch.name)"
+              >
+                Checkout
+              </button>
+              <button
+                v-if="!branch.is_current"
+                class="btn btn-sm"
+                @click="gitStore.activeTab = 'log'"
+              >
+                Log
+              </button>
+              <button
+                v-if="branch.is_merged && !branch.is_current"
+                class="btn btn-sm btn-danger"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Commit diff modal -->
+    <div v-if="showCommitDiffModal" class="modal-overlay" @click.self="closeCommitDiffModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <span class="modal-title">{{ commitDiffFile }}</span>
+          <button class="modal-close" @click="closeCommitDiffModal">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body diff-content">
+          <div
+            v-for="(line, idx) in parsedCommitDiff"
+            :key="idx"
+            class="diff-line"
+            :class="{
+              'diff-line-add': line.type === 'add',
+              'diff-line-remove': line.type === 'remove',
+              'diff-line-header': line.type === 'header',
+              'diff-line-context': line.type === 'context',
+            }"
+          >
+            <span class="diff-line-no old-no">{{ line.oldLineNo ?? '' }}</span>
+            <span class="diff-line-no new-no">{{ line.newLineNo ?? '' }}</span>
+            <span class="diff-line-prefix">{{
+              line.type === 'add' ? '+' : line.type === 'remove' ? '-' : line.type === 'header' ? '' : ' '
+            }}</span>
+            <span class="diff-line-text">{{ line.content }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error bar -->
+    <div v-if="gitStore.error" class="error-bar" @click="gitStore.error = null">
+      {{ gitStore.error }}
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.git-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* ===== TopBar ===== */
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  flex-shrink: 0;
+}
+
+.top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.top-bar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f0f6fc;
+  white-space: nowrap;
+}
+
+.status-text {
+  font-size: 13px;
+  color: #8b949e;
+  white-space: nowrap;
+}
+
+.top-bar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Branch selector */
+.branch-selector {
+  position: relative;
+}
+
+.branch-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #f0f6fc;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.branch-button:hover {
+  border-color: #58a6ff;
+}
+
+.branch-icon {
+  color: #8b949e;
+  flex-shrink: 0;
+}
+
+.branch-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.chevron {
+  color: #8b949e;
+  flex-shrink: 0;
+}
+
+.branch-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+}
+
+.branch-dropdown-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8b949e;
+  border-bottom: 1px solid #30363d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.branch-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  color: #f0f6fc;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.branch-option:hover {
+  background: #21262d;
+}
+
+.branch-active {
+  font-weight: 600;
+}
+
+.check-icon {
+  color: #58a6ff;
+  flex-shrink: 0;
+}
+
+.check-placeholder {
+  width: 14px;
+  flex-shrink: 0;
+}
+
+/* ===== SubTabs ===== */
+
+.sub-tabs {
+  display: flex;
+  gap: 0;
+  background: #0d1117;
+  border-bottom: 1px solid #30363d;
+  flex-shrink: 0;
+  padding: 0 16px;
+}
+
+.sub-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #8b949e;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.sub-tab:hover {
+  color: #f0f6fc;
+}
+
+.sub-tab-active {
+  color: #f0f6fc;
+  border-bottom-color: #f78166;
+}
+
+.tab-count {
+  background: #30363d;
+  color: #f0f6fc;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+/* ===== Tab Content ===== */
+
+.tab-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ===== Changes Layout ===== */
+
+.changes-layout {
+  display: grid;
+  grid-template-columns: 320px 4px 1fr;
+  grid-template-rows: 1fr auto;
+  height: 100%;
+}
+
+.files-panel {
+  grid-row: 1;
+  grid-column: 1;
+  background: #161b22;
+  overflow-y: auto;
+}
+
+.resize-handle {
+  grid-row: 1;
+  grid-column: 2;
+  background: #30363d;
+  cursor: col-resize;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: -2px -4px;
+}
+
+.resize-handle:hover {
+  background: var(--accent-blue);
+}
+
+.diff-panel {
+  grid-row: 1;
+  grid-column: 3;
+  display: flex;
+  flex-direction: column;
+  background: #0d1117;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.commit-bar {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: #161b22;
+  border-top: 1px solid #30363d;
+  flex-shrink: 0;
+}
+
+.btn-stage {
+  padding: 4px 12px;
+  background: #238636;
+  border: 1px solid #2ea043;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-stage:hover {
+  background: #2ea043;
+}
+
+/* File groups */
+.file-group {
+  border-bottom: 1px solid #30363d;
+}
+
+.file-group:last-child {
+  border-bottom: none;
+}
+
+.file-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: #0d1117;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  cursor: pointer;
+  user-select: none;
+}
+
+.file-group-header:hover {
+  background: #161b22;
+}
+
+.file-group-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.collapse-chevron {
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.collapse-chevron-collapsed {
+  transform: rotate(-90deg);
+}
+
+.file-group-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #8b949e;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.file-group-action:hover {
+  background: #21262d;
+  color: #f0f6fc;
+}
+
+.file-count {
+  background: #30363d;
+  color: #f0f6fc;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.file-item:hover {
+  background: #1c2128;
+}
+
+.file-active {
+  background: #1c2128;
+  border-left: 2px solid #58a6ff;
+  padding-left: 10px;
+}
+
+.file-checkbox {
+  width: 14px;
+  height: 14px;
+  accent-color: #58a6ff;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.file-badge {
+  font-size: 10px;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+.file-path {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+}
+
+.file-name {
+  color: #f0f6fc;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.file-dir {
+  color: #484f58;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+/* Diff viewer */
+.diff-header {
+  padding: 8px 16px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  flex-shrink: 0;
+}
+
+.diff-filename {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: #f0f6fc;
+  font-weight: 600;
+}
+
+.diff-content {
+  flex: 1;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.diff-line {
+  display: flex;
+  align-items: stretch;
+  min-height: 20px;
+  padding-right: 16px;
+}
+
+.diff-line-no {
+  display: inline-block;
+  width: 50px;
+  min-width: 50px;
+  text-align: right;
+  padding-right: 8px;
+  color: #484f58;
+  user-select: none;
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.diff-line-prefix {
+  display: inline-block;
+  width: 16px;
+  min-width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+  user-select: none;
+  line-height: 20px;
+}
+
+.diff-line-text {
+  flex: 1;
+  white-space: pre;
+  overflow: hidden;
+  line-height: 20px;
+}
+
+.diff-line-add {
+  background: #1b3a2a;
+  color: #3fb950;
+}
+
+.diff-line-add .diff-line-no {
+  background: rgba(63, 185, 80, 0.1);
+  color: #3fb950;
+}
+
+.diff-line-add .diff-line-prefix {
+  color: #3fb950;
+}
+
+.diff-line-remove {
+  background: #3d1e20;
+  color: #f85149;
+}
+
+.diff-line-remove .diff-line-no {
+  background: rgba(248, 81, 73, 0.1);
+  color: #f85149;
+}
+
+.diff-line-remove .diff-line-prefix {
+  color: #f85149;
+}
+
+.diff-line-header {
+  background: rgba(88, 166, 255, 0.1);
+  color: #58a6ff;
+  font-weight: 600;
+  padding: 4px 0;
+}
+
+.diff-line-header .diff-line-no {
+  background: transparent;
+}
+
+.diff-line-context {
+  color: #8b949e;
+}
+
+.diff-loading {
+  padding: 24px;
+  text-align: center;
+  color: #8b949e;
+}
+
+.diff-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #484f58;
+  font-size: 14px;
+}
+
+.diff-placeholder-icon {
+  opacity: 0.4;
+}
+
+.placeholder-title {
+  font-size: 14px;
+  color: #484f58;
+}
+
+.placeholder-summary {
+  font-size: 12px;
+  color: #30363d;
+  font-family: var(--font-mono);
+}
+
+/* Commit bar */
+.commit-bar-staged {
+  font-size: 12px;
+  color: #8b949e;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-generate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #f0f6fc;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.btn-generate:hover:not(:disabled) {
+  border-color: #58a6ff;
+}
+
+.btn-generate:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.generate-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.commit-bar .commit-input {
+  flex: 1;
+  height: 32px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 0 12px;
+  color: #f0f6fc;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.commit-bar .commit-input:focus {
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+  outline: none;
+}
+
+.commit-bar .commit-input::placeholder {
+  color: #484f58;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #f0f6fc;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  background: #30363d;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-action svg {
+  flex-shrink: 0;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.btn-commit {
+  padding: 6px 20px;
+  background: rgba(63, 185, 80, 0.15);
+  border: 1px solid #3fb950;
+  color: #3fb950;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.btn-commit:hover:not(:disabled) {
+  background: rgba(63, 185, 80, 0.25);
+}
+
+.btn-commit:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  color: #f85149;
+  border-color: #f85149;
+  background: rgba(248, 81, 73, 0.1);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: rgba(248, 81, 73, 0.2);
+}
+
+/* ===== Log Layout ===== */
+
+.log-layout {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.log-main {
+  flex: 1;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.log-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.log-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 12px;
+  height: 28px;
+  cursor: pointer;
+  transition: background 0.1s;
+  border-bottom: 1px solid transparent;
+}
+
+.log-row:hover {
+  background: #1c2128;
+}
+
+.log-row-selected {
+  background: rgba(31, 111, 235, 0.08);
+  border-bottom-color: #30363d;
+}
+
+.log-row-graph-only {
+  height: 14px;
+  padding: 0 12px;
+  cursor: default;
+}
+
+.log-row-graph-only:hover {
+  background: transparent;
+}
+
+.log-graph-col {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  min-width: 32px;
+}
+
+.graph-svg {
+  display: block;
+  overflow: visible;
+}
+
+.log-commit-col {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.log-hash {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #58a6ff;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.log-msg {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f0f6fc;
+  font-size: 13px;
+}
+
+.log-meta-col {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  padding-left: 12px;
+}
+
+.log-author {
+  font-size: 12px;
+  color: #8b949e;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.log-time {
+  font-size: 12px;
+  color: #484f58;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+
+.log-loading-more,
+.log-end {
+  padding: 12px;
+  text-align: center;
+  font-size: 12px;
+  color: #484f58;
+}
+
+.log-loading-more {
+  color: var(--accent-blue);
+}
+
+/* Ref badges */
+.ref-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ref-branch {
+  background: rgba(88, 166, 255, 0.15);
+  color: #58a6ff;
+  border: 1px solid rgba(88, 166, 255, 0.3);
+}
+
+.ref-tag {
+  background: rgba(63, 185, 80, 0.15);
+  color: #3fb950;
+  border: 1px solid rgba(63, 185, 80, 0.3);
+}
+
+.ref-hotfix {
+  background: rgba(248, 81, 73, 0.15);
+  color: #f85149;
+  border: 1px solid rgba(248, 81, 73, 0.3);
+}
+
+.ref-head {
+  background: rgba(188, 140, 255, 0.15);
+  color: #bc8cff;
+  border: 1px solid rgba(188, 140, 255, 0.3);
+}
+
+/* Commit detail panel */
+.commit-detail-panel {
+  width: 350px;
+  flex-shrink: 0;
+  background: #161b22;
+  border-left: 1px solid #30363d;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.commit-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid #30363d;
+  flex-shrink: 0;
+}
+
+.commit-detail-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.commit-detail-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.commit-detail-close:hover {
+  background: #21262d;
+  color: #f0f6fc;
+}
+
+.commit-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+
+.detail-row {
+  margin-bottom: 12px;
+}
+
+.detail-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.detail-value {
+  font-size: 13px;
+  color: #f0f6fc;
+  word-break: break-all;
+}
+
+.detail-hash-copyable {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #58a6ff;
+  cursor: pointer;
+}
+
+.detail-hash-copyable:hover {
+  text-decoration: underline;
+}
+
+.detail-body {
+  white-space: pre-wrap;
+  color: #8b949e;
+}
+
+.detail-files-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 0;
+  margin-top: 8px;
+  border-top: 1px solid #30363d;
+}
+
+.detail-file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+  transition: background 0.1s;
+  border-radius: 4px;
+  padding: 4px 6px;
+  margin: 0 -6px;
+}
+
+.detail-file-item:hover {
+  background: #1c2128;
+}
+
+.detail-file-status {
+  font-size: 10px;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+.detail-file-path {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #f0f6fc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== Branches Layout ===== */
+
+.branches-layout {
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.branches-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.branch-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 12px 16px;
+  transition: border-color 0.15s;
+}
+
+.branch-card:hover {
+  border-color: #484f58;
+}
+
+.branch-card-current {
+  border-color: #58a6ff;
+}
+
+.branch-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.branch-card-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f0f6fc;
+}
+
+.branch-card-icon {
+  color: #8b949e;
+  flex-shrink: 0;
+}
+
+.branch-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-current {
+  background: rgba(88, 166, 255, 0.15);
+  color: #58a6ff;
+}
+
+.badge-merged {
+  background: rgba(188, 140, 255, 0.15);
+  color: #bc8cff;
+}
+
+.badge-ahead {
+  background: rgba(63, 185, 80, 0.15);
+  color: #3fb950;
+}
+
+.badge-behind {
+  background: rgba(210, 153, 34, 0.15);
+  color: #d29922;
+}
+
+.branch-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #8b949e;
+}
+
+.branch-card-hash {
+  font-family: var(--font-mono);
+  color: #58a6ff;
+}
+
+.branch-card-msg {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-card-date {
+  color: #484f58;
+  flex-shrink: 0;
+}
+
+.branch-card-author {
+  color: #8b949e;
+  flex-shrink: 0;
+}
+
+.branch-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* ===== Modal ===== */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+}
+
+.modal-content {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  width: 80vw;
+  max-width: 900px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  flex-shrink: 0;
+}
+
+.modal-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: #f0f6fc;
+  font-weight: 600;
+}
+
+.modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.modal-close:hover {
+  background: #21262d;
+  color: #f0f6fc;
+}
+
+.modal-body {
+  flex: 1;
+  overflow: auto;
+}
+
+/* ===== Empty state ===== */
+
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.empty-text {
+  color: #484f58;
+  font-size: 13px;
+}
+
+/* ===== Error bar ===== */
+
+.error-bar {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  background: rgba(248, 81, 73, 0.15);
+  border: 1px solid #f85149;
+  border-radius: 8px;
+  color: #f85149;
+  font-size: 13px;
+  cursor: pointer;
+  z-index: 200;
+  max-width: 600px;
+  text-align: center;
+}
+</style>
