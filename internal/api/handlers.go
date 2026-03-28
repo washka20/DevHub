@@ -14,6 +14,7 @@ import (
 	"devhub/internal/git"
 	"devhub/internal/makefile"
 	"devhub/internal/scanner"
+	"devhub/internal/terminal"
 
 	"github.com/gorilla/mux"
 )
@@ -25,6 +26,7 @@ type Handlers struct {
 	projects    []scanner.Project // cached project list
 	Git         *git.GitService
 	Docker      *docker.DockerService
+	TermManager *terminal.Manager
 }
 
 // NewHandlers creates a new Handlers instance.
@@ -719,4 +721,58 @@ func (h *Handlers) DockerLogs(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+// DockerExec handles POST /api/projects/{id}/docker/{name}/exec
+// Creates a terminal session attached to a docker container via docker compose exec.
+func (h *Handlers) DockerExec(w http.ResponseWriter, r *http.Request) {
+	path, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	containerName := mux.Vars(r)["name"]
+
+	composePath, err := composeFilePath(path)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	var body struct {
+		Cols uint16 `json:"cols"`
+		Rows uint16 `json:"rows"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	if body.Cols == 0 {
+		body.Cols = 80
+	}
+	if body.Rows == 0 {
+		body.Rows = 24
+	}
+
+	composeDir := filepath.Dir(composePath)
+	composeFile := filepath.Base(composePath)
+
+	id := generateID()
+	sess, err := h.TermManager.CreateWithCommand(
+		id, composeDir, body.Cols, body.Rows,
+		"docker", "compose", "-f", composeFile, "exec", containerName, "sh", "-c",
+		"if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi",
+	)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]string{
+		"session_id": sess.ID,
+		"container":  containerName,
+	})
 }

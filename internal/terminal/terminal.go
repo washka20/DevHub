@@ -142,6 +142,41 @@ func (m *Manager) Create(id, shell, cwd string, cols, rows uint16) (*Session, er
 	return sess, nil
 }
 
+// CreateWithCommand creates a session running an arbitrary command with args.
+func (m *Manager) CreateWithCommand(id, cwd string, cols, rows uint16, name string, args ...string) (*Session, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if len(m.sessions) >= m.maxSessions {
+		return nil, ErrMaxSessions
+	}
+
+	if _, exists := m.sessions[id]; exists {
+		return nil, fmt.Errorf("session %s already exists", id)
+	}
+
+	cmd := exec.Command(name, args...)
+	cmd.Dir = cwd
+	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
+
+	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: cols, Rows: rows})
+	if err != nil {
+		return nil, fmt.Errorf("pty start: %w", err)
+	}
+
+	var logFile *os.File
+	logDir := filepath.Join(os.TempDir(), "devhub-terminal-logs")
+	if err := os.MkdirAll(logDir, 0700); err == nil {
+		logFile, _ = os.Create(filepath.Join(logDir, id+".log"))
+	}
+
+	sess := &Session{
+		ID: id, Cmd: cmd, Pty: ptmx, LogFile: logFile, CreatedAt: time.Now(), CWD: cwd,
+	}
+	m.sessions[id] = sess
+	return sess, nil
+}
+
 func (m *Manager) Get(id string) (*Session, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

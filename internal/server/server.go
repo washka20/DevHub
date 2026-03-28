@@ -33,11 +33,12 @@ func New(cfg *config.Config) *Server {
 	gitSvc := git.NewGitService(r)
 	dockerSvc := docker.NewDockerService(r)
 
-	h := api.NewHandlers(cfg.ProjectsDir, hub, gitSvc, dockerSvc)
-	h.RefreshProjects()
-
 	// Terminal
 	termManager := terminal.NewManager(cfg.Terminal.MaxSessions)
+
+	h := api.NewHandlers(cfg.ProjectsDir, hub, gitSvc, dockerSvc)
+	h.TermManager = termManager
+	h.RefreshProjects()
 
 	router := mux.NewRouter()
 
@@ -71,6 +72,7 @@ func New(cfg *config.Config) *Server {
 	// Docker
 	apiRouter.HandleFunc("/projects/{id}/docker/containers", h.DockerContainers).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/logs", h.DockerLogs).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/docker/{name}/exec", h.DockerExec).Methods("POST")
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/{action}", h.DockerAction).Methods("POST")
 
 	// Terminal

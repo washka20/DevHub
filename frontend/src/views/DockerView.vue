@@ -1,8 +1,44 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { useDockerStore } from '../stores/docker'
+import { useProjectsStore } from '../stores/projects'
+import WebTerminal from '../components/WebTerminal.vue'
+import { useTerminalStore } from '../stores/terminal'
 
 const dockerStore = useDockerStore()
+const projectsStore = useProjectsStore()
+const terminalStore = useTerminalStore()
+
+// Docker exec terminal
+const execContainer = ref<string | null>(null)
+const execSessionId = ref<string | null>(null)
+
+async function openTerminal(containerName: string) {
+  const projectName = projectsStore.currentProject?.name
+  if (!projectName) return
+
+  try {
+    const res = await fetch(`/api/projects/${projectName}/docker/${containerName}/exec`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cols: 80, rows: 24 }),
+    })
+    if (!res.ok) throw new Error(await res.text())
+    const data = await res.json()
+    execContainer.value = containerName
+    execSessionId.value = data.session_id
+  } catch (e) {
+    console.error('Failed to exec into container:', e)
+  }
+}
+
+function closeTerminal() {
+  if (execSessionId.value) {
+    fetch(`/api/terminal/sessions/${execSessionId.value}`, { method: 'DELETE' }).catch(() => {})
+  }
+  execContainer.value = null
+  execSessionId.value = null
+}
 
 // Logs state
 const logLines = ref<string[]>([])
@@ -186,6 +222,11 @@ onUnmounted(() => {
                 :disabled="dockerStore.actionLoading === c.name"
                 @click="dockerStore.containerAction(c.name, 'restart')"
               >Restart</button>
+              <button
+                v-if="c.state === 'running'"
+                class="action-btn action-terminal"
+                @click="openTerminal(c.name)"
+              >Terminal</button>
             </td>
           </tr>
         </tbody>
@@ -216,6 +257,21 @@ onUnmounted(() => {
 </span></pre>
       </div>
     </section>
+
+    <!-- Docker exec terminal modal -->
+    <Teleport to="body">
+      <div v-if="execSessionId" class="docker-term-overlay" @click.self="closeTerminal">
+        <div class="docker-term-modal">
+          <div class="docker-term-header">
+            <span class="docker-term-title">Terminal: {{ execContainer }}</span>
+            <button class="docker-term-close" @click="closeTerminal">&times;</button>
+          </div>
+          <div class="docker-term-body">
+            <WebTerminal :session-id="execSessionId" />
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -477,6 +533,70 @@ onUnmounted(() => {
 .action-restart:hover:not(:disabled) {
   color: #d29922;
   border-color: #d29922;
+}
+
+.action-terminal:hover:not(:disabled) {
+  color: #58a6ff;
+  border-color: #58a6ff;
+}
+
+/* Docker exec terminal modal */
+.docker-term-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.docker-term-modal {
+  width: 80vw;
+  height: 70vh;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+}
+
+.docker-term-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  flex-shrink: 0;
+}
+
+.docker-term-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #58a6ff;
+  font-family: var(--font-mono);
+}
+
+.docker-term-close {
+  background: none;
+  border: none;
+  color: #8b949e;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.docker-term-close:hover {
+  color: #f85149;
+}
+
+.docker-term-body {
+  flex: 1;
+  min-height: 0;
 }
 
 /* Logs panel */
