@@ -3,6 +3,7 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { useTerminalStore } from '../stores/terminal'
 import '@xterm/xterm/css/xterm.css'
 
@@ -82,10 +83,13 @@ function initTerminal() {
   if (!terminalEl.value) return
 
   term = new Terminal({
+    allowProposedApi: true,
     cursorBlink: true,
+    customGlyphs: true,
     fontFamily: "'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
     fontSize: 14,
     lineHeight: 1.0,
+    letterSpacing: 0,
     scrollback: 10000,
     theme: {
       background: '#0d1117',
@@ -114,6 +118,10 @@ function initTerminal() {
   fitAddon = new FitAddon()
   term.loadAddon(fitAddon)
   term.loadAddon(new WebLinksAddon())
+
+  const unicode11 = new Unicode11Addon()
+  term.loadAddon(unicode11)
+  term.unicode.activeVersion = '11'
 
   term.open(terminalEl.value)
   fitAddon.fit()
@@ -190,8 +198,9 @@ watch(
 
 .web-terminal :deep(.xterm) {
   height: 100%;
-  padding: 4px;
+  padding: 4px 4px 4px 8px;
 }
+
 
 .web-terminal :deep(.xterm-viewport) {
   overflow-y: auto !important;
