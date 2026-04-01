@@ -39,6 +39,7 @@ const pane = computed(() => {
 
 const isDisconnected = computed(() => !pane.value || pane.value.status === 'disconnected')
 const isConnecting = computed(() => pane.value?.status === 'connecting')
+const isReconnecting = computed(() => pane.value?.status === 'reconnecting')
 
 // ---------------------------------------------------------------------------
 // WebSocket
@@ -88,7 +89,14 @@ function connectWs(sessionId: string) {
 }
 
 function scheduleReconnect(sessionId: string) {
-  if (disposed || reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return
+  if (disposed) return
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    if (pane.value && pane.value.status !== 'disconnected') {
+      pane.value.status = 'disconnected'
+      // Don't clear sessionId — session may still be alive, user can retry
+    }
+    return
+  }
   const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000)
   reconnectAttempts++
   reconnectTimer = setTimeout(() => {
@@ -212,7 +220,20 @@ onMounted(async () => {
       initTerminal()
       connectWs(pane.value.sessionId)
     }
+    return
   }
+
+  // If the pane is reconnecting (restored from saved layout), auto-reconnect
+  if (pane.value?.status === 'reconnecting') {
+    const sessionId = await terminalStore.connectPane(props.paneId)
+    if (!sessionId || disposed) return
+    await document.fonts.ready
+    if (disposed) return
+    initTerminal()
+    connectWs(sessionId)
+    return
+  }
+
   // Otherwise, the placeholder is shown and user clicks to connect
 })
 
@@ -271,6 +292,15 @@ watch(
     <div class="placeholder-content">
       <div class="placeholder-spinner"></div>
       <div class="placeholder-text">Connecting...</div>
+    </div>
+  </div>
+
+  <!-- Reconnecting overlay -->
+  <div v-else-if="isReconnecting" class="placeholder-overlay">
+    <div class="placeholder-content">
+      <div class="placeholder-spinner"></div>
+      <div class="placeholder-text">Reconnecting...</div>
+      <div class="placeholder-cwd">{{ pane?.cwd || '' }}</div>
     </div>
   </div>
 
