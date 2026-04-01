@@ -703,9 +703,8 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
 }
 
 .markdown-body li.task-list-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  list-style: none;
+  margin-left: -1.5em;
 }
 
 .markdown-body li.task-list-item > p {
@@ -726,13 +725,12 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
   border-radius: 3px;
   background: var(--bg-primary);
   cursor: pointer;
-  display: block;
+  display: inline-block;
   position: relative;
-  margin: 0;
-  margin-top: 3px;
+  margin: 0 6px 0 0;
   padding: 0;
-  flex-shrink: 0;
-  flex-grow: 0;
+  vertical-align: middle;
+  transform: translateY(-1px);
   transition: background 0.15s, border-color 0.15s;
 }
 
