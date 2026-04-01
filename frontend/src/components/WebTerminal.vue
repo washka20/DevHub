@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -227,6 +227,7 @@ onMounted(async () => {
   if (pane.value?.status === 'reconnecting') {
     const sessionId = await terminalStore.connectPane(props.paneId)
     if (!sessionId || disposed) return
+    await nextTick()  // wait for Vue to render the terminal div (v-else branch)
     await document.fonts.ready
     if (disposed) return
     initTerminal()
