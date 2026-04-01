@@ -11,6 +11,7 @@ import IconDocker from './icons/IconDocker.vue'
 import IconTerminal from './icons/IconTerminal.vue'
 import IconSettings from './icons/IconSettings.vue'
 import IconReadme from './icons/IconReadme.vue'
+import IconNotes from './icons/IconNotes.vue'
 
 const projectsStore = useProjectsStore()
 const dockerStore = useDockerStore()
@@ -69,6 +70,10 @@ const dockerRunning = computed(() =>
         <router-link to="/readme" class="nav-item" active-class="active">
           <IconReadme class="nav-icon" />
           README
+        </router-link>
+        <router-link to="/notes" class="nav-item" active-class="active">
+          <IconNotes class="nav-icon" />
+          Notes
         </router-link>
       </div>
     </nav>
