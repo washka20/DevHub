@@ -10,6 +10,7 @@ import IconCommands from './icons/IconCommands.vue'
 import IconDocker from './icons/IconDocker.vue'
 import IconTerminal from './icons/IconTerminal.vue'
 import IconSettings from './icons/IconSettings.vue'
+import IconReadme from './icons/IconReadme.vue'
 
 const projectsStore = useProjectsStore()
 const dockerStore = useDockerStore()
@@ -37,33 +38,47 @@ const dockerRunning = computed(() =>
     <ProjectSelector />
 
     <nav class="sidebar-nav">
-      <router-link to="/" class="nav-item" exact-active-class="active">
-        <IconDashboard class="nav-icon" />
-        Dashboard
-      </router-link>
-      <router-link to="/git" class="nav-item" active-class="active">
-        <IconGit class="nav-icon" />
-        Git
-        <span v-if="gitChanges > 0" class="badge badge-orange">{{ gitChanges }}</span>
-      </router-link>
-      <router-link to="/commands" class="nav-item" active-class="active">
-        <IconCommands class="nav-icon" />
-        Commands
-      </router-link>
-      <router-link to="/docker" class="nav-item" active-class="active">
-        <IconDocker class="nav-icon" />
-        Docker
-        <span v-if="dockerRunning > 0" class="badge badge-green">{{ dockerRunning }}</span>
-      </router-link>
-      <router-link to="/console" class="nav-item" active-class="active">
-        <IconTerminal class="nav-icon" />
-        Console
-      </router-link>
+      <div class="nav-group">
+        <div class="nav-group-label">Development</div>
+        <router-link to="/" class="nav-item" exact-active-class="active">
+          <IconDashboard class="nav-icon" />
+          Dashboard
+        </router-link>
+        <router-link to="/git" class="nav-item" active-class="active">
+          <IconGit class="nav-icon" />
+          Git
+          <span v-if="gitChanges > 0" class="badge badge-orange">{{ gitChanges }}</span>
+        </router-link>
+        <router-link to="/commands" class="nav-item" active-class="active">
+          <IconCommands class="nav-icon" />
+          Commands
+        </router-link>
+        <router-link to="/docker" class="nav-item" active-class="active">
+          <IconDocker class="nav-icon" />
+          Docker
+          <span v-if="dockerRunning > 0" class="badge badge-green">{{ dockerRunning }}</span>
+        </router-link>
+        <router-link to="/console" class="nav-item" active-class="active">
+          <IconTerminal class="nav-icon" />
+          Console
+        </router-link>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-label">Files</div>
+        <router-link to="/readme" class="nav-item" active-class="active">
+          <IconReadme class="nav-icon" />
+          README
+        </router-link>
+      </div>
+    </nav>
+
+    <div class="sidebar-bottom">
       <router-link to="/settings" class="nav-item" active-class="active">
         <IconSettings class="nav-icon" />
         Settings
       </router-link>
-    </nav>
+    </div>
 
     <div class="sidebar-footer">
       <div class="footer-hint">
@@ -95,10 +110,6 @@ const dockerRunning = computed(() =>
   border-bottom: 1px solid var(--border);
 }
 
-.sidebar-nav {
-  padding: 4px 0;
-}
-
 .logo {
   font-size: 16px;
   font-weight: 700;
@@ -118,6 +129,24 @@ const dockerRunning = computed(() =>
 
 .sidebar-nav {
   flex: 1;
+  overflow-y: auto;
+}
+
+.nav-group {
+  padding: 4px 0;
+}
+
+.nav-group + .nav-group {
+  border-top: 1px solid var(--border);
+}
+
+.nav-group-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  padding: 10px 16px 4px;
 }
 
 .nav-item {
@@ -166,6 +195,11 @@ const dockerRunning = computed(() =>
 
 .badge-green {
   background: var(--accent-green);
+}
+
+.sidebar-bottom {
+  border-top: 1px solid var(--border);
+  padding: 4px 0;
 }
 
 .sidebar-footer {

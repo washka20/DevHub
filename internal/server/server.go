@@ -69,6 +69,11 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/git/commits/{hash}", h.GitCommitDetail).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/git/commits/{hash}/diff", h.GitCommitDiff).Methods("GET")
 
+	// Files
+	apiRouter.HandleFunc("/projects/{id}/readme", h.GetReadme).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/markdown", h.ListMarkdownFiles).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/markdown/{path:.*}", h.GetMarkdownFile).Methods("GET")
+
 	// Docker
 	apiRouter.HandleFunc("/projects/{id}/docker/containers", h.DockerContainers).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/logs", h.DockerLogs).Methods("GET")
