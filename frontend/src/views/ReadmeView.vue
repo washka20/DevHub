@@ -705,8 +705,10 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
 .markdown-body .md-checkbox {
   appearance: none;
   -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 16px !important;
+  height: 16px !important;
+  max-width: 16px;
+  max-height: 16px;
   min-width: 16px;
   min-height: 16px;
   box-sizing: border-box;
@@ -718,7 +720,9 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
   position: relative;
   margin: 0;
   margin-top: 3px;
+  padding: 0;
   flex-shrink: 0;
+  flex-grow: 0;
   transition: background 0.15s, border-color 0.15s;
 }
 
