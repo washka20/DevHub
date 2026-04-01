@@ -176,7 +176,6 @@ export const useTerminalStore = defineStore('terminal', () => {
     if (!targetPane) return null
     if (targetPane.status === 'connected' && targetPane.sessionId) return targetPane.sessionId
     if (targetPane.status === 'connecting') return null
-    if (targetPane.status === 'reconnecting') return null  // guard: already trying
 
     // Try reconnecting to saved session
     if (targetPane.sessionId) {
