@@ -198,3 +198,9 @@ export interface UISettings {
   themeName: string
   siteThemeName: string
 }
+
+export interface StashEntry {
+  index: number
+  message: string
+  date: string
+}

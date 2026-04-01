@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProject } from '../composables/useProject'
-import type { GitStatus, CommitDetail, BranchInfo, CommitMeta, Commit } from '../types'
+import type { GitStatus, CommitDetail, BranchInfo, CommitMeta, Commit, StashEntry } from '../types'
 
 interface TopoNode {
   id: string
@@ -33,6 +33,10 @@ export const useGitStore = defineStore('git', () => {
   const selectedCommit = ref<CommitDetail | null>(null)
   const commitMessage = ref('')
   const generatingMessage = ref(false)
+
+  // Stash state
+  const stashEntries = ref<StashEntry[]>([])
+  const stashLoading = ref(false)
 
   const loading = ref({
     status: false,
@@ -140,6 +144,8 @@ export const useGitStore = defineStore('git', () => {
     } finally {
       loading.value.status = false
     }
+    // Also refresh stash list
+    fetchStash()
   }
 
   async function fetchBranches() {
@@ -421,6 +427,52 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  // Stash actions
+  async function fetchStash() {
+    try {
+      const res = await fetch(`${projectApiUrl.value}/git/stash`)
+      if (res.ok) stashEntries.value = await res.json()
+    } catch { /* ignore */ }
+  }
+
+  async function stashPush(message: string) {
+    stashLoading.value = true
+    try {
+      await fetch(`${projectApiUrl.value}/git/stash`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      })
+      await fetchStash()
+      await fetchStatus()
+    } finally {
+      stashLoading.value = false
+    }
+  }
+
+  async function stashApply(index: number) {
+    await fetch(`${projectApiUrl.value}/git/stash/${index}/apply`, { method: 'POST' })
+    await fetchStatus()
+  }
+
+  async function stashPop(index: number) {
+    await fetch(`${projectApiUrl.value}/git/stash/${index}/pop`, { method: 'POST' })
+    await fetchStash()
+    await fetchStatus()
+  }
+
+  async function stashDrop(index: number) {
+    await fetch(`${projectApiUrl.value}/git/stash/${index}`, { method: 'DELETE' })
+    await fetchStash()
+  }
+
+  async function stashDiff(index: number): Promise<string> {
+    const res = await fetch(`${projectApiUrl.value}/git/stash/${index}/diff`)
+    if (!res.ok) return ''
+    const data = await res.json()
+    return data.diff || ''
+  }
+
   return {
     status,
     branches,
@@ -467,5 +519,13 @@ export const useGitStore = defineStore('git', () => {
     push,
     setViewingBranch,
     fetchBranchCommits,
+    stashEntries,
+    stashLoading,
+    fetchStash,
+    stashPush,
+    stashApply,
+    stashPop,
+    stashDrop,
+    stashDiff,
   }
 })

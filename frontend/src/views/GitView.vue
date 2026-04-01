@@ -10,6 +10,11 @@ const selectedFile = ref<string | null>(null)
 const branchDropdownOpen = ref(false)
 const stagedCollapsed = ref(false)
 const changesCollapsed = ref(false)
+const stashCollapsed = ref(false)
+const showStashDialog = ref(false)
+const stashMessage = ref('')
+const stashDiffContent = ref('')
+const selectedStashIndex = ref<number | null>(null)
 const commitDiffContent = ref('')
 const commitDiffFile = ref<string | null>(null)
 
@@ -213,6 +218,8 @@ function getRefClass(refStr: string): string {
 
 function selectFile(file: string) {
   selectedFile.value = file
+  selectedStashIndex.value = null
+  stashDiffContent.value = ''
   gitStore.fetchDiff(file)
 }
 
@@ -440,6 +447,66 @@ async function confirmCheckout(name: string) {
   await gitStore.checkout(name)
 }
 
+// ----- Stash actions -----
+
+async function openStashDialog() {
+  stashMessage.value = ''
+  showStashDialog.value = true
+}
+
+async function doStashPush() {
+  await gitStore.stashPush(stashMessage.value)
+  showStashDialog.value = false
+  stashMessage.value = ''
+}
+
+async function doStashApply(index: number) {
+  await gitStore.stashApply(index)
+}
+
+async function doStashPop(index: number) {
+  await gitStore.stashPop(index)
+  selectedStashIndex.value = null
+  stashDiffContent.value = ''
+}
+
+async function doStashDrop(index: number) {
+  await gitStore.stashDrop(index)
+  if (selectedStashIndex.value === index) {
+    selectedStashIndex.value = null
+    stashDiffContent.value = ''
+  }
+}
+
+async function selectStash(index: number) {
+  selectedStashIndex.value = index
+  selectedFile.value = null
+  gitStore.diff = ''
+  stashDiffContent.value = await gitStore.stashDiff(index)
+}
+
+const parsedStashDiff = computed<DiffLine[]>(() => {
+  if (!stashDiffContent.value) return []
+  return parseDiff(stashDiffContent.value)
+})
+
+function formatRelativeDate(dateStr: string): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffSec = Math.floor(diffMs / 1000)
+  const diffMin = Math.floor(diffSec / 60)
+  const diffHour = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHour / 24)
+  if (diffSec < 60) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  if (diffHour < 24) return `${diffHour}h ago`
+  if (diffDay < 30) return `${diffDay}d ago`
+  return formatDate(dateStr)
+}
+
 // ----- Lifecycle -----
 
 onMounted(() => {
@@ -664,6 +731,60 @@ watch(() => gitStore.status.branch, () => {
               </template>
             </div>
           </template>
+
+          <!-- Stash section -->
+          <div v-if="gitStore.stashEntries.length > 0" class="stash-group">
+            <div class="stash-header file-group-header" @click="stashCollapsed = !stashCollapsed">
+              <div class="file-group-header-left">
+                <svg
+                  width="12" height="12" viewBox="0 0 12 12" fill="currentColor"
+                  class="collapse-chevron"
+                  :class="{ 'collapse-chevron-collapsed': stashCollapsed }"
+                >
+                  <path d="M6 8.825a.5.5 0 0 1-.354-.146l-3.5-3.5a.5.5 0 1 1 .708-.708L6 7.618l3.146-3.147a.5.5 0 1 1 .708.708l-3.5 3.5A.5.5 0 0 1 6 8.825z"/>
+                </svg>
+                Stash
+                <span class="stash-badge">{{ gitStore.stashEntries.length }}</span>
+              </div>
+              <button class="stash-push-btn" title="Stash changes" @click.stop="openStashDialog">
+                + Stash
+              </button>
+            </div>
+            <template v-if="!stashCollapsed">
+              <div
+                v-for="entry in gitStore.stashEntries"
+                :key="'stash-' + entry.index"
+                class="stash-item"
+                :class="{ 'stash-item-active': selectedStashIndex === entry.index }"
+                @click="selectStash(entry.index)"
+              >
+                <div class="stash-item-top">
+                  <span class="stash-index">stash@{{ '{' }}{{ entry.index }}{{ '}' }}</span>
+                  <span class="stash-message">{{ entry.message }}</span>
+                </div>
+                <div class="stash-item-bottom">
+                  <span class="stash-date">{{ formatRelativeDate(entry.date) }}</span>
+                  <div class="stash-actions">
+                    <button class="stash-action-btn apply" title="Apply" @click.stop="doStashApply(entry.index)">Apply</button>
+                    <button class="stash-action-btn pop" title="Pop" @click.stop="doStashPop(entry.index)">Pop</button>
+                    <button class="stash-action-btn drop" title="Drop" @click.stop="doStashDrop(entry.index)">Drop</button>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+          <!-- Stash push button when no stash entries exist but there are changes -->
+          <div v-else class="stash-group stash-group-empty">
+            <div class="stash-header file-group-header">
+              <div class="file-group-header-left">
+                Stash
+                <span class="stash-badge">0</span>
+              </div>
+              <button class="stash-push-btn" title="Stash changes" @click.stop="openStashDialog">
+                + Stash
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Resize handle -->
@@ -671,7 +792,35 @@ watch(() => gitStore.status.branch, () => {
 
         <!-- Right: Diff viewer -->
         <div class="diff-panel">
-          <template v-if="selectedFile && gitStore.diff">
+          <!-- Stash diff -->
+          <template v-if="selectedStashIndex !== null && stashDiffContent">
+            <div class="diff-header">
+              <span class="diff-filename stash-diff-label">stash@{{ '{' }}{{ selectedStashIndex }}{{ '}' }} diff</span>
+              <button class="stash-diff-close" @click="selectedStashIndex = null; stashDiffContent = ''">&times;</button>
+            </div>
+            <div class="diff-content">
+              <div
+                v-for="(line, idx) in parsedStashDiff"
+                :key="idx"
+                class="diff-line"
+                :class="{
+                  'diff-line-add': line.type === 'add',
+                  'diff-line-remove': line.type === 'remove',
+                  'diff-line-header': line.type === 'header',
+                  'diff-line-context': line.type === 'context',
+                }"
+              >
+                <span class="diff-line-no old-no">{{ line.oldLineNo ?? '' }}</span>
+                <span class="diff-line-no new-no">{{ line.newLineNo ?? '' }}</span>
+                <span class="diff-line-prefix">{{
+                  line.type === 'add' ? '+' : line.type === 'remove' ? '-' : line.type === 'header' ? '' : ' '
+                }}</span>
+                <span class="diff-line-text">{{ line.content }}</span>
+              </div>
+            </div>
+          </template>
+          <!-- File diff -->
+          <template v-else-if="selectedFile && gitStore.diff">
             <div class="diff-header">
               <span class="diff-filename">{{ selectedFile }}</span>
             </div>
@@ -1091,6 +1240,32 @@ watch(() => gitStore.status.branch, () => {
         </div>
       </div>
     </div>
+
+    <!-- Stash dialog -->
+    <Teleport to="body">
+      <div v-if="showStashDialog" class="confirm-overlay" @click.self="showStashDialog = false">
+        <div class="stash-dialog">
+          <div class="stash-dialog-title">Stash Changes</div>
+          <input
+            v-model="stashMessage"
+            class="stash-dialog-input"
+            type="text"
+            placeholder="Stash message (optional)"
+            @keydown.enter="doStashPush"
+          />
+          <div class="stash-dialog-actions">
+            <button class="btn" @click="showStashDialog = false">Cancel</button>
+            <button
+              class="btn btn-stash-confirm"
+              :disabled="gitStore.stashLoading"
+              @click="doStashPush"
+            >
+              {{ gitStore.stashLoading ? 'Stashing...' : 'Stash' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Error bar -->
     <div v-if="gitStore.error" class="error-bar" @click="gitStore.error = null">
@@ -2784,5 +2959,237 @@ watch(() => gitStore.status.branch, () => {
   z-index: 200;
   max-width: 600px;
   text-align: center;
+}
+
+/* ===== Stash Section ===== */
+
+.stash-group {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 4px;
+}
+
+.stash-group-empty {
+  opacity: 0.7;
+}
+
+.stash-header {
+  color: var(--accent-purple);
+}
+
+.stash-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(188, 140, 255, 0.15);
+  color: var(--accent-purple);
+}
+
+.stash-push-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  background: transparent;
+  border: 1px solid rgba(188, 140, 255, 0.4);
+  border-radius: 4px;
+  color: var(--accent-purple);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.stash-push-btn:hover {
+  background: rgba(188, 140, 255, 0.1);
+  border-color: var(--accent-purple);
+}
+
+.stash-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+  border-left: 2px solid transparent;
+}
+
+.stash-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.stash-item-active {
+  background: rgba(188, 140, 255, 0.06);
+  border-left-color: var(--accent-purple);
+}
+
+.stash-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.stash-index {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-purple);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.stash-message {
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.stash-item-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stash-date {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.stash-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.stash-action-btn {
+  padding: 1px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.stash-action-btn.apply {
+  color: var(--accent-green);
+  border-color: rgba(63, 185, 80, 0.3);
+}
+
+.stash-action-btn.apply:hover {
+  background: rgba(63, 185, 80, 0.1);
+  border-color: var(--accent-green);
+}
+
+.stash-action-btn.pop {
+  color: var(--accent-blue);
+  border-color: rgba(88, 166, 255, 0.3);
+}
+
+.stash-action-btn.pop:hover {
+  background: rgba(88, 166, 255, 0.1);
+  border-color: var(--accent-blue);
+}
+
+.stash-action-btn.drop {
+  color: var(--accent-red);
+  border-color: rgba(248, 81, 73, 0.3);
+}
+
+.stash-action-btn.drop:hover {
+  background: rgba(248, 81, 73, 0.1);
+  border-color: var(--accent-red);
+}
+
+/* Stash diff header label */
+.stash-diff-label {
+  color: var(--accent-purple);
+}
+
+.stash-diff-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  transition: color 0.15s;
+}
+
+.stash-diff-close:hover {
+  color: var(--text-primary);
+}
+
+/* Stash dialog */
+.stash-dialog {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  width: 380px;
+  max-width: 90vw;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+
+.stash-dialog-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+.stash-dialog-input {
+  width: 100%;
+  height: 36px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 12px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+  margin-bottom: 20px;
+  box-sizing: border-box;
+}
+
+.stash-dialog-input:focus {
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 0 2px rgba(188, 140, 255, 0.2);
+}
+
+.stash-dialog-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.stash-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn-stash-confirm {
+  background: rgba(188, 140, 255, 0.15);
+  border-color: var(--accent-purple);
+  color: var(--accent-purple);
+  font-weight: 600;
+}
+
+.btn-stash-confirm:hover:not(:disabled) {
+  background: rgba(188, 140, 255, 0.25);
+}
+
+.btn-stash-confirm:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 </style>
