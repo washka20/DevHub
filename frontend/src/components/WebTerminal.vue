@@ -22,9 +22,11 @@ let ws: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
 let resizeTimer: ReturnType<typeof setTimeout> | null = null
 let disposed = false
+let intentionalClose = false
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectAttempts = 0
 const MAX_RECONNECT_ATTEMPTS = 5
+const watchStopHandles: (() => void)[] = []
 
 // Find the pane reactively
 const pane = computed(() => {
@@ -43,6 +45,7 @@ const isConnecting = computed(() => pane.value?.status === 'connecting')
 // ---------------------------------------------------------------------------
 
 function connectWs(sessionId: string) {
+  intentionalClose = false
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
   const url = `${proto}//${host}/api/terminal/ws/${sessionId}`
@@ -66,6 +69,7 @@ function connectWs(sessionId: string) {
       try {
         const msg = JSON.parse(event.data)
         if (msg.type === 'exit') {
+          intentionalClose = true
           terminalStore.handleSessionExit(pane.value?.sessionId || '')
         }
       } catch {
@@ -76,9 +80,10 @@ function connectWs(sessionId: string) {
 
   ws.onclose = () => {
     ws = null
-    if (!disposed) {
+    if (!disposed && !intentionalClose) {
       scheduleReconnect(sessionId)
     }
+    intentionalClose = false
   }
 }
 
@@ -153,27 +158,27 @@ function initTerminal() {
   resizeObserver.observe(terminalEl.value)
 
   // Settings watchers
-  watch(() => settingsStore.currentTheme, (theme) => {
+  watchStopHandles.push(watch(() => settingsStore.currentTheme, (theme) => {
     if (term) term.options.theme = theme
-  }, { deep: true })
+  }, { deep: true }))
 
-  watch(() => settingsStore.ui.fontSize, (size) => {
+  watchStopHandles.push(watch(() => settingsStore.ui.fontSize, (size) => {
     if (term) {
       term.options.fontSize = size
       fitAddon?.fit()
     }
-  })
+  }))
 
-  watch(() => settingsStore.ui.fontFamily, (font) => {
+  watchStopHandles.push(watch(() => settingsStore.ui.fontFamily, (font) => {
     if (term) {
       term.options.fontFamily = font
       fitAddon?.fit()
     }
-  })
+  }))
 
-  watch(() => settingsStore.ui.cursorBlink, (blink) => {
+  watchStopHandles.push(watch(() => settingsStore.ui.cursorBlink, (blink) => {
     if (term) term.options.cursorBlink = blink
-  })
+  }))
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +194,7 @@ async function handleConnect() {
   // Init terminal if not yet created, then connect WS
   if (!term) {
     await document.fonts.ready
+    if (disposed) return
     initTerminal()
   }
   connectWs(sessionId)
@@ -212,6 +218,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   disposed = true
+  watchStopHandles.forEach(stop => stop())
+  watchStopHandles.length = 0
   if (reconnectTimer) clearTimeout(reconnectTimer)
   if (resizeTimer) clearTimeout(resizeTimer)
   resizeObserver?.disconnect()
@@ -230,7 +238,11 @@ watch(
   () => pane.value?.sessionId,
   (newId, oldId) => {
     if (newId && newId !== oldId) {
-      ws?.close()
+      if (ws) {
+        ws.onclose = null  // prevent stale reconnect
+        ws.close()
+        ws = null
+      }
       if (term) {
         connectWs(newId)
       }
@@ -241,7 +253,7 @@ watch(
 
 <template>
   <!-- Disconnected placeholder -->
-  <div v-if="isDisconnected" class="placeholder-overlay" @click="handleConnect" @keydown.enter="handleConnect" tabindex="0">
+  <div v-if="isDisconnected" class="placeholder-overlay" role="button" aria-label="Connect terminal" @click="handleConnect" @keydown.enter="handleConnect" tabindex="0">
     <div class="placeholder-content">
       <div class="placeholder-icon">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
