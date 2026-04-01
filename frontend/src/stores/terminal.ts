@@ -168,7 +168,6 @@ export const useTerminalStore = defineStore('terminal', () => {
   // -------------------------------------------------------------------------
 
   async function connectPane(paneId: string): Promise<string | null> {
-    // Find the pane across all tabs
     let targetPane: TerminalPane | undefined
     for (const tab of tabs.value) {
       targetPane = tab.panes.find((p) => p.id === paneId)
@@ -177,7 +176,22 @@ export const useTerminalStore = defineStore('terminal', () => {
     if (!targetPane) return null
     if (targetPane.status === 'connected' && targetPane.sessionId) return targetPane.sessionId
     if (targetPane.status === 'connecting') return null
+    if (targetPane.status === 'reconnecting') return null  // guard: already trying
 
+    // Try reconnecting to saved session
+    if (targetPane.sessionId) {
+      targetPane.status = 'reconnecting'
+      try {
+        const res = await fetch(`/api/terminal/sessions/${targetPane.sessionId}`)
+        if (res.ok) {
+          targetPane.status = 'connected'
+          return targetPane.sessionId  // session alive — just open WS
+        }
+      } catch { /* fall through */ }
+      targetPane.sessionId = null  // stale, clear it
+    }
+
+    // Create new session
     targetPane.status = 'connecting'
     try {
       const session = await createSession(targetPane.cwd)
