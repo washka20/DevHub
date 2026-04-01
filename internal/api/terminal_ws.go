@@ -53,20 +53,42 @@ func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 		// Scrollback replay: send tail of log file before starting live stream.
 		logPath := filepath.Join(os.TempDir(), "devhub-terminal-logs", id+".log")
 		if f, err := os.Open(logPath); err == nil {
+			defer f.Close()
 			const maxReplay = 64 * 1024
 			if stat, err := f.Stat(); err == nil && stat.Size() > 0 {
 				offset := int64(0)
 				if stat.Size() > maxReplay {
 					offset = stat.Size() - maxReplay
 					// Scan forward to next newline to avoid mid-sequence cut
-					f.Seek(offset, io.SeekStart)
-					oneByte := make([]byte, 1)
-					for {
-						n, err := f.Read(oneByte)
-						if n > 0 {
-							offset++
-							if oneByte[0] == '\n' {
+					if _, seekErr := f.Seek(offset, io.SeekStart); seekErr != nil {
+						log.Printf("terminal scrollback seek error: %v", seekErr)
+						offset = 0
+					} else {
+						oneByte := make([]byte, 1)
+						for {
+							n, err := f.Read(oneByte)
+							if n > 0 {
+								offset++
+								if oneByte[0] == '\n' {
+									break
+								}
+							}
+							if err != nil {
 								break
+							}
+						}
+					}
+				}
+				if _, seekErr := f.Seek(offset, io.SeekStart); seekErr != nil {
+					log.Printf("terminal scrollback seek error: %v", seekErr)
+				} else {
+					buf := make([]byte, 4096)
+					for {
+						n, err := f.Read(buf)
+						if n > 0 {
+							if wErr := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); wErr != nil {
+								cleanup()
+								return
 							}
 						}
 						if err != nil {
@@ -74,28 +96,13 @@ func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 						}
 					}
 				}
-				f.Seek(offset, io.SeekStart)
-				buf := make([]byte, 4096)
-				for {
-					n, err := f.Read(buf)
-					if n > 0 {
-						if wErr := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); wErr != nil {
-							f.Close()
-							cleanup()
-							return
-						}
-					}
-					if err != nil {
-						break
-					}
-				}
 			}
-			f.Close()
 		}
 
 		// PTY -> WebSocket (binary frames)
 		stopCh := sess.StartReader()
 		go func() {
+			defer sess.ReaderDone()
 			buf := make([]byte, 4096)
 			for {
 				select {
