@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, reactive } from 'vue'
+import { ref, watch, computed, reactive, nextTick } from 'vue'
 import { useProjectsStore } from '../stores/projects'
 import FileTreeNode from '../components/FileTreeNode.vue'
 import type { FileNode } from '../components/FileTreeNode.vue'
@@ -21,6 +21,7 @@ import langRust from 'highlight.js/lib/languages/rust'
 import langDiff from 'highlight.js/lib/languages/diff'
 import langDockerfile from 'highlight.js/lib/languages/dockerfile'
 import langMarkdown from 'highlight.js/lib/languages/markdown'
+import mermaid from 'mermaid'
 
 hljs.registerLanguage('go', langGo)
 hljs.registerLanguage('typescript', langTypeScript)
@@ -48,6 +49,19 @@ hljs.registerLanguage('docker', langDockerfile)
 hljs.registerLanguage('markdown', langMarkdown)
 hljs.registerLanguage('md', langMarkdown)
 
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'dark',
+  themeVariables: {
+    primaryColor: '#58a6ff',
+    primaryBorderColor: '#30363d',
+    primaryTextColor: '#f0f6fc',
+    lineColor: '#8b949e',
+    secondaryColor: '#1c2128',
+    tertiaryColor: '#161b22',
+  },
+})
+
 const projectsStore = useProjectsStore()
 const currentProject = computed(() => projectsStore.currentProject)
 
@@ -56,6 +70,10 @@ const md = new MarkdownIt({
   linkify: true,
   typographer: true,
   highlight: (str: string, lang: string): string => {
+    // Mermaid diagrams — render as special container
+    if (lang === 'mermaid') {
+      return `<div class="mermaid-container"><pre class="mermaid">${str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></div>`
+    }
     if (lang && hljs.getLanguage(lang)) {
       try {
         return `<pre class="hljs"><code>${hljs.highlight(str, { language: lang }).value}</code></pre>`
@@ -223,6 +241,17 @@ async function fetchFileList() {
   }
 }
 
+async function renderMermaid() {
+  await nextTick()
+  const containers = document.querySelectorAll('.readme-article .mermaid')
+  if (containers.length === 0) return
+  try {
+    await mermaid.run({ nodes: containers as unknown as ArrayLike<HTMLElement> })
+  } catch (e) {
+    console.warn('Mermaid render error:', e)
+  }
+}
+
 async function selectFile(path: string) {
   if (!currentProject.value) return
   loading.value = true
@@ -245,6 +274,7 @@ async function selectFile(path: string) {
     const text = await res.text()
     rawMarkdown.value = text
     content.value = md.render(text)
+    renderMermaid()
   } catch {
     notFound.value = true
   } finally {
@@ -319,6 +349,7 @@ async function toggleCheckbox(line: number) {
       else if (l.includes('- [X]')) lines[idx] = l.replace('- [X]', '- [ ]')
       rawMarkdown.value = lines.join('\n')
       content.value = md.render(rawMarkdown.value)
+      renderMermaid()
     }
   } catch (err) {
     console.error('Failed to toggle checkbox:', err)
@@ -1042,5 +1073,23 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
 .markdown-body .footnote-ref a:hover,
 .markdown-body .footnote-backref:hover {
   text-decoration: underline;
+}
+
+/* Mermaid diagrams */
+.markdown-body .mermaid-container {
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+
+.markdown-body .mermaid-container pre.mermaid {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+  text-align: center;
+}
+
+.markdown-body .mermaid-container svg {
+  max-width: 100%;
 }
 </style>
