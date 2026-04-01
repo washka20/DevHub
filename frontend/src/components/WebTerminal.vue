@@ -23,6 +23,8 @@ let resizeObserver: ResizeObserver | null = null
 let resizeTimer: ReturnType<typeof setTimeout> | null = null
 let disposed = false
 let intentionalClose = false
+let oscCwdReceived = false
+let cwdPollTimer: ReturnType<typeof setInterval> | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectAttempts = 0
 const MAX_RECONNECT_ATTEMPTS = 5
@@ -78,6 +80,14 @@ function connectWs(sessionId: string) {
       fitAddon.fit()
       sendResize(term.cols, term.rows)
     }
+
+    // Start CWD polling fallback after 10s if no OSC 7 received
+    if (cwdPollTimer) { clearInterval(cwdPollTimer); cwdPollTimer = null }
+    setTimeout(() => {
+      if (!oscCwdReceived && !disposed && pane.value?.sessionId) {
+        cwdPollTimer = setInterval(() => pollCwd(), 5000)
+      }
+    }, 10000)
   }
 
   ws.onmessage = (event: MessageEvent) => {
@@ -133,6 +143,29 @@ function sendResize(cols: number, rows: number) {
   }
 }
 
+async function pollCwd() {
+  if (!pane.value?.sessionId || disposed) {
+    if (cwdPollTimer) { clearInterval(cwdPollTimer); cwdPollTimer = null }
+    return
+  }
+  try {
+    const res = await fetch(`/api/terminal/sessions/${pane.value.sessionId}/cwd`)
+    if (res.ok) {
+      const data = await res.json()
+      if (pane.value && data.cwd && data.cwd !== pane.value.cwd) {
+        pane.value.cwd = data.cwd
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+function shortCwd(cwd: string): string {
+  const home = '/home/'
+  const idx = cwd.indexOf('/', home.length)
+  if (idx > 0) return '~' + cwd.slice(idx)
+  return cwd
+}
+
 // ---------------------------------------------------------------------------
 // Terminal init
 // ---------------------------------------------------------------------------
@@ -159,6 +192,22 @@ function initTerminal() {
   const unicode11 = new Unicode11Addon()
   term.loadAddon(unicode11)
   term.unicode.activeVersion = '11'
+
+  // OSC 7: shell reports current working directory
+  // Format: \e]7;file://hostname/path\a
+  term.parser.registerOscHandler(7, (data) => {
+    try {
+      const url = new URL(data)
+      if (url.protocol === 'file:' && url.pathname) {
+        const newCwd = decodeURIComponent(url.pathname)
+        if (pane.value && newCwd !== pane.value.cwd) {
+          pane.value.cwd = newCwd
+          oscCwdReceived = true
+        }
+      }
+    } catch { /* ignore malformed OSC 7 */ }
+    return false // don't prevent default handling
+  })
 
   term.open(terminalEl.value)
   fitAddon.fit()
@@ -276,6 +325,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (cwdPollTimer) { clearInterval(cwdPollTimer); cwdPollTimer = null }
   disposed = true
   watchStopHandles.forEach(stop => stop())
   watchStopHandles.length = 0
@@ -343,14 +393,46 @@ watch(
   </div>
 
   <!-- Connected terminal -->
-  <div v-else ref="terminalEl" class="web-terminal"></div>
+  <div v-else class="terminal-wrapper">
+    <div ref="terminalEl" class="web-terminal"></div>
+    <div v-if="pane?.cwd" class="cwd-badge" :title="pane.cwd">
+      {{ shortCwd(pane.cwd) }}
+    </div>
+  </div>
 </template>
 
 <style scoped>
+.terminal-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
 .web-terminal {
   width: 100%;
   height: 100%;
   overflow: hidden;
+}
+
+.cwd-badge {
+  position: absolute;
+  top: 4px;
+  right: 12px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  opacity: 0.5;
+  background: var(--bg-primary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  pointer-events: none;
+  z-index: 1;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .web-terminal :deep(.xterm) {
