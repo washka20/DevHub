@@ -166,7 +166,6 @@ const tabCounts = computed(() => ({
 const ROW_HEIGHT = 28
 const OVERSCAN = 10
 
-const scrollContainerRef = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const containerHeight = ref(600)
 
@@ -347,23 +346,6 @@ function formatDate(dateStr: string): string {
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}, ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
 }
 
-function formatRelativeTime(dateStr: string): string {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMin = Math.floor(diffMs / 60000)
-  const diffHour = Math.floor(diffMin / 60)
-  const diffDay = Math.floor(diffHour / 24)
-  const diffWeek = Math.floor(diffDay / 7)
-
-  if (diffMin < 1) return 'just now'
-  if (diffMin < 60) return `${diffMin}m ago`
-  if (diffHour < 24) return `${diffHour}h ago`
-  if (diffDay < 7) return `${diffDay}d ago`
-  if (diffWeek < 4) return `${diffWeek}w ago`
-  return date.toLocaleDateString()
-}
 
 function getFileStatusColor(statusChar: string): string {
   switch (statusChar) {
@@ -813,7 +795,7 @@ watch(() => gitStore.status.branch, () => {
         </div>
 
         <!-- Log content -->
-        <div class="log-main" @scroll="onLogScroll" ref="scrollContainerRef">
+        <div class="log-main" @scroll="onLogScroll">
           <div v-if="gitStore.viewingBranch" class="log-branch-banner">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0">
               <path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.492 2.492 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25zM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM3.5 3.25a.75.75 0 1 1 1.5 0 .75.75 0 0 1-1.5 0z"/>

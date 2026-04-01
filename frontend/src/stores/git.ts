@@ -183,9 +183,12 @@ export const useGitStore = defineStore('git', () => {
       const data: CommitMeta[] = await res.json()
       log.value = data.map(m => ({
         hash: m.hash,
+        short_hash: m.short_hash,
         message: m.message,
         author: m.author,
         date: m.date,
+        refs: m.refs,
+        parents: [],
       }))
     } catch (e) {
       error.value = (e as Error).message

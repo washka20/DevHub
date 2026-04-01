@@ -3,11 +3,8 @@ import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { useDockerStore } from '../stores/docker'
 import { useProjectsStore } from '../stores/projects'
 import WebTerminal from '../components/WebTerminal.vue'
-import { useTerminalStore } from '../stores/terminal'
-
 const dockerStore = useDockerStore()
 const projectsStore = useProjectsStore()
-const terminalStore = useTerminalStore()
 
 // Docker exec terminal
 const execContainer = ref<string | null>(null)

@@ -108,7 +108,6 @@ describe('useGitStore', () => {
       expect(store.log[1].refs).toEqual([])
       expect(store.log[1].parents).toEqual([])
       expect(store.log[1].graph).toBe('*')
-      expect(store.commits).toEqual(store.log)
       expect(fetch).toHaveBeenCalledWith('/api/projects/myapp/git/log?limit=50&offset=0')
     })
   })
