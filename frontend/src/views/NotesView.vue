@@ -169,9 +169,10 @@ async function saveNote() {
 async function deleteNote(slug: string) {
   if (!currentProject.value || !confirm('Delete this note?')) return
   try {
-    await fetch(`/api/projects/${currentProject.value.name}/notes/${slug}`, {
+    const res = await fetch(`/api/projects/${currentProject.value.name}/notes/${slug}`, {
       method: 'DELETE',
     })
+    if (!res.ok) throw new Error('Failed to delete')
     if (selectedSlug.value === slug) {
       selectedSlug.value = null
       editor.value?.commands.clearContent()
@@ -188,12 +189,13 @@ function scheduleSave() {
   saveTimeout = setTimeout(() => saveNote(), 2000)
 }
 
-function selectNote(slug: string) {
+async function selectNote(slug: string) {
   if (saveTimeout) {
     clearTimeout(saveTimeout)
-    saveNote()
+    saveTimeout = null
+    await saveNote()
   }
-  fetchNote(slug)
+  await fetchNote(slug)
 }
 
 // --- Toolbar ---
@@ -223,6 +225,7 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
 onBeforeUnmount(() => {
   if (saveTimeout) {
     clearTimeout(saveTimeout)
+    saveTimeout = null
     saveNote()
   }
 })
@@ -483,7 +486,7 @@ function formatDate(iso: string): string {
 }
 
 .btn-create-first:hover {
-  background: rgba(88, 166, 255, 0.1);
+  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
 }
 
 /* --- Right: Editor --- */
