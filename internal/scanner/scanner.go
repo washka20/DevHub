@@ -12,6 +12,7 @@ type Project struct {
 	IsGit       bool   `json:"is_git"`
 	HasMakefile bool   `json:"has_makefile"`
 	HasDocker   bool   `json:"has_docker"`
+	Group       string `json:"group,omitempty"`
 }
 
 // Scan walks projectsDir and returns a Project for each subdirectory.
@@ -32,13 +33,14 @@ func Scan(projectsDir string) ([]Project, error) {
 		p := scanDir(entry.Name(), dir)
 
 		if p.IsGit || p.HasMakefile || p.HasDocker {
+			// Directory is a project itself — always show it
 			projects = append(projects, p)
-		} else {
-			// No markers — check subdirectories
-			subs := scanSubdirs(dir)
-			if len(subs) > 0 {
-				projects = append(projects, subs...)
-			}
+		}
+
+		// Also check for sub-projects (grouped by parent name)
+		subs := scanSubdirs(entry.Name(), dir)
+		if len(subs) > 0 {
+			projects = append(projects, subs...)
 		}
 	}
 
@@ -55,7 +57,7 @@ func scanDir(name, dir string) Project {
 	}
 }
 
-func scanSubdirs(parentDir string) []Project {
+func scanSubdirs(groupName, parentDir string) []Project {
 	entries, err := os.ReadDir(parentDir)
 	if err != nil {
 		return nil
@@ -68,6 +70,7 @@ func scanSubdirs(parentDir string) []Project {
 		dir := filepath.Join(parentDir, entry.Name())
 		p := scanDir(entry.Name(), dir)
 		if p.IsGit || p.HasMakefile || p.HasDocker {
+			p.Group = groupName
 			projects = append(projects, p)
 		}
 	}

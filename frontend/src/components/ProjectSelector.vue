@@ -15,8 +15,39 @@ const filteredProjects = computed(() => {
   const q = search.value.toLowerCase().trim()
   if (!q) return store.projects
   return store.projects.filter(
-    (p) => p.name.toLowerCase().includes(q) || p.path.toLowerCase().includes(q)
+    (p) => p.name.toLowerCase().includes(q) || p.path.toLowerCase().includes(q) || (p.group || '').toLowerCase().includes(q)
   )
+})
+
+interface GroupedProjects {
+  label: string
+  isGroup: boolean
+  projects: typeof store.projects
+}
+
+const groupedProjects = computed<GroupedProjects[]>(() => {
+  const list = filteredProjects.value
+  const ungrouped = list.filter(p => !p.group)
+  const groups = new Map<string, typeof list>()
+
+  for (const p of list) {
+    if (p.group) {
+      if (!groups.has(p.group)) groups.set(p.group, [])
+      groups.get(p.group)!.push(p)
+    }
+  }
+
+  const result: GroupedProjects[] = []
+
+  if (ungrouped.length > 0) {
+    result.push({ label: '', isGroup: false, projects: ungrouped })
+  }
+
+  for (const [name, projects] of groups) {
+    result.push({ label: name, isGroup: true, projects })
+  }
+
+  return result
 })
 
 async function toggle() {
@@ -75,23 +106,25 @@ onUnmounted(() => {
         />
       </div>
       <div class="dropdown-list">
-        <button
-          v-for="project in filteredProjects"
-          :key="project.name"
-          class="dropdown-item"
-          :class="{ active: store.currentProject?.name === project.name }"
-          @click="select(project.name)"
-        >
-          <span class="item-row">
-            <span class="item-name">{{ project.name }}</span>
-            <span class="item-badges">
-              <span v-if="project.is_git" class="feature-badge-sm" title="Git">G</span>
-              <span v-if="project.has_makefile" class="feature-badge-sm" title="Makefile">M</span>
-              <span v-if="project.has_docker" class="feature-badge-sm" title="Docker">D</span>
+        <template v-for="group in groupedProjects" :key="group.label">
+          <div v-if="group.isGroup" class="group-header">{{ group.label }}</div>
+          <button
+            v-for="project in group.projects"
+            :key="project.name"
+            class="dropdown-item"
+            :class="{ active: store.currentProject?.name === project.name, grouped: group.isGroup }"
+            @click="select(project.name)"
+          >
+            <span class="item-row">
+              <span class="item-name">{{ project.name }}</span>
+              <span class="item-badges">
+                <span v-if="project.is_git" class="feature-badge-sm" title="Git">G</span>
+                <span v-if="project.has_makefile" class="feature-badge-sm" title="Makefile">M</span>
+                <span v-if="project.has_docker" class="feature-badge-sm" title="Docker">D</span>
+              </span>
             </span>
-          </span>
-          <span class="item-path">{{ project.path }}</span>
-        </button>
+          </button>
+        </template>
         <div v-if="filteredProjects.length === 0" class="no-results">
           No projects found
         </div>
@@ -284,6 +317,21 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+.group-header {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  padding: 8px 10px 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+.dropdown-item.grouped {
+  padding-left: 18px;
 }
 
 .no-results {

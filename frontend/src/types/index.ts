@@ -4,6 +4,7 @@ export interface Project {
   is_git: boolean
   has_makefile: boolean
   has_docker: boolean
+  group?: string
 }
 
 export interface Container {
