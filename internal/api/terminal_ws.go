@@ -5,6 +5,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"devhub/internal/terminal"
@@ -47,6 +49,49 @@ func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 			})
 		}
 		defer cleanup()
+
+		// Scrollback replay: send tail of log file before starting live stream.
+		logPath := filepath.Join(os.TempDir(), "devhub-terminal-logs", id+".log")
+		if f, err := os.Open(logPath); err == nil {
+			const maxReplay = 64 * 1024
+			if stat, err := f.Stat(); err == nil && stat.Size() > 0 {
+				offset := int64(0)
+				if stat.Size() > maxReplay {
+					offset = stat.Size() - maxReplay
+					// Scan forward to next newline to avoid mid-sequence cut
+					f.Seek(offset, io.SeekStart)
+					oneByte := make([]byte, 1)
+					for {
+						n, err := f.Read(oneByte)
+						if n > 0 {
+							offset++
+							if oneByte[0] == '\n' {
+								break
+							}
+						}
+						if err != nil {
+							break
+						}
+					}
+				}
+				f.Seek(offset, io.SeekStart)
+				buf := make([]byte, 4096)
+				for {
+					n, err := f.Read(buf)
+					if n > 0 {
+						if wErr := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); wErr != nil {
+							f.Close()
+							cleanup()
+							return
+						}
+					}
+					if err != nil {
+						break
+					}
+				}
+			}
+			f.Close()
+		}
 
 		// PTY -> WebSocket (binary frames)
 		stopCh := sess.StartReader()
