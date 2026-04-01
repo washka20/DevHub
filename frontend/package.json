@@ -45,6 +45,7 @@
     "markdown-it-anchor": "^9.2.0",
     "markdown-it-footnote": "^4.0.0",
     "mermaid": "^11.14.0",
+    "monaco-editor": "^0.55.1",
     "pinia": "^3.0.4",
     "splitpanes": "^4.0.4",
     "turndown": "^7.2.2",
