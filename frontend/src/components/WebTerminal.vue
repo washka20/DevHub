@@ -46,6 +46,15 @@ function isActiveTab(): boolean {
   return false
 }
 
+function getTabLabel(): string {
+  for (const tab of terminalStore.tabs) {
+    if (tab.panes.some((p) => p.id === props.paneId)) {
+      return tab.label
+    }
+  }
+  return 'terminal'
+}
+
 const isDisconnected = computed(() => !pane.value || pane.value.status === 'disconnected')
 const isConnecting = computed(() => pane.value?.status === 'connecting')
 const isReconnecting = computed(() => pane.value?.status === 'reconnecting')
@@ -163,6 +172,20 @@ function initTerminal() {
 
   term.onResize(({ cols, rows }) => {
     sendResize(cols, rows)
+  })
+
+  term.onBell(() => {
+    if (!isActiveTab() && pane.value) {
+      pane.value.hasBell = true
+      setTimeout(() => {
+        if (pane.value) pane.value.hasBell = false
+      }, 3000)
+      // Browser notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const tabLabel = getTabLabel()
+        new Notification('Terminal bell', { body: `Tab: ${tabLabel}` })
+      }
+    }
   })
 
   resizeObserver = new ResizeObserver((entries) => {

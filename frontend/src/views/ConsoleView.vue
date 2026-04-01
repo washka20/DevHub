@@ -15,6 +15,11 @@ const projectsStore = useProjectsStore()
 let initialized = false
 
 onActivated(async () => {
+  // Request notification permission for terminal bell
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission()
+  }
+
   if (!initialized) {
     initialized = true
     // Clean orphan backend sessions from previous server lifecycle.
