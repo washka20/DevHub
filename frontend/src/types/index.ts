@@ -127,6 +127,8 @@ export interface TerminalPane {
   sessionId: string | null
   cwd: string
   status: 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
+  hasActivity?: boolean
+  hasBell?: boolean
 }
 
 export interface TerminalTab {
