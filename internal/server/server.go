@@ -81,6 +81,14 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/markdown/{path:.*}", h.GetMarkdownFile).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/markdown/{path:.*}", h.ToggleMarkdownCheckbox).Methods("PUT")
 
+	// File editor API
+	apiRouter.HandleFunc("/projects/{id}/files/tree", h.FileTree).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/files/content/{path:.*}", h.FileContent).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/files/content/{path:.*}", h.FileWrite).Methods("PUT")
+	apiRouter.HandleFunc("/projects/{id}/files/create", h.FileCreate).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/files/delete/{path:.*}", h.FileDelete).Methods("DELETE")
+	apiRouter.HandleFunc("/projects/{id}/files/rename/{path:.*}", h.FileRename).Methods("PATCH")
+
 	// Notes
 	apiRouter.HandleFunc("/projects/{id}/notes", h.ListNotes).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/notes/{slug}", h.GetNote).Methods("GET")
@@ -172,7 +180,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		if origin != "" && (strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1")) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		}
 
