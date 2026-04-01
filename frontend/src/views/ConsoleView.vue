@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'ConsoleView' })
 
-import { onActivated } from 'vue'
+import { onActivated, onDeactivated } from 'vue'
 import { Splitpanes, Pane } from 'splitpanes'
 import 'splitpanes/dist/splitpanes.css'
 import TerminalTabBar from '../components/TerminalTabBar.vue'
@@ -13,8 +13,15 @@ const terminalStore = useTerminalStore()
 const projectsStore = useProjectsStore()
 
 let initialized = false
+let panelWasVisible = false
 
 onActivated(async () => {
+  // Hide bottom panel on /console — it's redundant
+  panelWasVisible = terminalStore.panel.visible
+  if (terminalStore.panel.visible) {
+    terminalStore.updatePanel({ visible: false })
+  }
+
   // Request notification permission for terminal bell
   if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission()
@@ -37,6 +44,12 @@ onActivated(async () => {
     } catch {
       // session creation may fail on first load before backend is ready
     }
+  }
+})
+
+onDeactivated(() => {
+  if (panelWasVisible) {
+    terminalStore.updatePanel({ visible: true })
   }
 })
 
