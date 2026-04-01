@@ -7,13 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	"devhub/internal/config"
 	"devhub/internal/terminal"
 
 	"github.com/gorilla/mux"
 )
 
 func setupTerminalRouter(m *terminal.Manager) *mux.Router {
-	th := &TerminalHandlers{Manager: m}
+	th := &TerminalHandlers{Manager: m, Cfg: config.DefaultConfig()}
 	r := mux.NewRouter()
 	r.HandleFunc("/api/terminal/sessions", th.CreateSession).Methods("POST")
 	r.HandleFunc("/api/terminal/sessions", th.ListSessions).Methods("GET")
