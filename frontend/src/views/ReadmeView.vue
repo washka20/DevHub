@@ -4,6 +4,8 @@ import { useProjectsStore } from '../stores/projects'
 import FileTreeNode from '../components/FileTreeNode.vue'
 import type { FileNode } from '../components/FileTreeNode.vue'
 import MarkdownIt from 'markdown-it'
+import markdownItAnchor from 'markdown-it-anchor'
+import markdownItFootnote from 'markdown-it-footnote'
 import hljs from 'highlight.js/lib/core'
 import langGo from 'highlight.js/lib/languages/go'
 import langTypeScript from 'highlight.js/lib/languages/typescript'
@@ -109,6 +111,52 @@ md.core.ruler.after('inline', 'task-lists', (state: any) => {
     }
   }
 })
+
+// Alert/admonition blocks: > [!NOTE], > [!WARNING], etc.
+const alertTypes: Record<string, { icon: string; label: string }> = {
+  NOTE: { icon: 'ℹ️', label: 'Note' },
+  TIP: { icon: '💡', label: 'Tip' },
+  IMPORTANT: { icon: '❗', label: 'Important' },
+  WARNING: { icon: '⚠️', label: 'Warning' },
+  CAUTION: { icon: '🔴', label: 'Caution' },
+}
+
+md.core.ruler.after('block', 'alerts', (state: any) => {
+  const tokens = state.tokens
+  for (let i = 0; i < tokens.length - 2; i++) {
+    if (tokens[i].type !== 'blockquote_open') continue
+    let inlineIdx = -1
+    for (let j = i + 1; j < tokens.length && tokens[j].type !== 'blockquote_close'; j++) {
+      if (tokens[j].type === 'inline') { inlineIdx = j; break }
+    }
+    if (inlineIdx === -1) continue
+    const inlineContent = tokens[inlineIdx].content
+    const match = inlineContent.match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*\n?/)
+    if (!match) continue
+    const type = match[1]
+    const alert = alertTypes[type]
+    tokens[i].attrJoin('class', `alert alert-${type.toLowerCase()}`)
+    tokens[inlineIdx].content = inlineContent.slice(match[0].length)
+    if (tokens[inlineIdx].children) {
+      tokens[inlineIdx].children = md.parseInline(tokens[inlineIdx].content, state.env)[0]?.children || []
+    }
+    const headerToken = new state.Token('html_inline', '', 0)
+    headerToken.content = `<span class="alert-title">${alert.icon} ${alert.label}</span><br>`
+    if (tokens[inlineIdx].children) {
+      tokens[inlineIdx].children.unshift(headerToken)
+    }
+  }
+})
+
+md.use(markdownItAnchor, {
+  permalink: markdownItAnchor.permalink.headerLink({
+    safariReaderFix: true,
+    class: 'heading-anchor',
+  }),
+  slugify: (s: string) => s.toLowerCase().replace(/[^\w]+/g, '-').replace(/^-|-$/g, ''),
+})
+
+md.use(markdownItFootnote)
 
 const content = ref('')
 const rawMarkdown = ref('')
@@ -624,6 +672,7 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
   font-weight: 600;
   line-height: 1.3;
   color: var(--text-primary);
+  position: relative;
 }
 
 .markdown-body h1 {
@@ -862,4 +911,136 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
 
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 700; }
+
+/* Alert/admonition blocks */
+.markdown-body blockquote.alert {
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 0 0 16px 0;
+}
+
+.markdown-body .alert-title {
+  font-weight: 600;
+  font-size: 14px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.markdown-body blockquote.alert-note {
+  border-left-color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
+}
+.markdown-body blockquote.alert-note .alert-title { color: var(--accent-blue); }
+
+.markdown-body blockquote.alert-tip {
+  border-left-color: var(--accent-green);
+  background: color-mix(in srgb, var(--accent-green) 8%, transparent);
+}
+.markdown-body blockquote.alert-tip .alert-title { color: var(--accent-green); }
+
+.markdown-body blockquote.alert-important {
+  border-left-color: var(--accent-purple);
+  background: color-mix(in srgb, var(--accent-purple) 8%, transparent);
+}
+.markdown-body blockquote.alert-important .alert-title { color: var(--accent-purple); }
+
+.markdown-body blockquote.alert-warning {
+  border-left-color: var(--accent-orange);
+  background: color-mix(in srgb, var(--accent-orange) 8%, transparent);
+}
+.markdown-body blockquote.alert-warning .alert-title { color: var(--accent-orange); }
+
+.markdown-body blockquote.alert-caution {
+  border-left-color: var(--accent-red);
+  background: color-mix(in srgb, var(--accent-red) 8%, transparent);
+}
+.markdown-body blockquote.alert-caution .alert-title { color: var(--accent-red); }
+
+/* Heading anchor links */
+.markdown-body .heading-anchor {
+  text-decoration: none;
+  color: inherit;
+}
+
+.markdown-body .heading-anchor::before {
+  content: '#';
+  position: absolute;
+  left: -1.5em;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.15s;
+  font-weight: 400;
+}
+
+.markdown-body h1:hover .heading-anchor::before,
+.markdown-body h2:hover .heading-anchor::before,
+.markdown-body h3:hover .heading-anchor::before,
+.markdown-body h4:hover .heading-anchor::before,
+.markdown-body h5:hover .heading-anchor::before,
+.markdown-body h6:hover .heading-anchor::before {
+  opacity: 1;
+}
+
+/* Collapsible sections */
+.markdown-body details {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0;
+  margin-bottom: 16px;
+}
+
+.markdown-body details summary {
+  padding: 10px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  list-style: none;
+}
+
+.markdown-body details summary::-webkit-details-marker { display: none; }
+
+.markdown-body details summary::before {
+  content: '▶';
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 12px;
+  transition: transform 0.15s;
+  color: var(--text-secondary);
+}
+
+.markdown-body details[open] summary::before { transform: rotate(90deg); }
+
+.markdown-body details[open] summary {
+  border-bottom: 1px solid var(--border);
+  border-radius: 6px 6px 0 0;
+}
+
+.markdown-body details > *:not(summary) { padding: 0 16px; }
+.markdown-body details > p:last-child { margin-bottom: 16px; }
+
+/* Footnotes */
+.markdown-body .footnotes-sep {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 32px 0 16px;
+}
+
+.markdown-body .footnotes {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.markdown-body .footnote-ref a,
+.markdown-body .footnote-backref {
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+
+.markdown-body .footnote-ref a:hover,
+.markdown-body .footnote-backref:hover {
+  text-decoration: underline;
+}
 </style>
