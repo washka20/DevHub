@@ -723,6 +723,93 @@ func (h *Handlers) DockerLogs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// DockerComposeUp handles POST /api/projects/{id}/docker/compose/up
+func (h *Handlers) DockerComposeUp(w http.ResponseWriter, r *http.Request) {
+	path, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	composePath, err := composeFilePath(path)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	out, err := h.Docker.ComposeUp(composePath)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.Hub.Broadcast(Event{
+		Type:    "docker:update",
+		Project: mux.Vars(r)["id"],
+		Data:    "compose-up",
+	})
+
+	jsonResponse(w, map[string]string{"status": "ok", "output": out})
+}
+
+// DockerComposeUpBuild handles POST /api/projects/{id}/docker/compose/up-build
+func (h *Handlers) DockerComposeUpBuild(w http.ResponseWriter, r *http.Request) {
+	path, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	composePath, err := composeFilePath(path)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	out, err := h.Docker.ComposeUpBuild(composePath)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.Hub.Broadcast(Event{
+		Type:    "docker:update",
+		Project: mux.Vars(r)["id"],
+		Data:    "compose-up-build",
+	})
+
+	jsonResponse(w, map[string]string{"status": "ok", "output": out})
+}
+
+// DockerComposeDown handles POST /api/projects/{id}/docker/compose/down
+func (h *Handlers) DockerComposeDown(w http.ResponseWriter, r *http.Request) {
+	path, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	composePath, err := composeFilePath(path)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	out, err := h.Docker.ComposeDown(composePath)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.Hub.Broadcast(Event{
+		Type:    "docker:update",
+		Project: mux.Vars(r)["id"],
+		Data:    "compose-down",
+	})
+
+	jsonResponse(w, map[string]string{"status": "ok", "output": out})
+}
+
 // DockerExec handles POST /api/projects/{id}/docker/{name}/exec
 // Creates a terminal session attached to a docker container via docker compose exec.
 func (h *Handlers) DockerExec(w http.ResponseWriter, r *http.Request) {

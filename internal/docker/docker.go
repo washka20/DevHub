@@ -140,6 +140,39 @@ func (d *DockerService) Action(composeFile string, containerName string, action 
 	}
 }
 
+// ComposeUp runs docker compose up -d for the given compose file.
+func (d *DockerService) ComposeUp(composeFile string) (string, error) {
+	dir := filepath.Dir(composeFile)
+	file := filepath.Base(composeFile)
+	out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "up", "-d")
+	if err != nil {
+		return out, fmt.Errorf("compose up: %w: %s", err, out)
+	}
+	return out, nil
+}
+
+// ComposeUpBuild runs docker compose up -d --build for the given compose file.
+func (d *DockerService) ComposeUpBuild(composeFile string) (string, error) {
+	dir := filepath.Dir(composeFile)
+	file := filepath.Base(composeFile)
+	out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "up", "-d", "--build")
+	if err != nil {
+		return out, fmt.Errorf("compose up --build: %w: %s", err, out)
+	}
+	return out, nil
+}
+
+// ComposeDown runs docker compose down for the given compose file.
+func (d *DockerService) ComposeDown(composeFile string) (string, error) {
+	dir := filepath.Dir(composeFile)
+	file := filepath.Base(composeFile)
+	out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "down")
+	if err != nil {
+		return out, fmt.Errorf("compose down: %w: %s", err, out)
+	}
+	return out, nil
+}
+
 // Logs returns the last N lines of logs for a container.
 func (d *DockerService) Logs(composeFile string, containerName string, lines int) (string, error) {
 	dir := filepath.Dir(composeFile)

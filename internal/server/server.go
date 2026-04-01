@@ -84,6 +84,9 @@ func New(cfg *config.Config) *Server {
 
 	// Docker
 	apiRouter.HandleFunc("/projects/{id}/docker/containers", h.DockerContainers).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/docker/compose/up", h.DockerComposeUp).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/docker/compose/up-build", h.DockerComposeUpBuild).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/docker/compose/down", h.DockerComposeDown).Methods("POST")
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/logs", h.DockerLogs).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/exec", h.DockerExec).Methods("POST")
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/{action}", h.DockerAction).Methods("POST")
