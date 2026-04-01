@@ -68,6 +68,12 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/git/unstage", h.GitUnstage).Methods("POST")
 	apiRouter.HandleFunc("/projects/{id}/git/commits/{hash}", h.GitCommitDetail).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/git/commits/{hash}/diff", h.GitCommitDiff).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/stash", h.GitStashList).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/stash", h.GitStashPush).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}/apply", h.GitStashApply).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}/pop", h.GitStashPop).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}", h.GitStashDrop).Methods("DELETE")
+	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}/diff", h.GitStashDiff).Methods("GET")
 
 	// Files
 	apiRouter.HandleFunc("/projects/{id}/readme", h.GetReadme).Methods("GET")

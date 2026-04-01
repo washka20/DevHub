@@ -563,6 +563,77 @@ func (g *GitService) BranchesDetailed(dir string) ([]BranchInfo, error) {
 	return branches, nil
 }
 
+// StashEntry represents a single git stash entry.
+type StashEntry struct {
+	Index   int    `json:"index"`
+	Message string `json:"message"`
+	Date    string `json:"date"`
+}
+
+// StashList returns all stash entries for the repository at dir.
+func (g *GitService) StashList(dir string) ([]StashEntry, error) {
+	out, err := g.runner.Run(dir, "git", "stash", "list", "--format=%gd|%gs|%ci")
+	if err != nil {
+		return nil, err
+	}
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return []StashEntry{}, nil
+	}
+	var entries []StashEntry
+	for _, line := range strings.Split(out, "\n") {
+		parts := strings.SplitN(line, "|", 3)
+		if len(parts) < 3 {
+			continue
+		}
+		idx := 0
+		fmt.Sscanf(parts[0], "stash@{%d}", &idx)
+		entries = append(entries, StashEntry{
+			Index:   idx,
+			Message: parts[1],
+			Date:    parts[2],
+		})
+	}
+	return entries, nil
+}
+
+// StashPush creates a new stash entry with an optional message.
+func (g *GitService) StashPush(dir, message string) error {
+	args := []string{"stash", "push"}
+	if message != "" {
+		args = append(args, "-m", message)
+	}
+	_, err := g.runner.Run(dir, "git", args...)
+	return err
+}
+
+// StashApply applies the stash entry at the given index without removing it.
+func (g *GitService) StashApply(dir string, index int) error {
+	_, err := g.runner.Run(dir, "git", "stash", "apply", fmt.Sprintf("stash@{%d}", index))
+	return err
+}
+
+// StashPop applies the stash entry at the given index and removes it.
+func (g *GitService) StashPop(dir string, index int) error {
+	_, err := g.runner.Run(dir, "git", "stash", "pop", fmt.Sprintf("stash@{%d}", index))
+	return err
+}
+
+// StashDrop removes the stash entry at the given index.
+func (g *GitService) StashDrop(dir string, index int) error {
+	_, err := g.runner.Run(dir, "git", "stash", "drop", fmt.Sprintf("stash@{%d}", index))
+	return err
+}
+
+// StashDiff returns the diff for the stash entry at the given index.
+func (g *GitService) StashDiff(dir string, index int) (string, error) {
+	out, err := g.runner.Run(dir, "git", "stash", "show", "-p", fmt.Sprintf("stash@{%d}", index))
+	if err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
 // CommitDiff returns the diff of a specific commit, optionally filtered to a single file.
 func (g *GitService) CommitDiff(dir string, hash string, file string) (string, error) {
 	// Validate hash

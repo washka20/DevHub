@@ -598,6 +598,129 @@ func (h *Handlers) GitCommitDiff(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, map[string]string{"diff": diff})
 }
 
+// --- Git Stash endpoints ---
+
+// GitStashList handles GET /api/projects/{id}/git/stash
+func (h *Handlers) GitStashList(w http.ResponseWriter, r *http.Request) {
+	path, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	entries, err := h.Git.StashList(path)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, entries)
+}
+
+// GitStashPush handles POST /api/projects/{id}/git/stash
+func (h *Handlers) GitStashPush(w http.ResponseWriter, r *http.Request) {
+	path, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var body struct {
+		Message string `json:"message"`
+	}
+	json.NewDecoder(r.Body).Decode(&body)
+
+	if err := h.Git.StashPush(path, body.Message); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, map[string]string{"status": "ok"})
+}
+
+// GitStashApply handles POST /api/projects/{id}/git/stash/{index}/apply
+func (h *Handlers) GitStashApply(w http.ResponseWriter, r *http.Request) {
+	path, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	index, err := strconv.Atoi(mux.Vars(r)["index"])
+	if err != nil {
+		jsonError(w, "invalid stash index", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Git.StashApply(path, index); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, map[string]string{"status": "ok"})
+}
+
+// GitStashPop handles POST /api/projects/{id}/git/stash/{index}/pop
+func (h *Handlers) GitStashPop(w http.ResponseWriter, r *http.Request) {
+	path, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	index, err := strconv.Atoi(mux.Vars(r)["index"])
+	if err != nil {
+		jsonError(w, "invalid stash index", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Git.StashPop(path, index); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, map[string]string{"status": "ok"})
+}
+
+// GitStashDrop handles DELETE /api/projects/{id}/git/stash/{index}
+func (h *Handlers) GitStashDrop(w http.ResponseWriter, r *http.Request) {
+	path, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	index, err := strconv.Atoi(mux.Vars(r)["index"])
+	if err != nil {
+		jsonError(w, "invalid stash index", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Git.StashDrop(path, index); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, map[string]string{"status": "ok"})
+}
+
+// GitStashDiff handles GET /api/projects/{id}/git/stash/{index}/diff
+func (h *Handlers) GitStashDiff(w http.ResponseWriter, r *http.Request) {
+	path, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	index, err := strconv.Atoi(mux.Vars(r)["index"])
+	if err != nil {
+		jsonError(w, "invalid stash index", http.StatusBadRequest)
+		return
+	}
+
+	diff, err := h.Git.StashDiff(path, index)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, map[string]string{"diff": diff})
+}
+
 // --- Docker endpoints ---
 
 // DockerContainers handles GET /api/projects/{id}/docker/containers
