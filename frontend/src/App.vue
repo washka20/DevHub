@@ -25,7 +25,8 @@ const showBottomPanel = computed(() =>
 )
 
 function handleGlobalKeydown(e: KeyboardEvent) {
-  if (e.ctrlKey && e.key === '`') {
+  // Use e.code (physical key) instead of e.key (character) — works on any keyboard layout
+  if (e.ctrlKey && e.code === 'Backquote') {
     e.preventDefault()
     e.stopPropagation()
     if (route.path !== '/console') {
