@@ -87,7 +87,19 @@ const editor = useEditor({
   extensions: [
     StarterKit,
     TaskList,
-    TaskItem.configure({ nested: true }),
+    TaskItem.configure({ nested: true }).extend({
+      addKeyboardShortcuts() {
+        return {
+          ...this.parent?.(),
+          Enter: () => {
+            return this.editor.chain()
+              .splitListItem('taskItem')
+              .updateAttributes('taskItem', { checked: false })
+              .run()
+          },
+        }
+      },
+    }),
   ],
   editorProps: {
     attributes: { class: 'notes-editor-content' },
