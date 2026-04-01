@@ -20,3 +20,4 @@ frontend/node_modules
 
 # Config (contains paths)
 # ~/.devhub.yaml is in home dir, not here
+.worktrees/
