@@ -73,6 +73,7 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/readme", h.GetReadme).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/markdown", h.ListMarkdownFiles).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/markdown/{path:.*}", h.GetMarkdownFile).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/markdown/{path:.*}", h.ToggleMarkdownCheckbox).Methods("PUT")
 
 	// Notes
 	apiRouter.HandleFunc("/projects/{id}/notes", h.ListNotes).Methods("GET")

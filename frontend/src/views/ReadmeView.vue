@@ -14,7 +14,53 @@ const md = new MarkdownIt({
   typographer: true,
 })
 
+// Task list plugin: renders - [ ] / - [x] as interactive checkboxes with data-line
+md.core.ruler.after('inline', 'task-lists', (state) => {
+  const tokens = state.tokens
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].type !== 'inline') continue
+    const content = tokens[i].content
+    const match = content.match(/^\[([ xX])\]\s/)
+    if (!match) continue
+
+    // Find the source line (markdown-it map gives [startLine, endLine])
+    let sourceLine = -1
+    // Walk up to find parent token with map
+    for (let j = i; j >= 0; j--) {
+      if (tokens[j].map) {
+        sourceLine = tokens[j].map![0] + 1 // 1-based
+        break
+      }
+    }
+
+    const checked = match[1].toLowerCase() === 'x'
+    const checkbox = `<input type="checkbox" data-line="${sourceLine}" ${checked ? 'checked' : ''} class="md-checkbox">`
+    tokens[i].content = content.slice(match[0].length)
+    tokens[i].children = md.parseInline(tokens[i].content, state.env)[0]?.children || []
+
+    // Insert checkbox HTML before the inline content
+    const checkboxToken = new state.Token('html_inline', '', 0)
+    checkboxToken.content = checkbox
+    if (tokens[i].children) {
+      tokens[i].children!.unshift(checkboxToken)
+    }
+
+    // Mark parent <li> with a class
+    if (i >= 2 && tokens[i - 2].type === 'list_item_open') {
+      tokens[i - 2].attrJoin('class', 'task-list-item')
+    }
+    // Mark grandparent <ul> with a class
+    for (let j = i - 2; j >= 0; j--) {
+      if (tokens[j].type === 'bullet_list_open') {
+        tokens[j].attrJoin('class', 'task-list')
+        break
+      }
+    }
+  }
+})
+
 const content = ref('')
+const rawMarkdown = ref('')
 const loading = ref(false)
 const notFound = ref(false)
 const mdFiles = ref<string[]>([])
@@ -98,6 +144,7 @@ async function selectFile(path: string) {
       return
     }
     const text = await res.text()
+    rawMarkdown.value = text
     content.value = md.render(text)
   } catch {
     notFound.value = true
@@ -126,6 +173,15 @@ function resolvePath(href: string): string {
 
 function handleContentClick(e: MouseEvent) {
   const target = e.target as HTMLElement
+
+  // Handle checkbox clicks
+  if (target.tagName === 'INPUT' && target.classList.contains('md-checkbox')) {
+    e.preventDefault()
+    const line = parseInt(target.getAttribute('data-line') || '0')
+    if (line > 0) toggleCheckbox(line)
+    return
+  }
+
   const link = target.closest('a')
   if (!link) return
 
@@ -138,6 +194,25 @@ function handleContentClick(e: MouseEvent) {
     if (mdFiles.value.includes(resolved)) {
       selectFile(resolved)
     }
+  }
+}
+
+async function toggleCheckbox(line: number) {
+  if (!currentProject.value || !currentFile.value) return
+  try {
+    const res = await fetch(
+      `/api/projects/${currentProject.value.name}/markdown/${currentFile.value}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ line }),
+      }
+    )
+    if (!res.ok) throw new Error('Failed to toggle')
+    // Re-fetch to get updated content
+    await selectFile(currentFile.value)
+  } catch (err) {
+    console.error('Failed to toggle checkbox:', err)
   }
 }
 
@@ -605,5 +680,66 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
 .markdown-body strong {
   color: var(--text-primary);
   font-weight: 600;
+}
+
+/* Task list checkboxes (GitLab-style) */
+.markdown-body ul.task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.markdown-body ul.task-list ul.task-list {
+  padding-left: 1.5em;
+}
+
+.markdown-body li.task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.markdown-body li.task-list-item > p {
+  margin: 0;
+}
+
+.markdown-body .md-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-primary);
+  cursor: pointer;
+  display: block;
+  position: relative;
+  margin: 0;
+  margin-top: 3px;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.markdown-body .md-checkbox:hover {
+  border-color: var(--accent-blue);
+}
+
+.markdown-body .md-checkbox:checked {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.markdown-body .md-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--bg-primary);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 </style>

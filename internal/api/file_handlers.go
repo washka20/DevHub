@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -124,4 +126,73 @@ func (h *Handlers) GetMarkdownFile(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Write(data)
+}
+
+// ToggleMarkdownCheckbox handles PUT /api/projects/{id}/markdown/{path:.*}
+// Toggles a task list checkbox at the given line number.
+func (h *Handlers) ToggleMarkdownCheckbox(w http.ResponseWriter, r *http.Request) {
+	projectPath, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	mdPath := mux.Vars(r)["path"]
+	if mdPath == "" {
+		jsonError(w, "path required", http.StatusBadRequest)
+		return
+	}
+
+	clean := filepath.Clean(mdPath)
+	if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
+		jsonError(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+
+	fullPath := filepath.Join(projectPath, clean)
+	if !strings.HasPrefix(fullPath, projectPath) {
+		jsonError(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+
+	var body struct {
+		Line int `json:"line"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Line < 1 {
+		jsonError(w, "line number required (1-based)", http.StatusBadRequest)
+		return
+	}
+
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		jsonError(w, "file not found", http.StatusNotFound)
+		return
+	}
+
+	lines := strings.Split(string(data), "\n")
+	idx := body.Line - 1
+	if idx >= len(lines) {
+		jsonError(w, fmt.Sprintf("line %d out of range (file has %d lines)", body.Line, len(lines)), http.StatusBadRequest)
+		return
+	}
+
+	line := lines[idx]
+	if strings.Contains(line, "- [ ]") {
+		lines[idx] = strings.Replace(line, "- [ ]", "- [x]", 1)
+	} else if strings.Contains(line, "- [x]") {
+		lines[idx] = strings.Replace(line, "- [x]", "- [ ]", 1)
+	} else if strings.Contains(line, "- [X]") {
+		lines[idx] = strings.Replace(line, "- [X]", "- [ ]", 1)
+	} else {
+		jsonError(w, fmt.Sprintf("line %d is not a task list item", body.Line), http.StatusBadRequest)
+		return
+	}
+
+	result := strings.Join(lines, "\n")
+	if err := os.WriteFile(fullPath, []byte(result), 0644); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonResponse(w, map[string]string{"status": "ok"})
 }
