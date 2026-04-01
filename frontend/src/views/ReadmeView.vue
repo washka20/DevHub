@@ -4,18 +4,69 @@ import { useProjectsStore } from '../stores/projects'
 import FileTreeNode from '../components/FileTreeNode.vue'
 import type { FileNode } from '../components/FileTreeNode.vue'
 import MarkdownIt from 'markdown-it'
+import hljs from 'highlight.js/lib/core'
+import langGo from 'highlight.js/lib/languages/go'
+import langTypeScript from 'highlight.js/lib/languages/typescript'
+import langJavaScript from 'highlight.js/lib/languages/javascript'
+import langBash from 'highlight.js/lib/languages/bash'
+import langYaml from 'highlight.js/lib/languages/yaml'
+import langJson from 'highlight.js/lib/languages/json'
+import langCss from 'highlight.js/lib/languages/css'
+import langSql from 'highlight.js/lib/languages/sql'
+import langPython from 'highlight.js/lib/languages/python'
+import langXml from 'highlight.js/lib/languages/xml'
+import langRust from 'highlight.js/lib/languages/rust'
+import langDiff from 'highlight.js/lib/languages/diff'
+import langDockerfile from 'highlight.js/lib/languages/dockerfile'
+import langMarkdown from 'highlight.js/lib/languages/markdown'
+
+hljs.registerLanguage('go', langGo)
+hljs.registerLanguage('typescript', langTypeScript)
+hljs.registerLanguage('ts', langTypeScript)
+hljs.registerLanguage('javascript', langJavaScript)
+hljs.registerLanguage('js', langJavaScript)
+hljs.registerLanguage('bash', langBash)
+hljs.registerLanguage('sh', langBash)
+hljs.registerLanguage('shell', langBash)
+hljs.registerLanguage('yaml', langYaml)
+hljs.registerLanguage('yml', langYaml)
+hljs.registerLanguage('json', langJson)
+hljs.registerLanguage('css', langCss)
+hljs.registerLanguage('sql', langSql)
+hljs.registerLanguage('python', langPython)
+hljs.registerLanguage('py', langPython)
+hljs.registerLanguage('xml', langXml)
+hljs.registerLanguage('html', langXml)
+hljs.registerLanguage('vue', langXml)
+hljs.registerLanguage('rust', langRust)
+hljs.registerLanguage('rs', langRust)
+hljs.registerLanguage('diff', langDiff)
+hljs.registerLanguage('dockerfile', langDockerfile)
+hljs.registerLanguage('docker', langDockerfile)
+hljs.registerLanguage('markdown', langMarkdown)
+hljs.registerLanguage('md', langMarkdown)
 
 const projectsStore = useProjectsStore()
 const currentProject = computed(() => projectsStore.currentProject)
 
 const md = new MarkdownIt({
-  html: false,
+  html: true,
   linkify: true,
   typographer: true,
+  highlight: (str: string, lang: string): string => {
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        return `<pre class="hljs"><code>${hljs.highlight(str, { language: lang }).value}</code></pre>`
+      } catch { /* fallthrough */ }
+    }
+    const escaped = str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    return `<pre class="hljs"><code>${escaped}</code></pre>`
+  },
 })
 
 // Task list plugin: renders - [ ] / - [x] as interactive checkboxes with data-line
-md.core.ruler.after('inline', 'task-lists', (state) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+md.core.ruler.after('inline', 'task-lists', (state: any) => {
   const tokens = state.tokens
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i].type !== 'inline') continue
@@ -623,7 +674,7 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
-.markdown-body pre {
+.markdown-body pre:not(.hljs) {
   padding: 16px;
   overflow: auto;
   font-size: 13px;
@@ -634,7 +685,7 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
   border: 1px solid var(--border);
 }
 
-.markdown-body pre code {
+.markdown-body pre:not(.hljs) code {
   padding: 0;
   margin: 0;
   background: transparent;
@@ -754,4 +805,61 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
+
+/* Syntax highlighting (highlight.js tokens) */
+.markdown-body pre.hljs {
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+
+.markdown-body pre.hljs code {
+  padding: 0;
+  background: transparent;
+  font-size: 100%;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.hljs-comment,
+.hljs-quote { color: var(--text-secondary); font-style: italic; }
+
+.hljs-keyword,
+.hljs-selector-tag { color: #ff7b72; }
+
+.hljs-string,
+.hljs-doctag,
+.hljs-regexp { color: #a5d6ff; }
+
+.hljs-number,
+.hljs-literal,
+.hljs-variable,
+.hljs-template-variable { color: #79c0ff; }
+
+.hljs-title,
+.hljs-section,
+.hljs-name { color: #d2a8ff; }
+
+.hljs-type,
+.hljs-built_in { color: #ffa657; }
+
+.hljs-attr,
+.hljs-attribute { color: #79c0ff; }
+
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link { color: #a5d6ff; }
+
+.hljs-meta { color: #79c0ff; }
+
+.hljs-deletion { color: #ffa198; background: rgba(248, 81, 73, 0.1); }
+.hljs-addition { color: #7ee787; background: rgba(63, 185, 80, 0.1); }
+
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
 </style>
