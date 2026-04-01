@@ -830,38 +830,40 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
 }
 
 .markdown-body ul.task-list ul.task-list {
-  padding-left: 1.5em;
+  padding-left: 2em;
 }
 
 .markdown-body li.task-list-item {
   list-style: none;
-  margin-left: -1.5em;
+  position: relative;
+  padding-left: 28px;
+  margin-bottom: 4px;
 }
 
 .markdown-body li.task-list-item > p {
   margin: 0;
+  display: inline;
 }
 
 .markdown-body .md-checkbox {
   appearance: none;
   -webkit-appearance: none;
-  width: 16px !important;
-  height: 16px !important;
-  max-width: 16px;
-  max-height: 16px;
-  min-width: 16px;
-  min-height: 16px;
+  width: 18px !important;
+  height: 18px !important;
+  max-width: 18px;
+  max-height: 18px;
+  min-width: 18px;
+  min-height: 18px;
   box-sizing: border-box;
-  border: 1.5px solid var(--border);
-  border-radius: 3px;
+  border: 2px solid var(--border);
+  border-radius: 4px;
   background: var(--bg-primary);
   cursor: pointer;
-  display: inline-block;
-  position: relative;
-  margin: 0 6px 0 0;
+  position: absolute;
+  left: 0;
+  top: 2px;
+  margin: 0;
   padding: 0;
-  vertical-align: middle;
-  transform: translateY(-1px);
   transition: background 0.15s, border-color 0.15s;
 }
 
@@ -877,7 +879,7 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
 .markdown-body .md-checkbox:checked::after {
   content: '';
   position: absolute;
-  top: 2px;
+  top: 1px;
   left: 5px;
   width: 4px;
   height: 8px;
