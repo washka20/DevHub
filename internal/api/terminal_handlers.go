@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -118,6 +119,28 @@ func (th *TerminalHandlers) DestroySession(w http.ResponseWriter, r *http.Reques
 	}
 	th.Manager.Destroy(id)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetSessionCWD handles GET /api/terminal/sessions/{id}/cwd.
+func (th *TerminalHandlers) GetSessionCWD(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	if len(id) > 64 {
+		jsonError(w, "invalid session id", http.StatusBadRequest)
+		return
+	}
+	sess, ok := th.Manager.Get(id)
+	if !ok {
+		jsonError(w, "session not found", http.StatusNotFound)
+		return
+	}
+	cwd := sess.CWD // fallback
+	if sess.Cmd.Process != nil {
+		if link, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", sess.Cmd.Process.Pid)); err == nil {
+			cwd = link
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"cwd": cwd})
 }
 
 func generateID() string {

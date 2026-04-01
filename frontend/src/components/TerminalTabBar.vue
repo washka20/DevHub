@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useTerminalStore } from '../stores/terminal'
 import { useProjectsStore } from '../stores/projects'
+import TabContextMenu from './TabContextMenu.vue'
+import type { TerminalTab } from '../types'
 
 const terminalStore = useTerminalStore()
 const projectsStore = useProjectsStore()
@@ -8,6 +11,46 @@ const projectsStore = useProjectsStore()
 const emit = defineEmits<{
   split: [direction: 'horizontal' | 'vertical']
 }>()
+
+const contextMenu = ref<{ x: number; y: number; tabId: string } | null>(null)
+const renamingTabId = ref<string | null>(null)
+const renameValue = ref('')
+
+function tabHasActivity(tab: TerminalTab): boolean {
+  return tab.panes.some((p) => p.hasActivity)
+}
+
+function tabHasBell(tab: TerminalTab): boolean {
+  return tab.panes.some((p) => p.hasBell)
+}
+
+function handleContextMenu(e: MouseEvent, tabId: string) {
+  e.preventDefault()
+  contextMenu.value = { x: e.clientX, y: e.clientY, tabId }
+}
+
+function startRename(tabId: string) {
+  const tab = terminalStore.tabs.find((t) => t.id === tabId)
+  if (!tab) return
+  renamingTabId.value = tabId
+  renameValue.value = tab.label
+}
+
+function finishRename() {
+  if (renamingTabId.value && renameValue.value.trim()) {
+    terminalStore.renameTab(renamingTabId.value, renameValue.value.trim())
+  }
+  renamingTabId.value = null
+}
+
+function cancelRename() {
+  renamingTabId.value = null
+}
+
+function handleSplitFromMenu(tabId: string, direction: 'horizontal' | 'vertical') {
+  terminalStore.setActiveTab(tabId)
+  emit('split', direction)
+}
 
 async function handleNewTab() {
   const cwd = projectsStore.currentProject?.path || ''
@@ -28,9 +71,27 @@ async function handleNewTab() {
         class="tab"
         :class="{ active: terminalStore.activeTabId === tab.id }"
         @click="terminalStore.setActiveTab(tab.id)"
+        @contextmenu="handleContextMenu($event, tab.id)"
       >
-        <span class="tab-dot" :class="{ active: terminalStore.activeTabId === tab.id }"></span>
-        <span class="tab-label">{{ tab.label }}</span>
+        <span
+          class="tab-dot"
+          :class="{
+            active: terminalStore.activeTabId === tab.id,
+            activity: terminalStore.activeTabId !== tab.id && tabHasActivity(tab),
+            bell: terminalStore.activeTabId !== tab.id && tabHasBell(tab),
+          }"
+        ></span>
+        <input
+          v-if="renamingTabId === tab.id"
+          v-model="renameValue"
+          class="tab-rename-input"
+          @keydown.enter="finishRename"
+          @keydown.escape="cancelRename"
+          @blur="finishRename"
+          @click.stop
+          autofocus
+        />
+        <span v-else class="tab-label">{{ tab.label }}</span>
         <button
           class="tab-close"
           @click.stop="terminalStore.closeTab(tab.id)"
@@ -77,6 +138,23 @@ async function handleNewTab() {
         Sessions
       </button>
     </div>
+
+    <Teleport to="body">
+      <TabContextMenu
+        v-if="contextMenu"
+        :x="contextMenu.x"
+        :y="contextMenu.y"
+        :tab-id="contextMenu.tabId"
+        :can-split="(terminalStore.tabs.find(t => t.id === contextMenu?.tabId)?.panes.length ?? 0) < 2"
+        @close="contextMenu = null"
+        @rename="startRename"
+        @split-h="(id: string) => handleSplitFromMenu(id, 'horizontal')"
+        @split-v="(id: string) => handleSplitFromMenu(id, 'vertical')"
+        @close-tab="terminalStore.closeTab"
+        @close-others="terminalStore.closeOtherTabs"
+        @close-all="terminalStore.closeAllTabs"
+      />
+    </Teleport>
   </div>
 </template>
 
@@ -161,6 +239,18 @@ async function handleNewTab() {
   color: var(--accent-red);
 }
 
+.tab-rename-input {
+  background: var(--bg-primary);
+  border: 1px solid var(--accent-blue);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  padding: 1px 4px;
+  width: 80px;
+  outline: none;
+}
+
 .tab-add {
   padding: 4px 8px;
   font-size: 14px;
@@ -214,5 +304,25 @@ async function handleNewTab() {
 .toolbar-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+.tab-dot.activity {
+  background: var(--accent-blue);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.tab-dot.bell {
+  background: var(--accent-orange);
+  animation: bell-flash 0.5s ease-in-out 3;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.4); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(88, 166, 255, 0); }
+}
+
+@keyframes bell-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 </style>

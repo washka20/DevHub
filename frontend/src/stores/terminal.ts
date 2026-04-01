@@ -248,8 +248,37 @@ export const useTerminalStore = defineStore('terminal', () => {
     }
   }
 
+  function renameTab(tabId: string, label: string) {
+    const tab = tabs.value.find((t) => t.id === tabId)
+    if (tab) tab.label = label
+  }
+
+  async function closeOtherTabs(keepTabId: string) {
+    const toClose = tabs.value.filter((t) => t.id !== keepTabId)
+    for (const tab of toClose) {
+      await closeTab(tab.id)
+    }
+  }
+
+  async function closeAllTabs() {
+    const allTabs = [...tabs.value]
+    for (const tab of allTabs) {
+      await closeTab(tab.id)
+    }
+  }
+
+  function clearPaneAlerts(tabId: string) {
+    const tab = tabs.value.find((t) => t.id === tabId)
+    if (!tab) return
+    for (const pane of tab.panes) {
+      pane.hasActivity = false
+      pane.hasBell = false
+    }
+  }
+
   function setActiveTab(tabId: string) {
     activeTabId.value = tabId
+    clearPaneAlerts(tabId)
   }
 
   async function splitPane(tabId: string, direction: 'horizontal' | 'vertical', cwd: string) {
@@ -295,6 +324,14 @@ export const useTerminalStore = defineStore('terminal', () => {
 
   function updatePanel(partial: Partial<PanelState>) {
     panel.value = { ...panel.value, ...partial }
+  }
+
+  function togglePanel() {
+    panel.value.visible = !panel.value.visible
+  }
+
+  function setPanelMode(mode: 'pinned' | 'floating') {
+    panel.value.mode = mode
   }
 
   // -------------------------------------------------------------------------
@@ -408,10 +445,16 @@ export const useTerminalStore = defineStore('terminal', () => {
     addTab,
     closeTab,
     setActiveTab,
+    renameTab,
+    closeOtherTabs,
+    closeAllTabs,
+    clearPaneAlerts,
     splitPane,
     closePane,
     connectPane,
     updatePanel,
+    togglePanel,
+    setPanelMode,
     cleanOrphans,
     handleSessionExit,
     clearLayout,
