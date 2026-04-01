@@ -74,6 +74,13 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/markdown", h.ListMarkdownFiles).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/markdown/{path:.*}", h.GetMarkdownFile).Methods("GET")
 
+	// Notes
+	apiRouter.HandleFunc("/projects/{id}/notes", h.ListNotes).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/notes/{slug}", h.GetNote).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/notes", h.CreateNote).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/notes/{slug}", h.UpdateNote).Methods("PUT")
+	apiRouter.HandleFunc("/projects/{id}/notes/{slug}", h.DeleteNote).Methods("DELETE")
+
 	// Docker
 	apiRouter.HandleFunc("/projects/{id}/docker/containers", h.DockerContainers).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/logs", h.DockerLogs).Methods("GET")
