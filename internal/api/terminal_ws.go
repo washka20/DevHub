@@ -128,6 +128,16 @@ func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 					}
 				}
 				if err != nil {
+					// A read deadline set by StopReader() returns a timeout error;
+					// also check stopCh for a clean-stop signal.
+					select {
+					case <-stopCh:
+						return
+					default:
+					}
+					if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
+						return // deadline set by StopReader, exit silently
+					}
 					// PTY closed (shell exited)
 					exitCode := 0
 					if err != io.EOF {

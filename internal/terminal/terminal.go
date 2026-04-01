@@ -35,9 +35,19 @@ func (s *Session) StopReader() {
 		close(s.readerCh)
 		s.readerCh = nil
 	}
+	ptyFile := s.Pty
 	s.mu.Unlock()
+	// Unblock any pending Pty.Read() by setting a short deadline so the
+	// goroutine can observe the closed stop channel and exit.
+	if ptyFile != nil {
+		ptyFile.SetReadDeadline(time.Now().Add(20 * time.Millisecond))
+	}
 	// Wait outside the lock so the goroutine can finish without deadlock.
 	s.readerWg.Wait()
+	// Reset the deadline so the next reader goroutine gets a clean file.
+	if ptyFile != nil {
+		ptyFile.SetReadDeadline(time.Time{})
+	}
 }
 
 // StartReader creates a stop channel for a new reader goroutine and
