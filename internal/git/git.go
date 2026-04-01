@@ -97,7 +97,7 @@ func (g *GitService) Status(dir string) (*GitStatus, error) {
 	}
 
 	// Porcelain status for modified/staged
-	porcelain, err := g.runner.Run(dir, "git", "status", "--porcelain")
+	porcelain, err := g.runner.Run(dir, "git", "-c", "core.quotePath=false", "status", "--porcelain")
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +430,7 @@ func (g *GitService) CommitDetail(dir string, hash string) (*CommitDetailInfo, e
 	}
 
 	// Get commit details
-	showOut, err := g.runner.Run(dir, "git", "show", "--stat",
+	showOut, err := g.runner.Run(dir, "git", "-c", "core.quotePath=false", "show", "--stat",
 		"--format=%H|%s|%an|%ae|%ai|%b", hash)
 	if err != nil {
 		return nil, fmt.Errorf("git show failed: %w", err)
@@ -465,7 +465,7 @@ func (g *GitService) CommitDetail(dir string, hash string) (*CommitDetailInfo, e
 	}
 
 	// Get file changes
-	treeOut, err := g.runner.Run(dir, "git", "diff-tree", "--no-commit-id", "-r",
+	treeOut, err := g.runner.Run(dir, "git", "-c", "core.quotePath=false", "diff-tree", "--no-commit-id", "-r",
 		"--name-status", hash)
 	if err != nil {
 		return nil, fmt.Errorf("git diff-tree failed: %w", err)

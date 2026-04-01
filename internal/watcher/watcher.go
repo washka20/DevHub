@@ -67,14 +67,18 @@ func (w *Watcher) Watch(dir string) error {
 
 	return filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil
+			return nil // skip inaccessible dirs
 		}
 		if d.IsDir() {
 			name := d.Name()
 			if skipDirs[name] || (strings.HasPrefix(name, ".") && path != dir) {
 				return filepath.SkipDir
 			}
-			return w.fw.Add(path)
+			if addErr := w.fw.Add(path); addErr != nil {
+				// Permission denied or too many watchers — skip silently
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		return nil
 	})
