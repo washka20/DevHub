@@ -10,6 +10,7 @@ import { useWebSocket } from './composables/useWebSocket'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 import { useDockerStore } from './stores/docker'
 import { useGitStore } from './stores/git'
+import { useFilesStore } from './stores/files'
 import { useSettingsStore } from './stores/settings'
 import { useTerminalStore } from './stores/terminal'
 
@@ -38,13 +39,26 @@ onMounted(async () => {
   connect()
 
   onMessage((data) => {
-    const event = data as { type?: string }
+    const event = data as { type?: string; data?: unknown }
     if (event.type === 'docker:update') {
       dockerStore.fetchContainers()
     }
     if (event.type === 'git:update') {
       gitStore.fetchStatus()
       gitStore.fetchGraph()
+    }
+    if (event.type === 'files_changed') {
+      gitStore.fetchStatus()
+      try {
+        const filesStore = useFilesStore()
+        filesStore.fetchTree()
+        const paths = Array.isArray(event.data) ? (event.data as string[]) : []
+        if (paths.length > 0) {
+          filesStore.checkOpenFiles(paths)
+        }
+      } catch {
+        // files store not initialized yet, ignore
+      }
     }
   })
 
