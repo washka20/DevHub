@@ -126,7 +126,7 @@ export interface TerminalPane {
   id: string
   sessionId: string | null
   cwd: string
-  status: 'disconnected' | 'connecting' | 'connected'
+  status: 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
 }
 
 export interface TerminalTab {
@@ -147,7 +147,7 @@ export interface PersistedLayout {
   tabs: Array<{
     id: string
     label: string
-    panes: Array<{ id: string; cwd: string }>
+    panes: Array<{ id: string; cwd: string; sessionId?: string | null; label?: string }>
     direction: 'horizontal' | 'vertical' | null
   }>
   activeTabId: string | null

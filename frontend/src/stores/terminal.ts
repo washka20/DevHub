@@ -39,12 +39,17 @@ function loadLayout(): PersistedLayout | null {
   }
 }
 
-function saveLayout(tabs: TerminalTab[], activeTabId: string | null, panel: PanelState): void {
+function saveLayout(tabs: TerminalTab[], activeTabId: string | null, panel: PanelState, sessions: Map<string, TerminalSession>): void {
   const layout: PersistedLayout = {
     tabs: tabs.map((t) => ({
       id: t.id,
       label: t.label,
-      panes: t.panes.map((p) => ({ id: p.id, cwd: p.cwd })),
+      panes: t.panes.map((p) => ({
+        id: p.id,
+        cwd: p.cwd,
+        sessionId: p.sessionId,
+        label: p.sessionId ? (sessions.get(p.sessionId)?.label || 'shell') : undefined,
+      })),
       direction: t.splitDirection,
     })),
     activeTabId,
@@ -53,16 +58,22 @@ function saveLayout(tabs: TerminalTab[], activeTabId: string | null, panel: Pane
   localStorage.setItem(STORAGE_KEY, JSON.stringify(layout))
 }
 
-function restoreTabs(layout: PersistedLayout): TerminalTab[] {
+function restoreTabs(layout: PersistedLayout, sessions: Map<string, TerminalSession>): TerminalTab[] {
   return layout.tabs.map((t) => ({
     id: t.id,
     label: t.label,
-    panes: t.panes.map((p) => ({
-      id: p.id,
-      sessionId: null,
-      cwd: p.cwd,
-      status: 'disconnected' as const,
-    })),
+    panes: t.panes.map((p) => {
+      // Re-populate sessions Map with saved label for reconnected panes
+      if (p.sessionId && p.label) {
+        sessions.set(p.sessionId, { id: p.sessionId, label: p.label, cwd: p.cwd })
+      }
+      return {
+        id: p.id,
+        sessionId: p.sessionId ?? null,
+        cwd: p.cwd,
+        status: p.sessionId ? 'reconnecting' as const : 'disconnected' as const,
+      }
+    }),
     splitDirection: t.direction,
   }))
 }
@@ -77,7 +88,7 @@ export const useTerminalStore = defineStore('terminal', () => {
   // Try to restore from localStorage
   const saved = loadLayout()
 
-  const tabs = ref<TerminalTab[]>(saved ? restoreTabs(saved) : [])
+  const tabs = ref<TerminalTab[]>(saved ? restoreTabs(saved, sessions.value) : [])
   const activeTabId = ref<string | null>(saved?.activeTabId ?? null)
   const panel = ref<PanelState>(saved?.panel ? { ...defaultPanel, ...saved.panel } : { ...defaultPanel })
 
@@ -108,7 +119,7 @@ export const useTerminalStore = defineStore('terminal', () => {
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
-      saveLayout(tabs.value, activeTabId.value, panel.value)
+      saveLayout(tabs.value, activeTabId.value, panel.value, sessions.value)
     }, 500)
   }
 
