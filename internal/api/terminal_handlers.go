@@ -90,6 +90,10 @@ func (th *TerminalHandlers) DestroyAllSessions(w http.ResponseWriter, r *http.Re
 // GetSession handles GET /api/terminal/sessions/{id}.
 func (th *TerminalHandlers) GetSession(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
+	if len(id) > 64 {
+		jsonError(w, "invalid session id", http.StatusBadRequest)
+		return
+	}
 	sess, ok := th.Manager.Get(id)
 	if !ok {
 		jsonError(w, "session not found", http.StatusNotFound)
@@ -104,6 +108,10 @@ func (th *TerminalHandlers) GetSession(w http.ResponseWriter, r *http.Request) {
 // DestroySession handles DELETE /api/terminal/sessions/{id}.
 func (th *TerminalHandlers) DestroySession(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
+	if len(id) > 64 {
+		jsonError(w, "invalid session id", http.StatusBadRequest)
+		return
+	}
 	if _, ok := th.Manager.Get(id); !ok {
 		jsonError(w, "session not found", http.StatusNotFound)
 		return

@@ -68,6 +68,7 @@ func (s *Session) Resize(cols, rows uint16) error {
 }
 
 func (s *Session) Close() {
+	s.StopReader()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
