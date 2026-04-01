@@ -204,3 +204,19 @@ export interface StashEntry {
   message: string
   date: string
 }
+
+export interface FileNode {
+  name: string
+  path: string
+  is_dir: boolean
+  children?: FileNode[]
+}
+
+export interface OpenFile {
+  path: string
+  name: string
+  content: string
+  originalContent: string
+  dirty: boolean
+  language: string
+}
