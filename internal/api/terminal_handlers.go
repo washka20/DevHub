@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"time"
 
 	"devhub/internal/config"
 	"devhub/internal/terminal"
@@ -84,6 +85,20 @@ func (th *TerminalHandlers) ListSessions(w http.ResponseWriter, r *http.Request)
 func (th *TerminalHandlers) DestroyAllSessions(w http.ResponseWriter, r *http.Request) {
 	th.Manager.DestroyAll()
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetSession handles GET /api/terminal/sessions/{id}.
+func (th *TerminalHandlers) GetSession(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	sess, ok := th.Manager.Get(id)
+	if !ok {
+		jsonError(w, "session not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(terminal.SessionInfo{
+		ID: sess.ID, CWD: sess.CWD, CreatedAt: sess.CreatedAt.Format(time.RFC3339),
+	})
 }
 
 // DestroySession handles DELETE /api/terminal/sessions/{id}.

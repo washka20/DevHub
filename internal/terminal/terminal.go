@@ -23,26 +23,39 @@ type Session struct {
 	mu        sync.Mutex
 	closed    bool
 	readerCh  chan struct{} // closed to signal current reader goroutine to stop
+	readerWg  sync.WaitGroup
 }
 
-// StopReader signals the current PTY reader goroutine to exit.
+// StopReader signals the current PTY reader goroutine to exit and blocks
+// until it has fully stopped. This ensures the log file writer goroutine
+// is no longer active before any caller proceeds (e.g. scrollback replay).
 func (s *Session) StopReader() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.readerCh != nil {
 		close(s.readerCh)
 		s.readerCh = nil
 	}
+	s.mu.Unlock()
+	// Wait outside the lock so the goroutine can finish without deadlock.
+	s.readerWg.Wait()
 }
 
-// StartReader creates a stop channel for a new reader goroutine.
-// Must be called before starting the goroutine.
+// StartReader creates a stop channel for a new reader goroutine and
+// registers it with the internal WaitGroup. The caller must invoke
+// ReaderDone when the goroutine exits.
 func (s *Session) StartReader() <-chan struct{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ch := make(chan struct{})
 	s.readerCh = ch
+	s.readerWg.Add(1)
 	return ch
+}
+
+// ReaderDone must be called by the reader goroutine when it exits so that
+// StopReader can unblock.
+func (s *Session) ReaderDone() {
+	s.readerWg.Done()
 }
 
 func (s *Session) Resize(cols, rows uint16) error {
@@ -81,7 +94,9 @@ func (s *Session) Close() {
 
 	s.Pty.Close()
 	if s.LogFile != nil {
+		logPath := s.LogFile.Name()
 		s.LogFile.Close()
+		os.Remove(logPath) // best-effort cleanup
 	}
 }
 
