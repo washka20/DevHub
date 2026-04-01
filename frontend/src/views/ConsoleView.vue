@@ -14,13 +14,17 @@ const projectsStore = useProjectsStore()
 
 let initialized = false
 
-// onActivated fires on first mount AND on re-activation from keep-alive
 onActivated(async () => {
   if (!initialized) {
     initialized = true
-    // Clean orphan sessions from previous page loads / server restarts
+    // Clean orphan backend sessions from previous server lifecycle.
+    // This does NOT clear the persisted layout — just kills stale PTYs.
     await terminalStore.cleanOrphans()
   }
+
+  // If there are restored tabs from localStorage, do nothing — they show
+  // the "Press Enter to connect" placeholder and connect lazily.
+  // Only create a fresh tab if the store is truly empty (first ever visit).
   if (terminalStore.tabs.length === 0) {
     const cwd = projectsStore.currentProject?.path || ''
     try {
@@ -54,7 +58,6 @@ function handlePaneClose(paneId: string) {
       v-show="tab.id === terminalStore.activeTabId"
       class="terminal-area"
     >
-      <!-- Always use Splitpanes (even for 1 pane) to avoid DOM restructuring -->
       <Splitpanes
         :horizontal="tab.splitDirection === 'vertical'"
         class="default-theme"
@@ -63,12 +66,12 @@ function handlePaneClose(paneId: string) {
           <div class="pane-container">
             <div v-show="tab.panes.length > 1" class="pane-header">
               <span class="pane-title">
-                {{ terminalStore.sessions.get(pane.sessionId)?.label || 'shell' }}
+                {{ pane.sessionId ? (terminalStore.sessions.get(pane.sessionId)?.label || 'shell') : 'disconnected' }}
               </span>
               <span class="pane-close" @click="handlePaneClose(pane.id)">&#10005;</span>
             </div>
             <div class="pane-body">
-              <WebTerminal :session-id="pane.sessionId" />
+              <WebTerminal :pane-id="pane.id" />
             </div>
           </div>
         </Pane>
@@ -160,7 +163,6 @@ function handlePaneClose(paneId: string) {
   display: none;
 }
 
-/* Hide splitter when there's only 1 pane */
 :deep(.splitpanes.default-theme .splitpanes__pane:only-child + .splitpanes__splitter) {
   display: none;
 }
