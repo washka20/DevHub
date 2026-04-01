@@ -25,6 +25,10 @@ type terminalControlMsg struct {
 func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := mux.Vars(r)["id"]
+		if len(id) > 64 {
+			http.Error(w, "invalid session id", http.StatusBadRequest)
+			return
+		}
 		sess, ok := manager.Get(id)
 		if !ok {
 			http.Error(w, "session not found", http.StatusNotFound)

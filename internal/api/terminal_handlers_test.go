@@ -18,6 +18,7 @@ func setupTerminalRouter(m *terminal.Manager) *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/api/terminal/sessions", th.CreateSession).Methods("POST")
 	r.HandleFunc("/api/terminal/sessions", th.ListSessions).Methods("GET")
+	r.HandleFunc("/api/terminal/sessions/{id}", th.GetSession).Methods("GET")
 	r.HandleFunc("/api/terminal/sessions/{id}", th.DestroySession).Methods("DELETE")
 	return r
 }
@@ -123,4 +124,54 @@ func TestCreateSession_MaxExceeded(t *testing.T) {
 	if rr.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429, got %d: %s", rr.Code, rr.Body.String())
 	}
+}
+
+func TestGetSession(t *testing.T) {
+	m := terminal.NewManager(5)
+	defer m.DestroyAll()
+	router := setupTerminalRouter(m)
+
+	t.Run("id too long returns 400", func(t *testing.T) {
+		longID := strings.Repeat("a", 65)
+		req := httptest.NewRequest("GET", "/api/terminal/sessions/"+longID, nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
+		}
+	})
+
+	t.Run("unknown id returns 404", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/terminal/sessions/nope", nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", rr.Code)
+		}
+	})
+
+	t.Run("existing session returns 200 with JSON body", func(t *testing.T) {
+		m.Create("get-me", "/bin/sh", t.TempDir(), 80, 24)
+
+		req := httptest.NewRequest("GET", "/api/terminal/sessions/get-me", nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+
+		var resp terminal.SessionInfo
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if resp.ID != "get-me" {
+			t.Errorf("expected id 'get-me', got %q", resp.ID)
+		}
+		if resp.CreatedAt == "" {
+			t.Error("expected non-empty created_at")
+		}
+	})
 }
