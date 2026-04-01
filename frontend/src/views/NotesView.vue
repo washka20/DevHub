@@ -167,7 +167,8 @@ async function saveNote() {
 }
 
 async function deleteNote(slug: string) {
-  if (!currentProject.value || !confirm('Delete this note?')) return
+  const noteTitle = notes.value.find(n => n.slug === slug)?.title || slug
+  if (!currentProject.value || !confirm(`Delete "${noteTitle}"?`)) return
   try {
     const res = await fetch(`/api/projects/${currentProject.value.name}/notes/${slug}`, {
       method: 'DELETE',
@@ -250,8 +251,8 @@ function formatDate(iso: string): string {
     <aside class="notes-panel">
       <div class="notes-panel-header">
         <span class="notes-panel-title">Notes</span>
-        <button class="btn-new-note" @click="showNewNoteInput = !showNewNoteInput" title="New note">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+        <button class="btn-new-note" @click="showNewNoteInput = !showNewNoteInput" title="New note" aria-label="New note">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M7.75 2a.75.75 0 0 1 .75.75V7h4.25a.75.75 0 0 1 0 1.5H8.5v4.25a.75.75 0 0 1-1.5 0V8.5H2.75a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2z"/>
           </svg>
         </button>
@@ -293,44 +294,46 @@ function formatDate(iso: string): string {
       <template v-if="selectedSlug">
         <div class="editor-toolbar">
           <div class="toolbar-group">
-            <button class="toolbar-btn" :class="{ active: editor?.isActive('heading', { level: 1 }) }" @click="setHeading(1)" title="Heading 1">H1</button>
-            <button class="toolbar-btn" :class="{ active: editor?.isActive('heading', { level: 2 }) }" @click="setHeading(2)" title="Heading 2">H2</button>
-            <button class="toolbar-btn" :class="{ active: editor?.isActive('heading', { level: 3 }) }" @click="setHeading(3)" title="Heading 3">H3</button>
+            <button class="toolbar-btn" :class="{ active: editor?.isActive('heading', { level: 1 }) }" @click="setHeading(1)" title="Heading 1 (Ctrl+Alt+1)"><span style="font-size: 14px; font-weight: 700">H1</span></button>
+            <button class="toolbar-btn" :class="{ active: editor?.isActive('heading', { level: 2 }) }" @click="setHeading(2)" title="Heading 2 (Ctrl+Alt+2)"><span style="font-size: 13px; font-weight: 600">H2</span></button>
+            <button class="toolbar-btn" :class="{ active: editor?.isActive('heading', { level: 3 }) }" @click="setHeading(3)" title="Heading 3 (Ctrl+Alt+3)">H3</button>
           </div>
           <div class="toolbar-sep"></div>
           <div class="toolbar-group">
-            <button class="toolbar-btn" :class="{ active: editor?.isActive('bold') }" @click="toggleBold" title="Bold"><strong>B</strong></button>
-            <button class="toolbar-btn" :class="{ active: editor?.isActive('italic') }" @click="toggleItalic" title="Italic"><em>I</em></button>
-            <button class="toolbar-btn" :class="{ active: editor?.isActive('code') }" @click="toggleCode" title="Inline Code"><code>&lt;/&gt;</code></button>
+            <button class="toolbar-btn" :class="{ active: editor?.isActive('bold') }" @click="toggleBold" title="Bold (Ctrl+B)"><strong>B</strong></button>
+            <button class="toolbar-btn" :class="{ active: editor?.isActive('italic') }" @click="toggleItalic" title="Italic (Ctrl+I)"><em>I</em></button>
+            <button class="toolbar-btn" :class="{ active: editor?.isActive('code') }" @click="toggleCode" title="Inline Code (Ctrl+E)"><code>&lt;/&gt;</code></button>
           </div>
           <div class="toolbar-sep"></div>
           <div class="toolbar-group">
-            <button class="toolbar-btn" :class="{ active: editor?.isActive('bulletList') }" @click="toggleBulletList" title="Bullet List">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 4a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm3.75-1.5a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5zm0 5a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5zm0 5a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5zM3 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-1 5a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/></svg>
+            <button class="toolbar-btn" :class="{ active: editor?.isActive('bulletList') }" @click="toggleBulletList" title="Bullet List (Ctrl+Shift+8)" aria-label="Bullet List">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 4a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm3.75-1.5a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5zm0 5a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5zm0 5a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5zM3 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-1 5a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/></svg>
             </button>
-            <button class="toolbar-btn" :class="{ active: editor?.isActive('orderedList') }" @click="toggleOrderedList" title="Ordered List">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2.003 2.5a.5.5 0 0 0-.723-.447l-1.003.5a.5.5 0 0 0 .446.895l.28-.14V6H.5a.5.5 0 0 0 0 1h2.006a.5.5 0 1 0 0-1h-.503V2.5zM5.75 2.5a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5zm0 5a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5zm0 5a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5z"/></svg>
+            <button class="toolbar-btn" :class="{ active: editor?.isActive('orderedList') }" @click="toggleOrderedList" title="Ordered List (Ctrl+Shift+7)" aria-label="Ordered List">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2.003 2.5a.5.5 0 0 0-.723-.447l-1.003.5a.5.5 0 0 0 .446.895l.28-.14V6H.5a.5.5 0 0 0 0 1h2.006a.5.5 0 1 0 0-1h-.503V2.5zM5.75 2.5a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5zm0 5a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5zm0 5a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5z"/></svg>
             </button>
-            <button class="toolbar-btn" :class="{ active: editor?.isActive('taskList') }" @click="toggleTaskList" title="Task List">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 1h10.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 13.25 15H2.75A1.75 1.75 0 0 1 1 13.25V2.75C1 1.784 1.784 1 2.75 1zm0 1.5a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25H2.75zm8.03 2.72a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 0 1 1.06-1.06L5.75 8.69l3.72-3.72a.75.75 0 0 1 1.06 0z"/></svg>
+            <button class="toolbar-btn" :class="{ active: editor?.isActive('taskList') }" @click="toggleTaskList" title="Task List (Ctrl+Shift+9)" aria-label="Task List">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 1h10.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 13.25 15H2.75A1.75 1.75 0 0 1 1 13.25V2.75C1 1.784 1.784 1 2.75 1zm0 1.5a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25H2.75zm8.03 2.72a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 0 1 1.06-1.06L5.75 8.69l3.72-3.72a.75.75 0 0 1 1.06 0z"/></svg>
             </button>
           </div>
           <div class="toolbar-sep"></div>
           <div class="toolbar-group">
-            <button class="toolbar-btn" :class="{ active: editor?.isActive('blockquote') }" @click="toggleBlockquote" title="Blockquote">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 2.5h10.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5zm4 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5zm0 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5zM2.5 7.75v6a.75.75 0 0 1-1.5 0v-6a.75.75 0 0 1 1.5 0z"/></svg>
+            <button class="toolbar-btn" :class="{ active: editor?.isActive('blockquote') }" @click="toggleBlockquote" title="Blockquote (Ctrl+Shift+B)" aria-label="Blockquote">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 2.5h10.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5zm4 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5zm0 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5zM2.5 7.75v6a.75.75 0 0 1-1.5 0v-6a.75.75 0 0 1 1.5 0z"/></svg>
             </button>
-            <button class="toolbar-btn" :class="{ active: editor?.isActive('codeBlock') }" @click="toggleCodeBlock" title="Code Block">{ }</button>
+            <button class="toolbar-btn" :class="{ active: editor?.isActive('codeBlock') }" @click="toggleCodeBlock" title="Code Block (Ctrl+Alt+C)">{ }</button>
           </div>
 
           <div class="toolbar-right">
-            <span class="save-status" :class="saveStatus">
-              <template v-if="saveStatus === 'saving'">Saving...</template>
-              <template v-else-if="saveStatus === 'saved'">Saved</template>
-              <template v-else-if="saveStatus === 'error'">Error</template>
+            <span class="save-status" :class="saveStatus" role="status" aria-live="polite">
+              <template v-if="saveStatus === 'saving'">&#9679; Saving...</template>
+              <template v-else-if="saveStatus === 'saved'">&#9679; Saved</template>
+              <template v-else-if="saveStatus === 'error'">&#9679; Error</template>
             </span>
-            <button class="toolbar-btn toolbar-btn-danger" @click="deleteNote(selectedSlug!)" title="Delete note">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM4.496 6.675a.75.75 0 1 0-1.492.15l.66 6.6A1.75 1.75 0 0 0 5.405 15h5.19c.9 0 1.652-.681 1.741-1.576l.66-6.6a.75.75 0 0 0-1.492-.149l-.66 6.6a.25.25 0 0 1-.249.225h-5.19a.25.25 0 0 1-.249-.225l-.66-6.6z"/></svg>
+            <div class="toolbar-sep"></div>
+            <button class="toolbar-btn toolbar-btn-danger" @click="deleteNote(selectedSlug!)" title="Delete note" aria-label="Delete note">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M6.5 1.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V3h-3V1.75zm4.5 0V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM4.496 6.675a.75.75 0 1 0-1.492.15l.66 6.6A1.75 1.75 0 0 0 5.405 15h5.19c.9 0 1.652-.681 1.741-1.576l.66-6.6a.75.75 0 0 0-1.492-.149l-.66 6.6a.25.25 0 0 1-.249.225h-5.19a.25.25 0 0 1-.249-.225l-.66-6.6z"/></svg>
+              <span class="delete-label">Delete</span>
             </button>
           </div>
         </div>
@@ -385,8 +388,8 @@ function formatDate(iso: string): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   border: none;
   background: none;
   color: var(--text-secondary);
@@ -434,6 +437,7 @@ function formatDate(iso: string): string {
   color: var(--text-secondary);
   cursor: pointer;
   border-bottom: 1px solid var(--border);
+  border-left: 2px solid transparent;
   transition: background 0.15s;
 }
 
@@ -442,7 +446,7 @@ function formatDate(iso: string): string {
 }
 
 .note-item.active {
-  background: var(--bg-tertiary);
+  background: color-mix(in srgb, var(--accent-blue) 8%, var(--bg-tertiary));
   border-left: 2px solid var(--accent-blue);
 }
 
@@ -501,7 +505,7 @@ function formatDate(iso: string): string {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
   flex-shrink: 0;
@@ -513,18 +517,19 @@ function formatDate(iso: string): string {
 }
 
 .toolbar-sep {
-  width: 1px;
-  height: 20px;
+  width: 2px;
+  height: 24px;
   background: var(--border);
-  margin: 0 4px;
+  margin: 0 6px;
+  opacity: 0.6;
 }
 
 .toolbar-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  height: 28px;
+  min-width: 32px;
+  height: 32px;
   padding: 0 6px;
   border: none;
   background: none;
@@ -540,7 +545,7 @@ function formatDate(iso: string): string {
 }
 
 .toolbar-btn.active {
-  background: var(--bg-tertiary);
+  background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
   color: var(--accent-blue);
 }
 
@@ -556,13 +561,18 @@ function formatDate(iso: string): string {
 }
 
 .save-status {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
 .save-status.saving { color: var(--accent-orange); }
 .save-status.saved { color: var(--accent-green); }
 .save-status.error { color: var(--accent-red); }
+
+.delete-label {
+  font-size: 12px;
+  margin-left: 4px;
+}
 
 .editor-container {
   flex: 1;
@@ -583,6 +593,20 @@ function formatDate(iso: string): string {
 
 .editor-empty p {
   font-size: 13px;
+}
+
+/* --- Focus-visible styles --- */
+.toolbar-btn:focus-visible,
+.btn-new-note:focus-visible,
+.note-item:focus-visible,
+.btn-create-first:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.new-note-input:focus-visible {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-blue) 30%, transparent);
 }
 </style>
 
@@ -611,9 +635,9 @@ function formatDate(iso: string): string {
   color: var(--text-primary);
 }
 
-.notes-editor-content h1 { font-size: 1.6em; }
-.notes-editor-content h2 { font-size: 1.3em; }
-.notes-editor-content h3 { font-size: 1.1em; }
+.notes-editor-content h1 { font-size: 1.8em; }
+.notes-editor-content h2 { font-size: 1.4em; }
+.notes-editor-content h3 { font-size: 1.2em; }
 
 .notes-editor-content p { margin-bottom: 12px; }
 
@@ -698,7 +722,7 @@ function formatDate(iso: string): string {
   display: block;
   width: 4px;
   height: 8px;
-  border: solid white;
+  border: solid var(--bg-primary);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
   margin-top: -1px;
