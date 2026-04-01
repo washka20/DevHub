@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -9,7 +9,7 @@ import { useSettingsStore } from '../stores/settings'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
-  sessionId: string
+  paneId: string
 }>()
 
 const terminalStore = useTerminalStore()
@@ -25,6 +25,22 @@ let disposed = false
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectAttempts = 0
 const MAX_RECONNECT_ATTEMPTS = 5
+
+// Find the pane reactively
+const pane = computed(() => {
+  for (const tab of terminalStore.tabs) {
+    const found = tab.panes.find((p) => p.id === props.paneId)
+    if (found) return found
+  }
+  return null
+})
+
+const isDisconnected = computed(() => !pane.value || pane.value.status === 'disconnected')
+const isConnecting = computed(() => pane.value?.status === 'connecting')
+
+// ---------------------------------------------------------------------------
+// WebSocket
+// ---------------------------------------------------------------------------
 
 function connectWs(sessionId: string) {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -50,7 +66,7 @@ function connectWs(sessionId: string) {
       try {
         const msg = JSON.parse(event.data)
         if (msg.type === 'exit') {
-          terminalStore.handleSessionExit(props.sessionId)
+          terminalStore.handleSessionExit(pane.value?.sessionId || '')
         }
       } catch {
         // ignore
@@ -80,6 +96,10 @@ function sendResize(cols: number, rows: number) {
     ws.send(JSON.stringify({ type: 'resize', cols, rows }))
   }
 }
+
+// ---------------------------------------------------------------------------
+// Terminal init
+// ---------------------------------------------------------------------------
 
 function initTerminal() {
   if (!terminalEl.value) return
@@ -132,6 +152,7 @@ function initTerminal() {
   })
   resizeObserver.observe(terminalEl.value)
 
+  // Settings watchers
   watch(() => settingsStore.currentTheme, (theme) => {
     if (term) term.options.theme = theme
   }, { deep: true })
@@ -153,13 +174,40 @@ function initTerminal() {
   watch(() => settingsStore.ui.cursorBlink, (blink) => {
     if (term) term.options.cursorBlink = blink
   })
-
-  connectWs(props.sessionId)
 }
 
+// ---------------------------------------------------------------------------
+// Lazy connect: user clicks the placeholder
+// ---------------------------------------------------------------------------
+
+async function handleConnect() {
+  if (!pane.value || pane.value.status !== 'disconnected') return
+
+  const sessionId = await terminalStore.connectPane(props.paneId)
+  if (!sessionId) return
+
+  // Init terminal if not yet created, then connect WS
+  if (!term) {
+    await document.fonts.ready
+    initTerminal()
+  }
+  connectWs(sessionId)
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle
+// ---------------------------------------------------------------------------
+
 onMounted(async () => {
-  await document.fonts.ready
-  if (!disposed) initTerminal()
+  // If the pane is already connected (e.g. freshly created via addTab), init immediately
+  if (pane.value?.status === 'connected' && pane.value.sessionId) {
+    await document.fonts.ready
+    if (!disposed) {
+      initTerminal()
+      connectWs(pane.value.sessionId)
+    }
+  }
+  // Otherwise, the placeholder is shown and user clicks to connect
 })
 
 onBeforeUnmount(() => {
@@ -177,19 +225,45 @@ onBeforeUnmount(() => {
   reconnectTimer = null
 })
 
+// Watch for sessionId changes (e.g., reconnect after exit)
 watch(
-  () => props.sessionId,
+  () => pane.value?.sessionId,
   (newId, oldId) => {
-    if (newId !== oldId) {
+    if (newId && newId !== oldId) {
       ws?.close()
-      connectWs(newId)
+      if (term) {
+        connectWs(newId)
+      }
     }
   },
 )
 </script>
 
 <template>
-  <div ref="terminalEl" class="web-terminal"></div>
+  <!-- Disconnected placeholder -->
+  <div v-if="isDisconnected" class="placeholder-overlay" @click="handleConnect" @keydown.enter="handleConnect" tabindex="0">
+    <div class="placeholder-content">
+      <div class="placeholder-icon">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 17 10 11 4 5"></polyline>
+          <line x1="12" y1="19" x2="20" y2="19"></line>
+        </svg>
+      </div>
+      <div class="placeholder-text">Press Enter to connect</div>
+      <div class="placeholder-cwd">{{ pane?.cwd || 'default directory' }}</div>
+    </div>
+  </div>
+
+  <!-- Connecting spinner -->
+  <div v-else-if="isConnecting" class="placeholder-overlay">
+    <div class="placeholder-content">
+      <div class="placeholder-spinner"></div>
+      <div class="placeholder-text">Connecting...</div>
+    </div>
+  </div>
+
+  <!-- Connected terminal -->
+  <div v-else ref="terminalEl" class="web-terminal"></div>
 </template>
 
 <style scoped>
@@ -204,8 +278,65 @@ watch(
   padding: 4px 4px 4px 8px;
 }
 
-
 .web-terminal :deep(.xterm-viewport) {
   overflow-y: auto !important;
+}
+
+.placeholder-overlay {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  cursor: pointer;
+  outline: none;
+}
+
+.placeholder-overlay:hover .placeholder-content,
+.placeholder-overlay:focus .placeholder-content {
+  border-color: var(--accent-blue);
+}
+
+.placeholder-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 48px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  transition: border-color 0.2s;
+}
+
+.placeholder-icon {
+  color: var(--text-secondary);
+  opacity: 0.5;
+}
+
+.placeholder-text {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.placeholder-cwd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.5;
+}
+
+.placeholder-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>
