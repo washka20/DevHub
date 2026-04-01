@@ -2,13 +2,20 @@
 import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { useDockerStore } from '../stores/docker'
 import { useProjectsStore } from '../stores/projects'
-import WebTerminal from '../components/WebTerminal.vue'
+import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import '@xterm/xterm/css/xterm.css'
+
 const dockerStore = useDockerStore()
 const projectsStore = useProjectsStore()
 
 // Docker exec terminal
 const execContainer = ref<string | null>(null)
 const execSessionId = ref<string | null>(null)
+const execTermEl = ref<HTMLDivElement | null>(null)
+let execTerm: Terminal | null = null
+let execFitAddon: FitAddon | null = null
+let execWs: WebSocket | null = null
 
 async function openTerminal(containerName: string) {
   const projectName = projectsStore.currentProject?.name
@@ -24,15 +31,74 @@ async function openTerminal(containerName: string) {
     const data = await res.json()
     execContainer.value = containerName
     execSessionId.value = data.session_id
+    // Mount terminal after DOM update
+    await nextTick()
+    mountExecTerminal(data.session_id)
   } catch (e) {
     console.error('Failed to exec into container:', e)
   }
+}
+
+function mountExecTerminal(sessionId: string) {
+  if (!execTermEl.value) return
+
+  execTerm = new Terminal({
+    cursorBlink: true,
+    fontFamily: 'monospace',
+    fontSize: 13,
+    lineHeight: 1.0,
+    scrollback: 2000,
+  })
+  execFitAddon = new FitAddon()
+  execTerm.loadAddon(execFitAddon)
+  execTerm.open(execTermEl.value)
+  execFitAddon.fit()
+
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = window.location.host
+  execWs = new WebSocket(`${proto}//${host}/api/terminal/ws/${sessionId}`)
+  execWs.binaryType = 'arraybuffer'
+
+  execWs.onopen = () => {
+    if (execTerm && execFitAddon) {
+      execFitAddon.fit()
+      execWs?.send(JSON.stringify({ type: 'resize', cols: execTerm.cols, rows: execTerm.rows }))
+    }
+  }
+
+  execWs.onmessage = (event: MessageEvent) => {
+    if (!execTerm) return
+    if (event.data instanceof ArrayBuffer) {
+      execTerm.write(new Uint8Array(event.data))
+    }
+  }
+
+  const encoder = new TextEncoder()
+  execTerm.onData((data: string) => {
+    if (execWs?.readyState === WebSocket.OPEN) {
+      execWs.send(encoder.encode(data))
+    }
+  })
+
+  execTerm.onResize(({ cols, rows }) => {
+    if (execWs?.readyState === WebSocket.OPEN) {
+      execWs.send(JSON.stringify({ type: 'resize', cols, rows }))
+    }
+  })
 }
 
 function closeTerminal() {
   if (execSessionId.value) {
     fetch(`/api/terminal/sessions/${execSessionId.value}`, { method: 'DELETE' }).catch(() => {})
   }
+  if (execWs) {
+    execWs.onclose = null
+    execWs.close()
+    execWs = null
+  }
+  execTerm?.dispose()
+  execTerm = null
+  execFitAddon = null
   execContainer.value = null
   execSessionId.value = null
 }
@@ -138,6 +204,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   disconnectLogs()
+  closeTerminal()
 })
 </script>
 
@@ -165,6 +232,56 @@ onUnmounted(() => {
         </div>
       </div>
     </header>
+
+    <!-- Docker Compose section -->
+    <section class="compose-section">
+      <div class="compose-header">
+        <span class="compose-title">Docker Compose</span>
+        <span class="compose-file">docker-compose.yml</span>
+      </div>
+      <div class="compose-buttons">
+        <button
+          class="compose-btn compose-btn-green"
+          :disabled="dockerStore.composeLoading !== null"
+          @click="dockerStore.composeUp()"
+        >
+          <svg v-if="dockerStore.composeLoading === 'up'" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5,3 19,12 5,21"/>
+          </svg>
+          Up
+        </button>
+        <button
+          class="compose-btn compose-btn-blue"
+          :disabled="dockerStore.composeLoading !== null"
+          @click="dockerStore.composeUpBuild()"
+        >
+          <svg v-if="dockerStore.composeLoading === 'rebuild'" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 1 1-.07-5.05"/>
+          </svg>
+          Rebuild
+        </button>
+        <button
+          class="compose-btn compose-btn-red"
+          :disabled="dockerStore.composeLoading !== null"
+          @click="dockerStore.composeDown()"
+        >
+          <svg v-if="dockerStore.composeLoading === 'down'" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="currentColor">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+          </svg>
+          Down
+        </button>
+      </div>
+    </section>
 
     <!-- Container table -->
     <section class="section">
@@ -202,28 +319,69 @@ onUnmounted(() => {
               <span class="state-badge" :class="'state-' + c.state">{{ c.state }}</span>
             </td>
             <td class="cell-actions" @click.stop>
+              <!-- Start — for exited containers -->
               <button
                 v-if="c.state !== 'running'"
-                class="action-btn action-start"
+                class="action-btn action-btn-start"
                 :disabled="dockerStore.actionLoading === c.name"
                 @click="dockerStore.containerAction(c.name, 'start')"
-              >Start</button>
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5,3 19,12 5,21"/>
+                </svg>
+                Start
+              </button>
+              <!-- Stop — for running containers -->
               <button
                 v-if="c.state === 'running'"
-                class="action-btn action-stop"
+                class="action-btn action-btn-stop"
                 :disabled="dockerStore.actionLoading === c.name"
                 @click="dockerStore.containerAction(c.name, 'stop')"
-              >Stop</button>
-              <button
-                class="action-btn action-restart"
-                :disabled="dockerStore.actionLoading === c.name"
-                @click="dockerStore.containerAction(c.name, 'restart')"
-              >Restart</button>
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                </svg>
+                Stop
+              </button>
+              <!-- Restart — for running containers -->
               <button
                 v-if="c.state === 'running'"
-                class="action-btn action-terminal"
+                class="action-btn action-btn-restart"
+                :disabled="dockerStore.actionLoading === c.name"
+                @click="dockerStore.containerAction(c.name, 'restart')"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-.07-5.05"/>
+                </svg>
+                Restart
+              </button>
+              <!-- Terminal — for running containers -->
+              <button
+                v-if="c.state === 'running'"
+                class="action-btn action-btn-terminal"
                 @click="openTerminal(c.name)"
-              >Terminal</button>
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="4 17 10 11 4 5"/>
+                  <line x1="12" y1="19" x2="20" y2="19"/>
+                </svg>
+                Terminal
+              </button>
+              <!-- Logs — for all containers -->
+              <button
+                class="action-btn action-btn-logs"
+                @click="selectRow(c.name)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                  <polyline points="10 9 9 9 8 9"/>
+                </svg>
+                Logs
+              </button>
             </td>
           </tr>
         </tbody>
@@ -264,7 +422,7 @@ onUnmounted(() => {
             <button class="docker-term-close" @click="closeTerminal">&times;</button>
           </div>
           <div class="docker-term-body">
-            <WebTerminal :session-id="execSessionId" />
+            <div ref="execTermEl" class="exec-terminal"></div>
           </div>
         </div>
       </div>
@@ -350,6 +508,108 @@ onUnmounted(() => {
   background: rgba(248, 81, 73, 0.25);
 }
 
+/* Compose section */
+.compose-section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+  background: var(--bg-secondary);
+}
+
+.compose-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.compose-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.compose-file {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: 1px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.compose-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.compose-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.compose-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.compose-btn-green {
+  background: rgba(63, 185, 80, 0.1);
+  color: var(--accent-green);
+  border-color: rgba(63, 185, 80, 0.3);
+}
+
+.compose-btn-green:hover:not(:disabled) {
+  background: rgba(63, 185, 80, 0.2);
+  border-color: var(--accent-green);
+}
+
+.compose-btn-blue {
+  background: rgba(88, 166, 255, 0.1);
+  color: var(--accent-blue);
+  border-color: rgba(88, 166, 255, 0.3);
+}
+
+.compose-btn-blue:hover:not(:disabled) {
+  background: rgba(88, 166, 255, 0.2);
+  border-color: var(--accent-blue);
+}
+
+.compose-btn-red {
+  background: rgba(248, 81, 73, 0.1);
+  color: var(--accent-red);
+  border-color: rgba(248, 81, 73, 0.3);
+}
+
+.compose-btn-red:hover:not(:disabled) {
+  background: rgba(248, 81, 73, 0.2);
+  border-color: var(--accent-red);
+}
+
+.compose-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin-icon {
+  animation: spin 0.8s linear infinite;
+}
+
 /* Table */
 .section {
   margin-bottom: 24px;
@@ -405,7 +665,7 @@ onUnmounted(() => {
 }
 
 .col-actions {
-  width: 180px;
+  width: 280px;
 }
 
 .cell-status {
@@ -494,22 +754,29 @@ onUnmounted(() => {
 
 .cell-actions {
   display: flex;
-  gap: 6px;
+  gap: 5px;
+  flex-wrap: wrap;
 }
 
+/* Action buttons */
 .action-btn {
-  padding: 3px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid;
+  background: none;
+  cursor: pointer;
   font-size: 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-secondary);
-  transition: color 0.15s, border-color 0.15s;
+  font-weight: 500;
+  transition: all 0.15s;
 }
 
-.action-btn:hover:not(:disabled) {
-  color: var(--text-primary);
-  border-color: var(--text-secondary);
+.action-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .action-btn:disabled {
@@ -517,24 +784,49 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
-.action-start:hover:not(:disabled) {
-  color: var(--accent-green);
-  border-color: var(--accent-green);
-}
-
-.action-stop:hover:not(:disabled) {
+.action-btn-stop {
   color: var(--accent-red);
-  border-color: var(--accent-red);
+  border-color: rgba(248, 81, 73, 0.3);
 }
 
-.action-restart:hover:not(:disabled) {
-  color: var(--accent-orange);
-  border-color: var(--accent-orange);
+.action-btn-stop:hover:not(:disabled) {
+  background: rgba(248, 81, 73, 0.12);
 }
 
-.action-terminal:hover:not(:disabled) {
+.action-btn-start {
+  color: var(--accent-green);
+  border-color: rgba(63, 185, 80, 0.3);
+}
+
+.action-btn-start:hover:not(:disabled) {
+  background: rgba(63, 185, 80, 0.12);
+}
+
+.action-btn-restart {
   color: var(--accent-blue);
-  border-color: var(--accent-blue);
+  border-color: rgba(88, 166, 255, 0.3);
+}
+
+.action-btn-restart:hover:not(:disabled) {
+  background: rgba(88, 166, 255, 0.12);
+}
+
+.action-btn-terminal {
+  color: var(--accent-orange);
+  border-color: rgba(210, 153, 34, 0.3);
+}
+
+.action-btn-terminal:hover:not(:disabled) {
+  background: rgba(210, 153, 34, 0.12);
+}
+
+.action-btn-logs {
+  color: var(--accent-purple);
+  border-color: rgba(188, 140, 255, 0.3);
+}
+
+.action-btn-logs:hover:not(:disabled) {
+  background: rgba(188, 140, 255, 0.12);
 }
 
 /* Docker exec terminal modal */
@@ -594,6 +886,21 @@ onUnmounted(() => {
 .docker-term-body {
   flex: 1;
   min-height: 0;
+  padding: 8px;
+}
+
+.exec-terminal {
+  width: 100%;
+  height: 100%;
+}
+
+.exec-terminal :deep(.xterm) {
+  height: 100%;
+  padding: 4px 4px 4px 8px;
+}
+
+.exec-terminal :deep(.xterm-viewport) {
+  overflow-y: auto !important;
 }
 
 /* Logs panel */

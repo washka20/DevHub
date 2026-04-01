@@ -8,6 +8,7 @@ export const useDockerStore = defineStore('docker', () => {
   const selectedContainer = ref<string | null>(null)
   const loading = ref(false)
   const actionLoading = ref<string | null>(null)
+  const composeLoading = ref<'up' | 'rebuild' | 'down' | null>(null)
 
   const projectsStore = useProjectsStore()
 
@@ -49,6 +50,39 @@ export const useDockerStore = defineStore('docker', () => {
     }
   }
 
+  async function composeUp() {
+    composeLoading.value = 'up'
+    try {
+      await fetch(`${apiBase()}/docker/compose/up`, { method: 'POST' })
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      await fetchContainers()
+    } finally {
+      composeLoading.value = null
+    }
+  }
+
+  async function composeUpBuild() {
+    composeLoading.value = 'rebuild'
+    try {
+      await fetch(`${apiBase()}/docker/compose/up-build`, { method: 'POST' })
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      await fetchContainers()
+    } finally {
+      composeLoading.value = null
+    }
+  }
+
+  async function composeDown() {
+    composeLoading.value = 'down'
+    try {
+      await fetch(`${apiBase()}/docker/compose/down`, { method: 'POST' })
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      await fetchContainers()
+    } finally {
+      composeLoading.value = null
+    }
+  }
+
   function selectContainer(name: string | null) {
     selectedContainer.value = name
   }
@@ -62,10 +96,14 @@ export const useDockerStore = defineStore('docker', () => {
     selectedContainer,
     loading,
     actionLoading,
+    composeLoading,
     runningCount,
     totalCount,
     fetchContainers,
     containerAction,
+    composeUp,
+    composeUpBuild,
+    composeDown,
     selectContainer,
     logsUrl,
   }
