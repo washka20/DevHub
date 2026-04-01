@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import type {
   TerminalSession,
   TerminalTab,
@@ -116,6 +116,10 @@ export const useTerminalStore = defineStore('terminal', () => {
   watch(activeTabId, scheduleSave)
   watch(panel, scheduleSave, { deep: true })
 
+  onUnmounted(() => {
+    if (saveTimer) clearTimeout(saveTimer)
+  })
+
   // -------------------------------------------------------------------------
   // Session management
   // -------------------------------------------------------------------------
@@ -140,7 +144,11 @@ export const useTerminalStore = defineStore('terminal', () => {
   }
 
   async function destroySession(id: string) {
-    await fetch(`/api/terminal/sessions/${id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/terminal/sessions/${id}`, { method: 'DELETE' })
+    if (!res.ok && res.status !== 404) {
+      // best-effort: log but don't throw — callers already wrap in try/catch
+      console.warn(`destroySession: server returned ${res.status} for session ${id}`)
+    }
     sessions.value.delete(id)
   }
 
