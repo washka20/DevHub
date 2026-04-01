@@ -13,6 +13,7 @@ import (
 	"devhub/internal/git"
 	"devhub/internal/runner"
 	"devhub/internal/terminal"
+	"devhub/internal/watcher"
 
 	"github.com/gorilla/mux"
 )
@@ -23,6 +24,7 @@ type Server struct {
 	router      *mux.Router
 	hub         *api.Hub
 	termManager *terminal.Manager
+	fileWatcher *watcher.Watcher
 }
 
 // New creates a new Server with all routes configured.
@@ -39,6 +41,26 @@ func New(cfg *config.Config) *Server {
 	h := api.NewHandlers(cfg.ProjectsDir, hub, gitSvc, dockerSvc)
 	h.TermManager = termManager
 	h.RefreshProjects()
+
+	// File watcher: broadcast debounced fs changes to WebSocket clients.
+	var fw *watcher.Watcher
+	fw, err := watcher.New(func(ev watcher.Event) {
+		hub.Broadcast(api.Event{
+			Type:    ev.Type,
+			Project: ev.Project,
+			Data:    ev.Paths,
+		})
+	})
+	if err != nil {
+		log.Printf("file watcher init failed: %v", err)
+	} else if cfg.ProjectsDir != "" {
+		if watchErr := fw.Watch(cfg.ProjectsDir); watchErr != nil {
+			log.Printf("file watcher watch failed: %v", watchErr)
+		} else {
+			fw.Start()
+			log.Printf("file watcher started on %s", cfg.ProjectsDir)
+		}
+	}
 
 	router := mux.NewRouter()
 
@@ -133,15 +155,19 @@ func New(cfg *config.Config) *Server {
 		router:      router,
 		hub:         hub,
 		termManager: termManager,
+		fileWatcher: fw,
 	}
 
 	return s
 }
 
-// Shutdown cleans up all terminal sessions.
+// Shutdown cleans up all terminal sessions and the file watcher.
 func (s *Server) Shutdown() {
 	if s.termManager != nil {
 		s.termManager.DestroyAll()
+	}
+	if s.fileWatcher != nil {
+		s.fileWatcher.Close()
 	}
 }
 
