@@ -37,6 +37,15 @@ const pane = computed(() => {
   return null
 })
 
+function isActiveTab(): boolean {
+  for (const tab of terminalStore.tabs) {
+    if (tab.panes.some((p) => p.id === props.paneId)) {
+      return tab.id === terminalStore.activeTabId
+    }
+  }
+  return false
+}
+
 const isDisconnected = computed(() => !pane.value || pane.value.status === 'disconnected')
 const isConnecting = computed(() => pane.value?.status === 'connecting')
 const isReconnecting = computed(() => pane.value?.status === 'reconnecting')
@@ -66,6 +75,11 @@ function connectWs(sessionId: string) {
     if (!term) return
     if (event.data instanceof ArrayBuffer) {
       term.write(new Uint8Array(event.data))
+
+      // Mark pane as having activity if its tab is not active
+      if (pane.value && !isActiveTab()) {
+        pane.value.hasActivity = true
+      }
     } else if (typeof event.data === 'string') {
       try {
         const msg = JSON.parse(event.data)

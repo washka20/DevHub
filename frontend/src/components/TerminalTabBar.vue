@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useTerminalStore } from '../stores/terminal'
 import { useProjectsStore } from '../stores/projects'
+import type { TerminalTab } from '../types'
 
 const terminalStore = useTerminalStore()
 const projectsStore = useProjectsStore()
@@ -8,6 +9,14 @@ const projectsStore = useProjectsStore()
 const emit = defineEmits<{
   split: [direction: 'horizontal' | 'vertical']
 }>()
+
+function tabHasActivity(tab: TerminalTab): boolean {
+  return tab.panes.some((p) => p.hasActivity)
+}
+
+function tabHasBell(tab: TerminalTab): boolean {
+  return tab.panes.some((p) => p.hasBell)
+}
 
 async function handleNewTab() {
   const cwd = projectsStore.currentProject?.path || ''
@@ -29,7 +38,14 @@ async function handleNewTab() {
         :class="{ active: terminalStore.activeTabId === tab.id }"
         @click="terminalStore.setActiveTab(tab.id)"
       >
-        <span class="tab-dot" :class="{ active: terminalStore.activeTabId === tab.id }"></span>
+          <span
+            class="tab-dot"
+            :class="{
+              active: terminalStore.activeTabId === tab.id,
+              activity: terminalStore.activeTabId !== tab.id && tabHasActivity(tab),
+              bell: terminalStore.activeTabId !== tab.id && tabHasBell(tab),
+            }"
+          ></span>
         <span class="tab-label">{{ tab.label }}</span>
         <span class="tab-close" @click.stop="terminalStore.closeTab(tab.id)">&#10005;</span>
       </div>
@@ -170,5 +186,25 @@ async function handleNewTab() {
 .toolbar-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+.tab-dot.activity {
+  background: var(--accent-blue);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.tab-dot.bell {
+  background: var(--accent-orange);
+  animation: bell-flash 0.5s ease-in-out 3;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.4); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(88, 166, 255, 0); }
+}
+
+@keyframes bell-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 </style>
