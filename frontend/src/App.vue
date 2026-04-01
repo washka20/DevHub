@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { Splitpanes, Pane } from 'splitpanes'
 import 'splitpanes/dist/splitpanes.css'
@@ -7,6 +7,7 @@ import AppSidebar from './components/AppSidebar.vue'
 import BottomTerminal from './components/BottomTerminal.vue'
 import { useProject } from './composables/useProject'
 import { useWebSocket } from './composables/useWebSocket'
+import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 import { useDockerStore } from './stores/docker'
 import { useGitStore } from './stores/git'
 import { useSettingsStore } from './stores/settings'
@@ -15,6 +16,7 @@ import { useTerminalStore } from './stores/terminal'
 const { initProject } = useProject()
 useSettingsStore()
 const { connect, onMessage } = useWebSocket()
+useKeyboardShortcuts()
 const dockerStore = useDockerStore()
 const gitStore = useGitStore()
 const terminalStore = useTerminalStore()
@@ -23,17 +25,6 @@ const route = useRoute()
 const showBottomPanel = computed(() =>
   terminalStore.panel.visible && route.path !== '/console'
 )
-
-function handleGlobalKeydown(e: KeyboardEvent) {
-  // Use e.code (physical key) instead of e.key (character) — works on any keyboard layout
-  if (e.ctrlKey && e.code === 'Backquote') {
-    e.preventDefault()
-    e.stopPropagation()
-    if (route.path !== '/console') {
-      terminalStore.togglePanel()
-    }
-  }
-}
 
 function handlePanelResize(panes: Array<{ size: number }>) {
   if (panes.length === 2) {
@@ -57,11 +48,6 @@ onMounted(async () => {
     }
   })
 
-  document.addEventListener('keydown', handleGlobalKeydown, true)
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('keydown', handleGlobalKeydown, true)
 })
 </script>
 
