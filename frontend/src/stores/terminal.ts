@@ -318,6 +318,14 @@ export const useTerminalStore = defineStore('terminal', () => {
     panel.value = { ...panel.value, ...partial }
   }
 
+  function togglePanel() {
+    panel.value.visible = !panel.value.visible
+  }
+
+  function setPanelMode(mode: 'pinned' | 'floating') {
+    panel.value.mode = mode
+  }
+
   // -------------------------------------------------------------------------
   // Cleanup
   // -------------------------------------------------------------------------
@@ -376,6 +384,8 @@ export const useTerminalStore = defineStore('terminal', () => {
     closePane,
     connectPane,
     updatePanel,
+    togglePanel,
+    setPanelMode,
     cleanOrphans,
     handleSessionExit,
     clearLayout,
