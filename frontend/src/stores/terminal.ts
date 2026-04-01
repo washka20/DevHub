@@ -296,7 +296,22 @@ export const useTerminalStore = defineStore('terminal', () => {
 
   async function cleanOrphans() {
     try {
-      await fetch('/api/terminal/sessions', { method: 'DELETE' })
+      const res = await fetch('/api/terminal/sessions')
+      if (!res.ok) return
+      const liveSessions: Array<{ id: string }> = await res.json()
+
+      const referencedIds = new Set<string>()
+      for (const tab of tabs.value) {
+        for (const pane of tab.panes) {
+          if (pane.sessionId) referencedIds.add(pane.sessionId)
+        }
+      }
+
+      for (const sess of liveSessions) {
+        if (!referencedIds.has(sess.id)) {
+          await fetch(`/api/terminal/sessions/${sess.id}`, { method: 'DELETE' }).catch(() => {})
+        }
+      }
     } catch { /* best-effort */ }
   }
 
