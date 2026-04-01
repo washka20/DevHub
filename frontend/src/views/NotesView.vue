@@ -696,20 +696,34 @@ function formatDate(iso: string): string {
 .notes-editor-content ul[data-type="taskList"] li > label {
   flex-shrink: 0;
   margin-top: 3px;
+  display: flex;
+  align-items: center;
 }
 
 .notes-editor-content ul[data-type="taskList"] li > label input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 16px !important;
+  height: 16px !important;
+  max-width: 16px;
+  max-height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  box-sizing: border-box;
   border: 1.5px solid var(--border);
   border-radius: 3px;
   background: var(--bg-primary);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
+  position: relative;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+  flex-grow: 0;
+}
+
+.notes-editor-content ul[data-type="taskList"] li > label span {
+  display: none;
 }
 
 .notes-editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
@@ -719,13 +733,14 @@ function formatDate(iso: string): string {
 
 .notes-editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:checked::after {
   content: '';
-  display: block;
+  position: absolute;
+  top: 2px;
+  left: 5px;
   width: 4px;
   height: 8px;
   border: solid var(--bg-primary);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
-  margin-top: -1px;
 }
 
 .notes-editor-content ul[data-type="taskList"] li[data-checked="true"] > div {
