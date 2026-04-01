@@ -82,8 +82,16 @@ function restoreTabs(layout: PersistedLayout, sessions: Map<string, TerminalSess
 // Store
 // ---------------------------------------------------------------------------
 
+export interface LiveSession {
+  id: string
+  cwd: string
+  created_at: string
+}
+
 export const useTerminalStore = defineStore('terminal', () => {
   const sessions = ref<Map<string, TerminalSession>>(new Map())
+  const sessionsPanelOpen = ref(false)
+  const liveSessions = ref<LiveSession[]>([])
 
   // Try to restore from localStorage
   const saved = loadLayout()
@@ -330,12 +338,73 @@ export const useTerminalStore = defineStore('terminal', () => {
     localStorage.removeItem(STORAGE_KEY)
   }
 
+  // -------------------------------------------------------------------------
+  // Sessions panel
+  // -------------------------------------------------------------------------
+
+  function toggleSessionsPanel() {
+    sessionsPanelOpen.value = !sessionsPanelOpen.value
+    if (sessionsPanelOpen.value) fetchLiveSessions()
+  }
+
+  async function fetchLiveSessions() {
+    try {
+      const res = await fetch('/api/terminal/sessions')
+      if (!res.ok) return
+      liveSessions.value = await res.json()
+    } catch { /* best-effort */ }
+  }
+
+  /** Which session IDs are already open in a tab pane */
+  const attachedSessionIds = computed(() => {
+    const ids = new Set<string>()
+    for (const tab of tabs.value) {
+      for (const pane of tab.panes) {
+        if (pane.sessionId) ids.add(pane.sessionId)
+      }
+    }
+    return ids
+  })
+
+  /** Open an existing backend session in a new tab (resume) */
+  function attachSession(sessionId: string, cwd: string, label = 'shell') {
+    // Don't create duplicate if already attached
+    if (attachedSessionIds.value.has(sessionId)) {
+      // Just switch to the tab that has it
+      for (const tab of tabs.value) {
+        if (tab.panes.some((p) => p.sessionId === sessionId)) {
+          activeTabId.value = tab.id
+          return
+        }
+      }
+      return
+    }
+    sessions.value.set(sessionId, { id: sessionId, label, cwd })
+    const pane: TerminalPane = {
+      id: nextId('pane'),
+      sessionId,
+      cwd,
+      status: 'connected',
+    }
+    const tab: TerminalTab = {
+      id: `tab-${sessionId}`,
+      label,
+      panes: [pane],
+      splitDirection: null,
+    }
+    tabs.value.push(tab)
+    activeTabId.value = tab.id
+  }
+
   return {
     sessions,
     tabs,
     activeTabId,
     activeTab,
     panel,
+    sessionsPanelOpen,
+    liveSessions,
+    attachedSessionIds,
     addTab,
     closeTab,
     setActiveTab,
@@ -346,5 +415,9 @@ export const useTerminalStore = defineStore('terminal', () => {
     cleanOrphans,
     handleSessionExit,
     clearLayout,
+    toggleSessionsPanel,
+    fetchLiveSessions,
+    attachSession,
+    destroySession,
   }
 })

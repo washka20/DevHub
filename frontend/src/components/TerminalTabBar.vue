@@ -31,7 +31,16 @@ async function handleNewTab() {
       >
         <span class="tab-dot" :class="{ active: terminalStore.activeTabId === tab.id }"></span>
         <span class="tab-label">{{ tab.label }}</span>
-        <span class="tab-close" @click.stop="terminalStore.closeTab(tab.id)">&#10005;</span>
+        <button
+          class="tab-close"
+          @click.stop="terminalStore.closeTab(tab.id)"
+          title="Close tab"
+          aria-label="Close tab"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>
+          </svg>
+        </button>
       </div>
       <button class="tab-add" @click="handleNewTab" title="New terminal">+</button>
     </div>
@@ -54,6 +63,18 @@ async function handleNewTab() {
         title="Split vertical"
       >
         &#9783; Split V
+      </button>
+      <div class="toolbar-sep"></div>
+      <button
+        class="toolbar-btn"
+        :class="{ active: terminalStore.sessionsPanelOpen }"
+        @click="terminalStore.toggleSessionsPanel()"
+        title="Sessions"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: -2px; margin-right: 3px;">
+          <path d="M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 2.75Zm0 5A.75.75 0 0 1 1.75 7h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 7.75ZM1.75 12h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"/>
+        </svg>
+        Sessions
       </button>
     </div>
   </div>
@@ -83,7 +104,7 @@ async function handleNewTab() {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
+  padding: 4px 6px 4px 12px;
   border-radius: 6px 6px 0 0;
   font-size: 12px;
   color: var(--text-secondary);
@@ -105,6 +126,7 @@ async function handleNewTab() {
   height: 6px;
   border-radius: 50%;
   background: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .tab-dot.active {
@@ -112,16 +134,31 @@ async function handleNewTab() {
 }
 
 .tab-close {
-  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
   color: var(--text-secondary);
-  opacity: 0.5;
+  opacity: 0;
   cursor: pointer;
-  padding: 0 2px;
+  border-radius: 4px;
+  padding: 0;
+  flex-shrink: 0;
+  transition: opacity 0.1s, background 0.1s, color 0.1s;
+}
+
+.tab:hover .tab-close,
+.tab.active .tab-close {
+  opacity: 0.6;
 }
 
 .tab-close:hover {
-  opacity: 1;
-  color: var(--accent-red, #f85149);
+  opacity: 1 !important;
+  background: rgba(248, 81, 73, 0.15);
+  color: var(--accent-red);
 }
 
 .tab-add {
@@ -143,6 +180,13 @@ async function handleNewTab() {
   display: flex;
   gap: 4px;
   align-items: center;
+}
+
+.toolbar-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
 }
 
 .toolbar-btn {

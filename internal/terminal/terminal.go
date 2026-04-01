@@ -3,6 +3,8 @@ package terminal
 import (
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,52 +22,86 @@ type Session struct {
 	LogFile   *os.File // persistent log of all PTY output
 	CreatedAt time.Time
 	CWD       string
-	mu        sync.Mutex
-	closed    bool
-	readerCh  chan struct{} // closed to signal current reader goroutine to stop
-	readerWg  sync.WaitGroup
+
+	mu     sync.Mutex
+	closed bool
+
+	// Output routing: pump writes PTY data via this function.
+	outputMu sync.Mutex
+	outputFn func([]byte)
+
+	// Shell lifecycle: exitCh is closed when the shell process exits.
+	exitOnce sync.Once
+	exitCh   chan struct{}
+	exitCode int
 }
 
-// StopReader signals the current PTY reader goroutine to exit and blocks
-// until it has fully stopped. This ensures the log file writer goroutine
-// is no longer active before any caller proceeds (e.g. scrollback replay).
-func (s *Session) StopReader() {
-	s.mu.Lock()
-	if s.readerCh != nil {
-		close(s.readerCh)
-		s.readerCh = nil
-	}
-	ptyFile := s.Pty
-	s.mu.Unlock()
-	// Unblock any pending Pty.Read() by setting a short deadline so the
-	// goroutine can observe the closed stop channel and exit.
-	if ptyFile != nil {
-		ptyFile.SetReadDeadline(time.Now().Add(20 * time.Millisecond))
-	}
-	// Wait outside the lock so the goroutine can finish without deadlock.
-	s.readerWg.Wait()
-	// Reset the deadline so the next reader goroutine gets a clean file.
-	if ptyFile != nil {
-		ptyFile.SetReadDeadline(time.Time{})
-	}
+// startPump runs a goroutine that reads PTY output, writes to the log file,
+// and forwards to the attached output function. Runs for the session lifetime.
+func (s *Session) startPump() {
+	s.exitCh = make(chan struct{})
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := s.Pty.Read(buf)
+			if n > 0 {
+				data := make([]byte, n)
+				copy(data, buf[:n])
+
+				// Always write to log first (data survives WS disconnects)
+				if s.LogFile != nil {
+					s.LogFile.Write(data)
+				}
+
+				s.outputMu.Lock()
+				fn := s.outputFn
+				s.outputMu.Unlock()
+				if fn != nil {
+					fn(data)
+				}
+			}
+			if err != nil {
+				code := 0
+				if err != io.EOF {
+					code = 1
+				}
+				s.signalExit(code)
+				return
+			}
+		}
+	}()
 }
 
-// StartReader creates a stop channel for a new reader goroutine and
-// registers it with the internal WaitGroup. The caller must invoke
-// ReaderDone when the goroutine exits.
-func (s *Session) StartReader() <-chan struct{} {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ch := make(chan struct{})
-	s.readerCh = ch
-	s.readerWg.Add(1)
-	return ch
+func (s *Session) signalExit(code int) {
+	s.exitOnce.Do(func() {
+		s.exitCode = code
+		close(s.exitCh)
+	})
 }
 
-// ReaderDone must be called by the reader goroutine when it exits so that
-// StopReader can unblock.
-func (s *Session) ReaderDone() {
-	s.readerWg.Done()
+// AttachOutput sets the function called for each PTY output chunk.
+// The previous output (if any) is replaced immediately.
+func (s *Session) AttachOutput(fn func([]byte)) {
+	s.outputMu.Lock()
+	s.outputFn = fn
+	s.outputMu.Unlock()
+}
+
+// DetachOutput clears the output function so PTY data only goes to the log.
+func (s *Session) DetachOutput() {
+	s.outputMu.Lock()
+	s.outputFn = nil
+	s.outputMu.Unlock()
+}
+
+// ExitCh returns a channel that is closed when the shell process exits.
+func (s *Session) ExitCh() <-chan struct{} {
+	return s.exitCh
+}
+
+// ExitCode returns the exit code (0=clean, 1=error). Valid after ExitCh closes.
+func (s *Session) ExitCode() int {
+	return s.exitCode
 }
 
 func (s *Session) Resize(cols, rows uint16) error {
@@ -78,13 +114,15 @@ func (s *Session) Resize(cols, rows uint16) error {
 }
 
 func (s *Session) Close() {
-	s.StopReader()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.closed {
+		s.mu.Unlock()
 		return
 	}
 	s.closed = true
+	s.mu.Unlock()
+
+	s.DetachOutput()
 
 	if s.Cmd.Process != nil {
 		s.Cmd.Process.Signal(syscall.SIGHUP)
@@ -104,6 +142,9 @@ func (s *Session) Close() {
 	}
 
 	s.Pty.Close()
+	// Ensure exitCh is closed even if the pump hasn't detected the exit yet
+	s.signalExit(1)
+
 	if s.LogFile != nil {
 		logPath := s.LogFile.Name()
 		s.LogFile.Close()
@@ -164,7 +205,10 @@ func (m *Manager) Create(id, shell, cwd string, cols, rows uint16) (*Session, er
 	sess := &Session{
 		ID: id, Cmd: cmd, Pty: ptmx, LogFile: logFile, CreatedAt: time.Now(), CWD: cwd,
 	}
+	sess.startPump()
 	m.sessions[id] = sess
+
+	log.Printf("terminal: session %s created (shell=%s, cwd=%s)", id, shell, cwd)
 	return sess, nil
 }
 
@@ -199,6 +243,7 @@ func (m *Manager) CreateWithCommand(id, cwd string, cols, rows uint16, name stri
 	sess := &Session{
 		ID: id, Cmd: cmd, Pty: ptmx, LogFile: logFile, CreatedAt: time.Now(), CWD: cwd,
 	}
+	sess.startPump()
 	m.sessions[id] = sess
 	return sess, nil
 }

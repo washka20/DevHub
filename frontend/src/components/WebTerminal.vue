@@ -25,6 +25,7 @@ let disposed = false
 let intentionalClose = false
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectAttempts = 0
+let connectedSessionId: string | null = null  // tracks which session WS is connected to
 const MAX_RECONNECT_ATTEMPTS = 5
 const watchStopHandles: (() => void)[] = []
 
@@ -46,7 +47,27 @@ const isReconnecting = computed(() => pane.value?.status === 'reconnecting')
 // ---------------------------------------------------------------------------
 
 function connectWs(sessionId: string) {
+  // Idempotent: skip if already connected/connecting to this session
+  if (connectedSessionId === sessionId && ws && ws.readyState <= WebSocket.OPEN) {
+    return
+  }
+
+  // Close previous connection if switching sessions
+  if (ws) {
+    intentionalClose = true
+    ws.onclose = null
+    ws.close()
+    ws = null
+  }
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+
   intentionalClose = false
+  connectedSessionId = sessionId
+  reconnectAttempts = 0
+
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
   const url = `${proto}//${host}/api/terminal/ws/${sessionId}`
@@ -71,6 +92,7 @@ function connectWs(sessionId: string) {
         const msg = JSON.parse(event.data)
         if (msg.type === 'exit') {
           intentionalClose = true
+          connectedSessionId = null
           terminalStore.handleSessionExit(pane.value?.sessionId || '')
         }
       } catch {
@@ -196,15 +218,21 @@ function initTerminal() {
 async function handleConnect() {
   if (!pane.value || pane.value.status !== 'disconnected') return
 
+  // Dispose stale terminal — its DOM element was removed when v-if switched
+  // to the placeholder. Must re-create on the fresh div.
+  if (term) {
+    term.dispose()
+    term = null
+    fitAddon = null
+  }
+
   const sessionId = await terminalStore.connectPane(props.paneId)
   if (!sessionId) return
 
-  // Init terminal if not yet created, then connect WS
-  if (!term) {
-    await document.fonts.ready
-    if (disposed) return
-    initTerminal()
-  }
+  await nextTick()  // wait for Vue to render the terminal div
+  await document.fonts.ready
+  if (disposed) return
+  initTerminal()
   connectWs(sessionId)
 }
 
@@ -240,12 +268,16 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   disposed = true
+  connectedSessionId = null
   watchStopHandles.forEach(stop => stop())
   watchStopHandles.length = 0
   if (reconnectTimer) clearTimeout(reconnectTimer)
   if (resizeTimer) clearTimeout(resizeTimer)
   resizeObserver?.disconnect()
-  ws?.close()
+  if (ws) {
+    ws.onclose = null
+    ws.close()
+  }
   term?.dispose()
   term = null
   ws = null
@@ -255,19 +287,12 @@ onBeforeUnmount(() => {
   reconnectTimer = null
 })
 
-// Watch for sessionId changes (e.g., reconnect after exit)
+// Watch for sessionId changes (e.g., reconnect after exit, or attachSession from panel)
 watch(
   () => pane.value?.sessionId,
-  (newId, oldId) => {
-    if (newId && newId !== oldId) {
-      if (ws) {
-        ws.onclose = null  // prevent stale reconnect
-        ws.close()
-        ws = null
-      }
-      if (term) {
-        connectWs(newId)
-      }
+  (newId) => {
+    if (newId && term) {
+      connectWs(newId)  // idempotent — skips if already connected to this session
     }
   },
 )

@@ -18,6 +18,13 @@ frontend/node_modules
 .superpowers/
 .playwright-mcp/
 
+# Test artifacts
+*.png
+devhub-server
+
 # Config (contains paths)
 # ~/.devhub.yaml is in home dir, not here
 .worktrees/
+
+# Dependencies
+node_modules/

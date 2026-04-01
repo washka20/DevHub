@@ -22,6 +22,8 @@ type terminalControlMsg struct {
 }
 
 // HandleTerminalWS upgrades to WebSocket and bridges to a PTY session.
+// The session has a persistent pump goroutine that reads PTY output; this
+// handler only needs to attach/detach the WS connection and relay input.
 func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := mux.Vars(r)["id"]
@@ -40,11 +42,7 @@ func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 			log.Printf("terminal ws upgrade error: %v", err)
 			return
 		}
-
-		// Stop any previous reader goroutine before starting a new one.
-		// This prevents two goroutines reading the same PTY concurrently
-		// (happens on split/remount when the browser reconnects).
-		sess.StopReader()
+		log.Printf("terminal ws: connected to session %s", id)
 
 		var closeOnce sync.Once
 		cleanup := func() {
@@ -54,105 +52,48 @@ func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 		}
 		defer cleanup()
 
-		// Scrollback replay: send tail of log file before starting live stream.
-		logPath := filepath.Join(os.TempDir(), "devhub-terminal-logs", id+".log")
-		if f, err := os.Open(logPath); err == nil {
-			defer f.Close()
-			const maxReplay = 64 * 1024
-			if stat, err := f.Stat(); err == nil && stat.Size() > 0 {
-				offset := int64(0)
-				if stat.Size() > maxReplay {
-					offset = stat.Size() - maxReplay
-					// Scan forward to next newline to avoid mid-sequence cut
-					if _, seekErr := f.Seek(offset, io.SeekStart); seekErr != nil {
-						log.Printf("terminal scrollback seek error: %v", seekErr)
-						offset = 0
-					} else {
-						oneByte := make([]byte, 1)
-						for {
-							n, err := f.Read(oneByte)
-							if n > 0 {
-								offset++
-								if oneByte[0] == '\n' {
-									break
-								}
-							}
-							if err != nil {
-								break
-							}
-						}
-					}
-				}
-				if _, seekErr := f.Seek(offset, io.SeekStart); seekErr != nil {
-					log.Printf("terminal scrollback seek error: %v", seekErr)
-				} else {
-					buf := make([]byte, 4096)
-					for {
-						n, err := f.Read(buf)
-						if n > 0 {
-							if wErr := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); wErr != nil {
-								cleanup()
-								return
-							}
-						}
-						if err != nil {
-							break
-						}
-					}
-				}
-			}
+		// Detach any previous WS output (previous browser tab / reconnect)
+		sess.DetachOutput()
+
+		// Check if shell already exited (e.g. user reconnects to dead session)
+		select {
+		case <-sess.ExitCh():
+			log.Printf("terminal ws: session %s already exited, replaying + sending exit", id)
+			replayScrollback(conn, id)
+			exitMsg, _ := json.Marshal(map[string]interface{}{
+				"type": "exit",
+				"code": sess.ExitCode(),
+			})
+			conn.WriteMessage(websocket.TextMessage, exitMsg)
+			manager.Destroy(id)
+			return
+		default:
 		}
 
-		// PTY -> WebSocket (binary frames)
-		stopCh := sess.StartReader()
-		go func() {
-			defer sess.ReaderDone()
-			buf := make([]byte, 4096)
-			for {
-				select {
-				case <-stopCh:
-					return
-				default:
-				}
+		// Scrollback replay: send tail of log file before live stream
+		replayScrollback(conn, id)
 
-				n, err := sess.Pty.Read(buf)
-				if n > 0 {
-					data := buf[:n]
-					if wErr := conn.WriteMessage(websocket.BinaryMessage, data); wErr != nil {
-						cleanup()
-						return
-					}
-					// Persist output to log file (best-effort, ignore errors)
-					if sess.LogFile != nil {
-						sess.LogFile.Write(data)
-					}
-				}
-				if err != nil {
-					// A read deadline set by StopReader() returns a timeout error;
-					// also check stopCh for a clean-stop signal.
-					select {
-					case <-stopCh:
-						return
-					default:
-					}
-					if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
-						return // deadline set by StopReader, exit silently
-					}
-					// PTY closed (shell exited)
-					exitCode := 0
-					if err != io.EOF {
-						exitCode = 1
-					}
-					exitMsg, _ := json.Marshal(map[string]interface{}{
-						"type": "exit",
-						"code": exitCode,
-					})
-					conn.WriteMessage(websocket.TextMessage, exitMsg)
-					// Shell exited -- destroy the session so it doesn't linger
-					manager.Destroy(id)
-					cleanup()
-					return
-				}
+		// Attach live output: pump goroutine will call this for every PTY chunk
+		sess.AttachOutput(func(data []byte) {
+			if wErr := conn.WriteMessage(websocket.BinaryMessage, data); wErr != nil {
+				cleanup()
+			}
+		})
+
+		// Monitor shell exit in background
+		wsHandlerDone := make(chan struct{})
+		go func() {
+			select {
+			case <-sess.ExitCh():
+				exitMsg, _ := json.Marshal(map[string]interface{}{
+					"type": "exit",
+					"code": sess.ExitCode(),
+				})
+				conn.WriteMessage(websocket.TextMessage, exitMsg)
+				manager.Destroy(id)
+				cleanup()
+			case <-wsHandlerDone:
+				// WS handler returned (browser disconnected), stop monitoring
 			}
 		}()
 
@@ -160,14 +101,16 @@ func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 		for {
 			msgType, data, err := conn.ReadMessage()
 			if err != nil {
-				cleanup()
+				sess.DetachOutput()
+				close(wsHandlerDone)
 				return
 			}
 
 			switch msgType {
 			case websocket.BinaryMessage:
 				if _, err := sess.Pty.Write(data); err != nil {
-					cleanup()
+					sess.DetachOutput()
+					close(wsHandlerDone)
 					return
 				}
 			case websocket.TextMessage:
@@ -179,6 +122,65 @@ func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 					sess.Resize(msg.Cols, msg.Rows)
 				}
 			}
+		}
+	}
+}
+
+// replayScrollback sends the tail of the session's log file over the WS
+// so the user sees previous terminal output on reconnect.
+func replayScrollback(conn *websocket.Conn, id string) {
+	logPath := filepath.Join(os.TempDir(), "devhub-terminal-logs", id+".log")
+	f, err := os.Open(logPath)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	const maxReplay = 64 * 1024
+	stat, err := f.Stat()
+	if err != nil || stat.Size() == 0 {
+		return
+	}
+
+	offset := int64(0)
+	if stat.Size() > maxReplay {
+		offset = stat.Size() - maxReplay
+		if _, seekErr := f.Seek(offset, io.SeekStart); seekErr != nil {
+			log.Printf("terminal scrollback seek error: %v", seekErr)
+			offset = 0
+		} else {
+			// Scan forward to next newline to avoid mid-sequence cut
+			oneByte := make([]byte, 1)
+			for {
+				n, err := f.Read(oneByte)
+				if n > 0 {
+					offset++
+					if oneByte[0] == '\n' {
+						break
+					}
+				}
+				if err != nil {
+					break
+				}
+			}
+		}
+	}
+
+	if _, seekErr := f.Seek(offset, io.SeekStart); seekErr != nil {
+		log.Printf("terminal scrollback seek error: %v", seekErr)
+		return
+	}
+
+	buf := make([]byte, 4096)
+	for {
+		n, err := f.Read(buf)
+		if n > 0 {
+			if wErr := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); wErr != nil {
+				return
+			}
+		}
+		if err != nil {
+			break
 		}
 	}
 }
