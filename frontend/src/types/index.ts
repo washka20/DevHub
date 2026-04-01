@@ -124,7 +124,9 @@ export interface TerminalSession {
 
 export interface TerminalPane {
   id: string
-  sessionId: string
+  sessionId: string | null
+  cwd: string
+  status: 'disconnected' | 'connecting' | 'connected'
 }
 
 export interface TerminalTab {
@@ -132,6 +134,24 @@ export interface TerminalTab {
   label: string
   panes: TerminalPane[]
   splitDirection: 'horizontal' | 'vertical' | null
+}
+
+export interface PanelState {
+  mode: 'pinned' | 'floating'
+  visible: boolean
+  height: number
+  floatingPos: { x: number; y: number; w: number; h: number }
+}
+
+export interface PersistedLayout {
+  tabs: Array<{
+    id: string
+    label: string
+    panes: Array<{ id: string; cwd: string }>
+    direction: 'horizontal' | 'vertical' | null
+  }>
+  activeTabId: string | null
+  panel: PanelState
 }
 
 // Settings
