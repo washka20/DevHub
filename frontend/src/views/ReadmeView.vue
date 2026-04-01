@@ -209,8 +209,18 @@ async function toggleCheckbox(line: number) {
       }
     )
     if (!res.ok) throw new Error('Failed to toggle')
-    // Re-fetch to get updated content
-    await selectFile(currentFile.value)
+
+    // Toggle locally without re-fetching — no scroll reset
+    const lines = rawMarkdown.value.split('\n')
+    const idx = line - 1
+    if (idx < lines.length) {
+      const l = lines[idx]
+      if (l.includes('- [ ]')) lines[idx] = l.replace('- [ ]', '- [x]')
+      else if (l.includes('- [x]')) lines[idx] = l.replace('- [x]', '- [ ]')
+      else if (l.includes('- [X]')) lines[idx] = l.replace('- [X]', '- [ ]')
+      rawMarkdown.value = lines.join('\n')
+      content.value = md.render(rawMarkdown.value)
+    }
   } catch (err) {
     console.error('Failed to toggle checkbox:', err)
   }
