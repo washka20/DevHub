@@ -1,10 +1,28 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useFilesStore } from '../stores/files'
+import { useProjectsStore } from '../stores/projects'
 import { getFileIcon } from './FileIcons'
 import type { FileNode } from '../types'
 
 const filesStore = useFilesStore()
+const projectsStore = useProjectsStore()
+
+function getFullPath(node: FileNode): string {
+  const basePath = projectsStore.currentProject?.path || ''
+  return `${basePath}/${node.path}`
+}
+
+function copyPath(node: FileNode) {
+  navigator.clipboard.writeText(getFullPath(node))
+  closeContextMenu()
+}
+
+function openInFileManager(node: FileNode) {
+  closeContextMenu()
+  filesStore.openInFileManager(node.path)
+}
+
 const expandedDirs = ref<Set<string>>(new Set())
 const contextMenu = ref<{ x: number; y: number; node: FileNode } | null>(null)
 const renaming = ref<{ path: string; value: string } | null>(null)
@@ -293,6 +311,9 @@ function flattenTree(nodes: FileNode[], depth: number = 0): FlatNode[] {
           <div class="menu-item" @click="startCreate(contextMenu.node.path, true)">New Folder</div>
           <div class="menu-sep"></div>
         </template>
+        <div class="menu-item" @click="copyPath(contextMenu!.node)">Copy Path</div>
+        <div class="menu-item" @click="openInFileManager(contextMenu!.node)">Open in File Manager</div>
+        <div class="menu-sep"></div>
         <div class="menu-item" @click="startRename(contextMenu!.node)">Rename</div>
         <div class="menu-item danger" @click="handleDelete(contextMenu!.node)">Delete</div>
       </div>

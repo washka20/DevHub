@@ -171,6 +171,14 @@ export const useFilesStore = defineStore('files', () => {
     await fetchTree()
   }
 
+  async function openInFileManager(path: string) {
+    fetch(`${apiBase()}/open-in-fm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    })
+  }
+
   async function renameFile(oldPath: string, newPath: string) {
     await fetch(`${apiBase()}/files/rename/${encodeURIComponent(oldPath)}`, {
       method: 'PATCH',
@@ -238,6 +246,7 @@ export const useFilesStore = defineStore('files', () => {
     createFile,
     deleteFile,
     renameFile,
+    openInFileManager,
     checkOpenFiles,
     dismissDiskChange,
     reloadFromDisk,

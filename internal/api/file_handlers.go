@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"log"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -517,5 +519,43 @@ func (h *Handlers) FileRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	jsonResponse(w, map[string]string{"status": "ok"})
+}
+
+// OpenInFileManager handles POST /api/projects/{id}/open-in-fm
+func (h *Handlers) OpenInFileManager(w http.ResponseWriter, r *http.Request) {
+	projectPath, err := h.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var body struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Path == "" {
+		jsonError(w, "path required", http.StatusBadRequest)
+		return
+	}
+
+	fullPath, err := h.safePath(projectPath, body.Path)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	target := fullPath
+	if info, err := os.Stat(fullPath); err != nil {
+		jsonError(w, "not found", http.StatusNotFound)
+		return
+	} else if !info.IsDir() {
+		target = filepath.Dir(fullPath)
+	}
+
+	go func() {
+		if err := exec.Command("xdg-open", target).Run(); err != nil {
+			log.Printf("xdg-open %s: %v", target, err)
+		}
+	}()
 	jsonResponse(w, map[string]string{"status": "ok"})
 }

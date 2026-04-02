@@ -10,24 +10,9 @@ import type { ServerSettings, UISettings } from '../types'
 const settingsStore = useSettingsStore()
 
 /* ---------- local form state ---------- */
-const localServer = reactive<ServerSettings>({
-  port: 9000,
-  projects_dir: '~/project',
-  default_project: '',
-  terminal: { max_sessions: 10, shell: '' },
-})
+const localServer = reactive<ServerSettings>(JSON.parse(JSON.stringify(settingsStore.server)))
 
-const localUI = reactive<UISettings>({
-  fontSize: 14,
-  fontFamily: "'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
-  scrollback: 10000,
-  cursorBlink: true,
-  themeName: 'github-dark',
-  siteThemeName: 'github-dark',
-  editorEngine: 'codemirror',
-  editorMinimap: true,
-  editorFontSize: 13,
-})
+const localUI = reactive<UISettings>(JSON.parse(JSON.stringify(settingsStore.ui)))
 
 function syncFromStore() {
   Object.assign(localServer, JSON.parse(JSON.stringify(settingsStore.server)))

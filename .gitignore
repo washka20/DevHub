@@ -17,6 +17,7 @@ frontend/node_modules
 .claude/
 .superpowers/
 .playwright-mcp/
+docs/superpowers/
 
 # Test artifacts
 *.png

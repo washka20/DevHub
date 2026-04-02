@@ -110,6 +110,7 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/files/create", h.FileCreate).Methods("POST")
 	apiRouter.HandleFunc("/projects/{id}/files/delete/{path:.*}", h.FileDelete).Methods("DELETE")
 	apiRouter.HandleFunc("/projects/{id}/files/rename/{path:.*}", h.FileRename).Methods("PATCH")
+	apiRouter.HandleFunc("/projects/{id}/open-in-fm", h.OpenInFileManager).Methods("POST")
 
 	// Notes
 	apiRouter.HandleFunc("/projects/{id}/notes", h.ListNotes).Methods("GET")
