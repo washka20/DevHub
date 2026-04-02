@@ -68,7 +68,7 @@ describe('useGitStore', () => {
   })
 
   describe('fetchLog', () => {
-    it('parses commits array', async () => {
+    it('parses commits from metadata endpoint', async () => {
       const logData = [
         {
           hash: 'abc123def456',
@@ -77,16 +77,14 @@ describe('useGitStore', () => {
           author: 'dev',
           date: '2025-01-01',
           refs: ['HEAD', 'main'],
-          parents: ['bbb222ccc333'],
-          graph: '*',
-          graph_only: false,
         },
         {
           hash: 'bbb222ccc333',
+          short_hash: 'bbb222c',
           message: 'fix: typo',
           author: 'dev2',
           date: '2024-12-31',
-          graph: '*',
+          refs: [],
         },
       ]
 
@@ -101,14 +99,11 @@ describe('useGitStore', () => {
       expect(store.log).toHaveLength(2)
       expect(store.log[0].hash).toBe('abc123def456')
       expect(store.log[0].refs).toEqual(['HEAD', 'main'])
-      expect(store.log[0].parents).toEqual(['bbb222ccc333'])
-      expect(store.log[0].graph).toBe('*')
-      expect(store.log[0].graph_only).toBe(false)
+      expect(store.log[0].parents).toEqual([])
       expect(store.log[1].short_hash).toBe('bbb222c')
       expect(store.log[1].refs).toEqual([])
       expect(store.log[1].parents).toEqual([])
-      expect(store.log[1].graph).toBe('*')
-      expect(fetch).toHaveBeenCalledWith('/api/projects/myapp/git/log?limit=50&offset=0')
+      expect(fetch).toHaveBeenCalledWith('/api/projects/myapp/git/log/metadata?offset=0&limit=5')
     })
   })
 

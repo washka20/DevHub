@@ -184,19 +184,17 @@ export const useGitStore = defineStore('git', () => {
   async function fetchLog() {
     loading.value.log = true
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/log?limit=${LOG_PAGE_SIZE}&offset=0`)
+      const res = await fetch(`${projectApiUrl.value}/git/log/metadata?offset=0&limit=5`)
       if (!res.ok) throw new Error(await res.text())
-      const data: Commit[] = await res.json()
+      const data: CommitMeta[] = await res.json()
       log.value = data.map(m => ({
         hash: m.hash,
-        short_hash: m.short_hash ?? m.hash.slice(0, 7),
+        short_hash: m.short_hash,
         message: m.message,
         author: m.author,
         date: m.date,
-        refs: m.refs ?? [],
-        parents: m.parents ?? [],
-        graph: m.graph,
-        graph_only: m.graph_only,
+        refs: m.refs,
+        parents: [],
       }))
     } catch (e) {
       error.value = (e as Error).message
