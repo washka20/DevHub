@@ -325,6 +325,23 @@ func (h *Handlers) FileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Raw file serving (for images etc.)
+	if r.URL.Query().Get("raw") == "true" {
+		ext := strings.ToLower(filepath.Ext(relPath))
+		contentTypes := map[string]string{
+			".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+			".gif": "image/gif", ".svg": "image/svg+xml", ".webp": "image/webp",
+			".ico": "image/x-icon", ".bmp": "image/bmp",
+		}
+		if ct, ok := contentTypes[ext]; ok {
+			w.Header().Set("Content-Type", ct)
+		} else {
+			w.Header().Set("Content-Type", "application/octet-stream")
+		}
+		http.ServeFile(w, r, fullPath)
+		return
+	}
+
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		jsonError(w, "file not found", http.StatusNotFound)

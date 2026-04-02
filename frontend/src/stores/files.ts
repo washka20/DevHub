@@ -34,6 +34,13 @@ function detectLanguage(filename: string): string {
   return map[ext] ?? 'text'
 }
 
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'])
+
+function isImage(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+  return IMAGE_EXTENSIONS.has(ext)
+}
+
 export const useFilesStore = defineStore('files', () => {
   const projectsStore = useProjectsStore()
 
@@ -76,18 +83,28 @@ export const useFilesStore = defineStore('files', () => {
 
     // Enforce max tabs: close oldest non-dirty if overflow
     if (openFiles.value.length >= MAX_TABS) {
-      const oldest = openFiles.value.find((f) => !f.dirty)
+      const oldest = openFiles.value.find((f) => !f.dirty && f.path !== activeFilePath.value)
       if (oldest) {
         closeFile(oldest.path)
       }
     }
 
+    const name = path.split('/').pop() ?? path
+
+    // Image files: no content fetch
+    if (isImage(name)) {
+      openFiles.value.push({
+        path, name, content: '', originalContent: '', dirty: false, language: 'image',
+      })
+      activeFilePath.value = path
+      return
+    }
+
+    // Text files: fetch content (existing logic)
     const res = await fetch(`${apiBase()}/files/content/${encodeURIComponent(path)}`)
     if (!res.ok) return
 
     const content = await res.text()
-    const name = path.split('/').pop() ?? path
-
     openFiles.value.push({
       path,
       name,
