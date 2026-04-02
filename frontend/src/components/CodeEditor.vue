@@ -37,6 +37,7 @@ const view = shallowRef<EditorView | null>(null)
 const settingsStore = useSettingsStore()
 const themeCompartment = new Compartment()
 const highlightCompartment = new Compartment()
+const fontSizeCompartment = new Compartment()
 
 // Read CSS variable values from document root
 function getCssVar(name: string): string {
@@ -188,6 +189,9 @@ function createState(doc: string) {
       indentOnInput(),
       themeCompartment.of(buildEditorTheme()),
       highlightCompartment.of(syntaxHighlighting(buildHighlightStyle())),
+      fontSizeCompartment.of(EditorView.theme({
+        '.cm-scroller': { fontSize: settingsStore.ui.editorFontSize + 'px' },
+      })),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       ...(Array.isArray(langExt) ? langExt : [langExt]),
       EditorView.updateListener.of((update) => {
@@ -240,6 +244,15 @@ watch(() => settingsStore.ui.siteThemeName, () => {
         highlightCompartment.reconfigure(syntaxHighlighting(buildHighlightStyle())),
       ],
     })
+  })
+})
+
+watch(() => settingsStore.ui.editorFontSize, (size) => {
+  if (!view.value) return
+  view.value.dispatch({
+    effects: fontSizeCompartment.reconfigure(EditorView.theme({
+      '.cm-scroller': { fontSize: size + 'px' },
+    })),
   })
 })
 

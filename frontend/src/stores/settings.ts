@@ -13,6 +13,9 @@ const defaultUI: UISettings = {
   cursorBlink: true,
   themeName: 'github-dark',
   siteThemeName: 'github-dark',
+  editorEngine: 'codemirror',
+  editorMinimap: true,
+  editorFontSize: 13,
 }
 
 function loadUI(): UISettings {

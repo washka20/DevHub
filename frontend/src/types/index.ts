@@ -197,6 +197,9 @@ export interface UISettings {
   cursorBlink: boolean
   themeName: string
   siteThemeName: string
+  editorEngine: 'codemirror' | 'monaco'
+  editorMinimap: boolean
+  editorFontSize: number
 }
 
 export interface StashEntry {
