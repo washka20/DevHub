@@ -1,13 +1,52 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount } from 'vue'
+import { defineAsyncComponent, computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { Splitpanes, Pane } from 'splitpanes'
 import 'splitpanes/dist/splitpanes.css'
 import FileTree from '../components/FileTree.vue'
 import CodeEditor from '../components/CodeEditor.vue'
+import ImagePreview from '../components/ImagePreview.vue'
 import { getFileIcon } from '../components/FileIcons'
 import { useFilesStore } from '../stores/files'
+import { useSettingsStore } from '../stores/settings'
+import { useProjectsStore } from '../stores/projects'
 
 const filesStore = useFilesStore()
+const settingsStore = useSettingsStore()
+const projectsStore = useProjectsStore()
+
+const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
+
+const EditorComponent = computed(() =>
+  settingsStore.ui.editorEngine === 'monaco' ? MonacoEditor : CodeEditor
+)
+
+const isImageFile = computed(() => filesStore.activeFile?.language === 'image')
+
+const imageUrl = computed(() => {
+  if (!isImageFile.value || !filesStore.activeFilePath) return ''
+  const projectName = projectsStore.currentProject?.name || '_'
+  return `/api/projects/${projectName}/files/content/${encodeURIComponent(filesStore.activeFilePath)}?raw=true`
+})
+
+const diffMode = ref(false)
+const diskContent = ref('')
+
+async function openDiff() {
+  if (!filesStore.activeFilePath) return
+  const projectName = projectsStore.currentProject?.name || '_'
+  const apiBase = `/api/projects/${projectName}`
+  const res = await fetch(`${apiBase}/files/content/${encodeURIComponent(filesStore.activeFilePath)}`)
+  if (!res.ok) return
+  diskContent.value = await res.text()
+  diffMode.value = true
+}
+
+function closeDiff() {
+  diffMode.value = false
+  diskContent.value = ''
+}
+// expose for future diff overlay: diffMode, diskContent, closeDiff
+void closeDiff
 
 function handleSave() {
   if (filesStore.activeFile?.dirty) {
@@ -76,12 +115,19 @@ function handleContentUpdate(value: string) {
             <div class="banner-actions">
               <button class="banner-btn primary" @click="filesStore.reloadFromDisk(filesStore.activeFilePath!)">Reload</button>
               <button class="banner-btn secondary" @click="filesStore.dismissDiskChange(filesStore.activeFilePath!)">Keep mine</button>
+              <button v-if="settingsStore.ui.editorEngine === 'monaco'" class="banner-btn secondary" @click="openDiff">Diff</button>
             </div>
           </div>
 
-          <!-- Code editor -->
-          <div v-if="filesStore.activeFile" class="editor-content">
-            <CodeEditor
+          <!-- Image preview -->
+          <div v-if="isImageFile && filesStore.activeFile" class="editor-content">
+            <ImagePreview :src="imageUrl" :filename="filesStore.activeFile.name" />
+          </div>
+
+          <!-- Normal code editor -->
+          <div v-else-if="filesStore.activeFile" class="editor-content">
+            <component
+              :is="EditorComponent"
               :model-value="filesStore.activeFile.content"
               :language="filesStore.activeFile.language"
               @update:model-value="handleContentUpdate"
@@ -96,12 +142,13 @@ function handleContentUpdate(value: string) {
           <!-- Status bar -->
           <div class="editor-statusbar">
             <div class="statusbar-left">
-              <span v-if="filesStore.activeFile">{{ filesStore.activeFile.language }}</span>
+              <span v-if="filesStore.activeFile && !isImageFile">{{ filesStore.activeFile.language }}</span>
+              <span v-if="isImageFile">image</span>
               <span>UTF-8</span>
             </div>
             <div class="statusbar-right">
               <span v-if="filesStore.activeFile?.dirty" class="unsaved-indicator">● Unsaved</span>
-              <span v-if="filesStore.activeFile">Ctrl+S</span>
+              <span v-if="filesStore.activeFile && !isImageFile">Ctrl+S</span>
             </div>
           </div>
         </div>
