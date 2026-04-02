@@ -58,7 +58,10 @@ const isDirty = computed(() => {
     localUI.fontFamily !== u.fontFamily ||
     localUI.scrollback !== u.scrollback ||
     localUI.cursorBlink !== u.cursorBlink ||
-    localUI.themeName !== u.themeName
+    localUI.themeName !== u.themeName ||
+    localUI.editorEngine !== u.editorEngine ||
+    localUI.editorMinimap !== u.editorMinimap ||
+    localUI.editorFontSize !== u.editorFontSize
   )
 })
 
@@ -83,6 +86,9 @@ async function save() {
       scrollback: localUI.scrollback,
       cursorBlink: localUI.cursorBlink,
       themeName: localUI.themeName,
+      editorEngine: localUI.editorEngine,
+      editorMinimap: localUI.editorMinimap,
+      editorFontSize: localUI.editorFontSize,
     })
   } finally {
     saving.value = false
@@ -154,6 +160,50 @@ function selectTheme(key: string) {
         </div>
         <div class="setting-control">
           <input type="number" v-model.number="localServer.port" style="width:100px">
+        </div>
+      </div>
+    </div>
+
+    <!-- Editor Section -->
+    <div class="settings-section">
+      <div class="section-header">
+        <span class="section-icon">&#9998;</span> Editor
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Editor Engine</div>
+          <div class="setting-desc">Code editor component</div>
+        </div>
+        <div class="setting-control">
+          <select v-model="localUI.editorEngine">
+            <option value="codemirror">CodeMirror 6</option>
+            <option value="monaco">Monaco Editor</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Editor Font Size</div>
+          <div class="setting-desc">Font size for code editor (px)</div>
+        </div>
+        <div class="setting-control">
+          <input type="number" v-model.number="localUI.editorFontSize" min="10" max="24" style="width:80px">
+          <span class="suffix">px</span>
+        </div>
+      </div>
+
+      <div v-if="localUI.editorEngine === 'monaco'" class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Minimap</div>
+          <div class="setting-desc">Code overview on the right side (Monaco only)</div>
+        </div>
+        <div class="setting-control">
+          <label class="toggle">
+            <input type="checkbox" v-model="localUI.editorMinimap">
+            <span class="toggle-slider"></span>
+          </label>
         </div>
       </div>
     </div>
