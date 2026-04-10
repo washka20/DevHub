@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import CommandButton from '../components/CommandButton.vue'
 import TerminalOutput from '../components/TerminalOutput.vue'
 import { useProject } from '../composables/useProject'
@@ -8,6 +8,8 @@ import { projectsApi } from '../api/projects'
 import type { MakeCommand } from '../types'
 
 const { currentProject } = useProject()
+
+const hasMakefile = computed(() => currentProject.value?.has_makefile ?? false)
 
 const terminalLines = ref<string[]>([])
 const running = ref(false)
@@ -71,7 +73,11 @@ watch(
     if (project) {
       ws.subscribe(project.name)
       subscribedProject = project.name
-      fetchCommands()
+      if (project.has_makefile) {
+        fetchCommands()
+      } else {
+        commands.value = []
+      }
     }
   },
   { immediate: true },
@@ -140,56 +146,71 @@ onUnmounted(() => {
     </header>
 
     <template v-if="currentProject">
-      <!-- Command groups from Makefile -->
-      <div v-if="commandsLoading" class="loading-state">Loading commands...</div>
-      <div v-else-if="commands.length === 0" class="empty-state">
-        No Makefile targets found for this project
+      <!-- No Makefile -->
+      <div v-if="!hasMakefile" class="no-makefile">
+        <div class="no-makefile-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="4 17 10 11 4 5"/>
+            <line x1="12" y1="19" x2="20" y2="19"/>
+          </svg>
+        </div>
+        <h2>Makefile not found</h2>
+        <p>This project does not have a <code>Makefile</code>.</p>
+        <p class="no-makefile-hint">Add a Makefile to the project root to run commands here.</p>
       </div>
+
       <template v-else>
-        <div v-for="(cmds, category) in groupedCommands()" :key="category" class="cmd-group">
-          <h2>{{ category }}</h2>
-          <div class="cmd-grid">
-            <CommandButton
-              v-for="cmd in cmds"
-              :key="cmd.name"
-              :name="cmd.name"
-              :description="cmd.description"
-              :category="category"
-              :loading="loadingCmd === cmd.name"
-              :disabled="running && loadingCmd !== cmd.name"
-              @execute="execute(cmd.name)"
-            />
-          </div>
+        <!-- Command groups from Makefile -->
+        <div v-if="commandsLoading" class="loading-state">Loading commands...</div>
+        <div v-else-if="commands.length === 0" class="empty-state">
+          No Makefile targets found for this project
         </div>
+        <template v-else>
+          <div v-for="(cmds, category) in groupedCommands()" :key="category" class="cmd-group">
+            <h2>{{ category }}</h2>
+            <div class="cmd-grid">
+              <CommandButton
+                v-for="cmd in cmds"
+                :key="cmd.name"
+                :name="cmd.name"
+                :description="cmd.description"
+                :category="category"
+                :loading="loadingCmd === cmd.name"
+                :disabled="running && loadingCmd !== cmd.name"
+                @execute="execute(cmd.name)"
+              />
+            </div>
+          </div>
+        </template>
+
+        <!-- Terminal output -->
+        <section class="section">
+          <div class="section-header">
+            <h2>Output</h2>
+            <button v-if="terminalLines.length > 0" class="btn-clear" @click="clearTerminal">
+              Clear
+            </button>
+          </div>
+          <TerminalOutput :lines="terminalLines" :running="running" />
+        </section>
+
+        <!-- Command history -->
+        <section v-if="history.length > 0" class="section">
+          <h2>History</h2>
+          <div class="history-list">
+            <div
+              v-for="(entry, i) in history"
+              :key="i"
+              class="history-item"
+              :class="{ success: entry.exitCode === 0, failure: entry.exitCode !== 0 }"
+            >
+              <span class="history-status">{{ entry.exitCode === 0 ? 'OK' : 'FAIL' }}</span>
+              <span class="history-cmd">make {{ entry.cmd }}</span>
+              <span class="history-time">{{ entry.timestamp }}</span>
+            </div>
+          </div>
+        </section>
       </template>
-
-      <!-- Terminal output -->
-      <section class="section">
-        <div class="section-header">
-          <h2>Output</h2>
-          <button v-if="terminalLines.length > 0" class="btn-clear" @click="clearTerminal">
-            Clear
-          </button>
-        </div>
-        <TerminalOutput :lines="terminalLines" :running="running" />
-      </section>
-
-      <!-- Command history -->
-      <section v-if="history.length > 0" class="section">
-        <h2>History</h2>
-        <div class="history-list">
-          <div
-            v-for="(entry, i) in history"
-            :key="i"
-            class="history-item"
-            :class="{ success: entry.exitCode === 0, failure: entry.exitCode !== 0 }"
-          >
-            <span class="history-status">{{ entry.exitCode === 0 ? 'OK' : 'FAIL' }}</span>
-            <span class="history-cmd">make {{ entry.cmd }}</span>
-            <span class="history-time">{{ entry.timestamp }}</span>
-          </div>
-        </div>
-      </section>
     </template>
   </div>
 </template>
@@ -213,6 +234,55 @@ onUnmounted(() => {
 .no-project {
   font-size: 14px;
   color: var(--text-secondary);
+}
+
+/* No Makefile state */
+.no-makefile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.no-makefile-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 20px;
+  opacity: 0.3;
+}
+
+.no-makefile-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.no-makefile h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.no-makefile p {
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.no-makefile code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.no-makefile-hint {
+  margin-top: 12px;
+  font-size: 13px;
+  opacity: 0.7;
 }
 
 .loading-state,
