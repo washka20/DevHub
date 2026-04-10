@@ -11,6 +11,7 @@ import (
 	"devhub/internal/config"
 	"devhub/internal/docker"
 	"devhub/internal/git"
+	"devhub/internal/gitlab"
 	"devhub/internal/runner"
 	"devhub/internal/terminal"
 	"devhub/internal/watcher"
@@ -143,6 +144,55 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/settings", settingsH.GetSettings).Methods("GET")
 	apiRouter.HandleFunc("/settings", settingsH.UpdateSettings).Methods("PUT")
 	apiRouter.HandleFunc("/settings/shells", settingsH.ListShells).Methods("GET")
+
+	// GitLab (only if enabled in config)
+	if cfg.Services.GitLab.Enabled && cfg.Services.GitLab.Token != "" {
+		glClient := gitlab.NewClient(cfg.Services.GitLab.URL, cfg.Services.GitLab.Token)
+		glh := &api.GitLabHandlers{Client: glClient, Handlers: h}
+
+		// Enabled check
+		apiRouter.HandleFunc("/gitlab/enabled", glh.GitLabEnabled).Methods("GET")
+
+		// File proxy (images, attachments)
+		apiRouter.HandleFunc("/gitlab/proxy", glh.GitLabProxy).Methods("GET")
+
+		// Cross-project (no {id} in path)
+		apiRouter.HandleFunc("/gitlab/my/issues", glh.GitLabMyIssues).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/my/merge-requests", glh.GitLabMyMRs).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/user", glh.GitLabCurrentUser).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/labels", glh.GitLabLabels).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/milestones", glh.GitLabMilestones).Methods("GET")
+
+		// Per-project: existing
+		apiRouter.HandleFunc("/projects/{id}/gitlab/project", glh.GitLabProject).Methods("GET")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/issues", glh.GitLabIssues).Methods("GET")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests", glh.GitLabMergeRequests).Methods("GET")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/pipelines", glh.GitLabPipelines).Methods("GET")
+
+		// Per-project: detail + notes
+		apiRouter.HandleFunc("/projects/{id}/gitlab/issues/{iid:[0-9]+}", glh.GitLabIssueDetail).Methods("GET")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/issues/{iid:[0-9]+}/notes", glh.GitLabIssueNotes).Methods("GET")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/issues/{iid:[0-9]+}/notes", glh.GitLabAddIssueNote).Methods("POST")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/issues/{iid:[0-9]+}", glh.GitLabUpdateIssue).Methods("PUT")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/issues", glh.GitLabCreateIssue).Methods("POST")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/notes", glh.GitLabMRNotes).Methods("GET")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/notes", glh.GitLabAddMRNote).Methods("POST")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests", glh.GitLabCreateMR).Methods("POST")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/members", glh.GitLabProjectMembers).Methods("GET")
+
+		// Direct by GitLab project ID (no DevHub project binding)
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/issues/{iid:[0-9]+}", glh.DirectIssueDetail).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/issues/{iid:[0-9]+}/notes", glh.DirectIssueNotes).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/issues/{iid:[0-9]+}/notes", glh.DirectAddIssueNote).Methods("POST")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/issues/{iid:[0-9]+}", glh.DirectUpdateIssue).Methods("PUT")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/issues", glh.DirectCreateIssue).Methods("POST")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/notes", glh.DirectMRNotes).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/notes", glh.DirectAddMRNote).Methods("POST")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests", glh.DirectCreateMR).Methods("POST")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/members", glh.DirectProjectMembers).Methods("GET")
+
+		log.Printf("GitLab integration enabled for %s", cfg.Services.GitLab.URL)
+	}
 
 	// WebSocket (on apiRouter so it matches /api/ws path used by frontend)
 	apiRouter.HandleFunc("/ws", hub.HandleWS)

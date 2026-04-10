@@ -223,3 +223,106 @@ export interface OpenFile {
   dirty: boolean
   language: string
 }
+
+// GitLab types
+export interface GitLabAuthor {
+  id: number
+  username: string
+  name: string
+  avatar_url: string
+}
+
+export interface GitLabLabel {
+  id: number
+  name: string
+  color: string
+}
+
+export interface GitLabMilestone {
+  id: number
+  title: string
+  state: string
+}
+
+export interface GitLabMember {
+  id: number
+  username: string
+  name: string
+  avatar_url: string
+}
+
+export interface GitLabNote {
+  id: number
+  body: string
+  author: GitLabAuthor
+  created_at: string
+  system: boolean
+}
+
+export interface GitLabProject {
+  id: number
+  name: string
+  path_with_namespace: string
+  web_url: string
+  description: string
+}
+
+export interface GitLabLabelDetail {
+  name: string
+  color: string
+}
+
+export interface GitLabIssue {
+  id: number
+  iid: number
+  project_id: number
+  title: string
+  description: string
+  state: 'opened' | 'closed'
+  author: GitLabAuthor
+  assignees: GitLabAuthor[]
+  labels: string[]
+  label_details?: GitLabLabelDetail[]
+  milestone: GitLabMilestone | null
+  due_date: string | null
+  created_at: string
+  updated_at: string
+  web_url: string
+  project_path: string
+  references: { full: string }
+}
+
+export interface GitLabMR {
+  id: number
+  iid: number
+  project_id: number
+  title: string
+  description: string
+  state: 'opened' | 'merged' | 'closed'
+  author: GitLabAuthor
+  assignees: GitLabAuthor[]
+  reviewers: GitLabAuthor[]
+  labels: string[]
+  label_details?: GitLabLabelDetail[]
+  source_branch: string
+  target_branch: string
+  draft: boolean
+  merge_status: string
+  created_at: string
+  updated_at: string
+  merged_at: string | null
+  web_url: string
+  project_path: string
+  references: { full: string }
+  pipeline: GitLabPipeline | null
+}
+
+export interface GitLabPipeline {
+  id: number
+  status: 'created' | 'waiting_for_resource' | 'preparing' | 'pending' | 'running' | 'success' | 'failed' | 'canceled' | 'skipped' | 'manual' | 'scheduled'
+  ref: string
+  sha: string
+  web_url: string
+  created_at: string
+  updated_at: string
+}
