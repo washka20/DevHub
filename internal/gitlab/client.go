@@ -471,7 +471,7 @@ func (c *Client) ProjectByRemote(remoteURL string) (*Project, error) {
 
 // Issues fetches issues for a project.
 func (c *Client) Issues(projectID int, state string) ([]Issue, error) {
-	endpoint := fmt.Sprintf("/projects/%d/issues?state=%s&per_page=50&order_by=updated_at&sort=desc", projectID, url.QueryEscape(state))
+	endpoint := fmt.Sprintf("/projects/%d/issues?state=%s&per_page=50&order_by=updated_at&sort=desc&with_labels_details=true", projectID, url.QueryEscape(state))
 	var issues []Issue
 	if err := c.do(endpoint, &issues); err != nil {
 		return nil, err
@@ -484,7 +484,7 @@ func (c *Client) Issues(projectID int, state string) ([]Issue, error) {
 
 // MergeRequests fetches merge requests for a project.
 func (c *Client) MergeRequests(projectID int, state string) ([]MergeRequest, error) {
-	endpoint := fmt.Sprintf("/projects/%d/merge_requests?state=%s&per_page=50&order_by=updated_at&sort=desc", projectID, url.QueryEscape(state))
+	endpoint := fmt.Sprintf("/projects/%d/merge_requests?state=%s&per_page=50&order_by=updated_at&sort=desc&with_labels_details=true", projectID, url.QueryEscape(state))
 	var mrs []MergeRequest
 	if err := c.do(endpoint, &mrs); err != nil {
 		return nil, err
@@ -510,7 +510,7 @@ func (c *Client) Pipelines(projectID int) ([]Pipeline, error) {
 
 // IssueDetail fetches a single issue by IID.
 func (c *Client) IssueDetail(projectID, iid int) (*Issue, error) {
-	endpoint := fmt.Sprintf("/projects/%d/issues/%d", projectID, iid)
+	endpoint := fmt.Sprintf("/projects/%d/issues/%d?with_labels_details=true", projectID, iid)
 	var issue Issue
 	if err := c.do(endpoint, &issue); err != nil {
 		return nil, err

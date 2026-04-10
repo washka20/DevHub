@@ -186,11 +186,13 @@ export const useGitLabStore = defineStore('gitlab', () => {
     } catch { /* ignore */ }
   }
 
-  // Detail
+  // Detail — merge list item (has label_details) with detail (has description)
   async function fetchIssueDetail(pid: number, iid: number) {
     detailLoading.value = true
     try {
-      detailIssue.value = await gitlabApi.issueDetail(pid, iid)
+      const detail = await gitlabApi.issueDetail(pid, iid)
+      const listItem = myIssues.value.find(i => i.project_id === pid && i.iid === iid)
+      detailIssue.value = { ...listItem, ...detail, label_details: listItem?.label_details ?? detail.label_details }
     } catch (e) {
       toast.show('error', `Failed to fetch issue: ${getErrorMessage(e)}`)
     } finally {

@@ -103,12 +103,16 @@ const canToggleState = computed(() => {
 })
 
 function labelStyle(labelName: string): Record<string, string> {
-  const found = gitlabStore.labels.find(l => l.name === labelName)
-  if (found?.color) {
-    const rgb = hexToRgb(found.color)
+  // First check label_details on the item itself (has colors from API)
+  const fromItem = props.item?.label_details?.find(d => d.name === labelName)
+  // Fallback to global labels store
+  const fromStore = gitlabStore.labels.find(l => l.name === labelName)
+  const color = fromItem?.color ?? fromStore?.color
+  if (color) {
+    const rgb = hexToRgb(color)
     return {
       background: `rgba(${rgb},0.1)`,
-      color: found.color,
+      color,
       borderColor: `rgba(${rgb},0.25)`,
     }
   }

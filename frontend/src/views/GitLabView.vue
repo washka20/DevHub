@@ -53,7 +53,7 @@ const labelColorMap = computed(() => {
     }
   }
   for (const mr of store.myMRs) {
-    for (const ld of (mr as any).label_details || []) {
+    for (const ld of mr.label_details || []) {
       if (ld.color) map.set(ld.name, ld.color)
     }
   }
@@ -108,11 +108,11 @@ async function handleRefresh() {
 }
 
 function selectIssue(issue: GitLabIssue) {
-  store.selectItem('issue', issue.project_path, issue.iid)
+  store.selectItem('issue', issue.project_path, issue.iid, issue.project_id)
 }
 
 function selectMR(mr: GitLabMR) {
-  store.selectItem('mr', mr.project_path, mr.iid)
+  store.selectItem('mr', mr.project_path, mr.iid, mr.project_id)
 }
 
 async function handleAddComment(body: string) {
