@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue'
 import { useDockerStore } from '../stores/docker'
 import { useProjectsStore } from '../stores/projects'
 import { api, postJson, projectUrl } from '../api/client'
@@ -201,8 +201,12 @@ function stateClass(state: string): string {
   }
 }
 
+const hasDocker = computed(() => projectsStore.currentProject?.has_docker ?? false)
+
 onMounted(() => {
-  dockerStore.fetchContainers()
+  if (hasDocker.value) {
+    dockerStore.fetchContainers()
+  }
 })
 
 onUnmounted(() => {
@@ -213,6 +217,22 @@ onUnmounted(() => {
 
 <template>
   <div class="docker-view">
+    <!-- No Docker -->
+    <div v-if="!hasDocker" class="no-docker">
+      <div class="no-docker-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+          <line x1="12" y1="22.08" x2="12" y2="12"/>
+        </svg>
+      </div>
+      <h2>Docker not available</h2>
+      <p>This project does not have a <code>docker-compose.yml</code> file.</p>
+      <p class="no-docker-hint">Add a docker-compose.yml to the project root to manage containers here.</p>
+    </div>
+
+    <!-- Docker UI -->
+    <template v-else>
     <!-- Header -->
     <header class="page-header">
       <div class="header-row">
@@ -430,11 +450,61 @@ onUnmounted(() => {
         </div>
       </div>
     </Teleport>
+    </template>
   </div>
 </template>
 
 <style scoped>
 .docker-view {
+}
+
+/* No Docker state */
+.no-docker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.no-docker-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 20px;
+  opacity: 0.3;
+}
+
+.no-docker-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.no-docker h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.no-docker p {
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.no-docker code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.no-docker-hint {
+  margin-top: 12px;
+  font-size: 13px;
+  opacity: 0.7;
 }
 
 /* Header */
