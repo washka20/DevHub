@@ -401,6 +401,9 @@ export const useGitLabStore = defineStore('gitlab', () => {
   }
 
   async function init() {
+    await checkEnabled()
+    if (!enabled.value) return
+
     await Promise.all([
       fetchMyIssues(),
       fetchMyMRs(),

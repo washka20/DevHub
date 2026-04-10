@@ -216,6 +216,27 @@ onUnmounted(() => {
 
 <template>
   <div class="gitlab-view">
+    <!-- Not configured -->
+    <div v-if="store.enabled === false" class="not-configured">
+      <div class="not-configured-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22.65 14.39L12 22.13 1.35 14.39a.84.84 0 0 1-.3-.94l1.22-3.78 2.44-7.51A.42.42 0 0 1 4.82 2a.43.43 0 0 1 .58 0 .42.42 0 0 1 .11.18l2.44 7.49h8.1l2.44-7.51A.42.42 0 0 1 18.6 2a.43.43 0 0 1 .58 0 .42.42 0 0 1 .11.18l2.44 7.51L23 13.45a.84.84 0 0 1-.35.94z"/>
+        </svg>
+      </div>
+      <h2>GitLab not connected</h2>
+      <p>Set <code>DEVHUB_GITLAB_URL</code> and <code>DEVHUB_GITLAB_TOKEN</code> in your <code>.env</code> file to enable GitLab integration.</p>
+      <p class="not-configured-hint">Token needs <code>api</code> scope for full functionality.</p>
+    </div>
+
+    <!-- Loading state while checking -->
+    <div v-else-if="store.enabled === null" class="loading-check">
+      <svg class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+      </svg>
+      Checking GitLab connection...
+    </div>
+
+    <template v-else>
     <!-- Header -->
     <header class="page-header">
       <div class="header-row">
@@ -612,10 +633,76 @@ onUnmounted(() => {
       @close="store.showCreateMR = false"
       @create="handleCreateMR"
     />
+    </template>
   </div>
 </template>
 
 <style scoped>
+/* Not configured / loading */
+.not-configured {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.not-configured-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 20px;
+  opacity: 0.3;
+}
+
+.not-configured-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.not-configured h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.not-configured p {
+  font-size: 14px;
+  margin-bottom: 4px;
+  max-width: 480px;
+}
+
+.not-configured code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.not-configured-hint {
+  margin-top: 12px;
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.loading-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 80px 24px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.loading-check .spin-icon {
+  width: 18px;
+  height: 18px;
+}
+
 /* Header */
 .page-header h1 {
   font-size: 28px;
