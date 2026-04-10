@@ -224,6 +224,29 @@ onUnmounted(() => {
 
 <template>
   <div class="docker-view">
+    <!-- Header — always visible -->
+    <header class="page-header">
+      <div class="header-row">
+        <div class="header-title">
+          <h1>Docker</h1>
+          <span class="header-count" v-if="dockerStore.totalCount > 0">
+            {{ dockerStore.runningCount }} running / {{ dockerStore.totalCount }} total
+          </span>
+        </div>
+        <div v-if="hasDocker" class="header-actions">
+          <button class="btn btn-green" @click="startAll" :disabled="dockerStore.loading">
+            Start All
+          </button>
+          <button class="btn btn-red" @click="stopAll" :disabled="dockerStore.loading">
+            Stop All
+          </button>
+          <button class="btn" @click="dockerStore.fetchContainers()" :disabled="dockerStore.loading">
+            Refresh
+          </button>
+        </div>
+      </div>
+    </header>
+
     <!-- No Docker -->
     <div v-if="!hasDocker" class="no-docker">
       <div class="no-docker-icon">
@@ -238,31 +261,7 @@ onUnmounted(() => {
       <p class="no-docker-hint">Add a docker-compose.yml to the project root to manage containers here.</p>
     </div>
 
-    <!-- Docker UI -->
     <template v-else>
-    <!-- Header -->
-    <header class="page-header">
-      <div class="header-row">
-        <div class="header-title">
-          <h1>Containers</h1>
-          <span class="header-count" v-if="dockerStore.totalCount > 0">
-            {{ dockerStore.runningCount }} running / {{ dockerStore.totalCount }} total
-          </span>
-        </div>
-        <div class="header-actions">
-          <button class="btn btn-green" @click="startAll" :disabled="dockerStore.loading">
-            Start All
-          </button>
-          <button class="btn btn-red" @click="stopAll" :disabled="dockerStore.loading">
-            Stop All
-          </button>
-          <button class="btn" @click="dockerStore.fetchContainers()" :disabled="dockerStore.loading">
-            Refresh
-          </button>
-        </div>
-      </div>
-    </header>
-
     <!-- Docker Compose section -->
     <section class="compose-section">
       <div class="compose-header">

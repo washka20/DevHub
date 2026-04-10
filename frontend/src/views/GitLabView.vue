@@ -216,39 +216,18 @@ onUnmounted(() => {
 
 <template>
   <div class="gitlab-view">
-    <!-- Not configured -->
-    <div v-if="store.enabled === false" class="not-configured">
-      <div class="not-configured-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M22.65 14.39L12 22.13 1.35 14.39a.84.84 0 0 1-.3-.94l1.22-3.78 2.44-7.51A.42.42 0 0 1 4.82 2a.43.43 0 0 1 .58 0 .42.42 0 0 1 .11.18l2.44 7.49h8.1l2.44-7.51A.42.42 0 0 1 18.6 2a.43.43 0 0 1 .58 0 .42.42 0 0 1 .11.18l2.44 7.51L23 13.45a.84.84 0 0 1-.35.94z"/>
-        </svg>
-      </div>
-      <h2>GitLab not connected</h2>
-      <p>Set <code>DEVHUB_GITLAB_URL</code> and <code>DEVHUB_GITLAB_TOKEN</code> in your <code>.env</code> file to enable GitLab integration.</p>
-      <p class="not-configured-hint">Token needs <code>api</code> scope for full functionality.</p>
-    </div>
-
-    <!-- Loading state while checking -->
-    <div v-else-if="store.enabled === null" class="loading-check">
-      <svg class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-      </svg>
-      Checking GitLab connection...
-    </div>
-
-    <template v-else>
-    <!-- Header -->
+    <!-- Header — always visible -->
     <header class="page-header">
       <div class="header-row">
         <div class="header-title">
           <h1>GitLab</h1>
-          <span v-if="isRefreshing" class="refresh-indicator">
+          <span v-if="store.enabled && isRefreshing" class="refresh-indicator">
             <svg class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
             </svg>
           </span>
         </div>
-        <div class="header-actions">
+        <div v-if="store.enabled" class="header-actions">
           <button class="btn btn-green" @click="store.showCreateIssue = true">
             <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14">
               <path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z"/>
@@ -268,6 +247,27 @@ onUnmounted(() => {
       </div>
     </header>
 
+    <!-- Not configured -->
+    <div v-if="store.enabled === false" class="not-configured">
+      <div class="not-configured-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22.65 14.39L12 22.13 1.35 14.39a.84.84 0 0 1-.3-.94l1.22-3.78 2.44-7.51A.42.42 0 0 1 4.82 2a.43.43 0 0 1 .58 0 .42.42 0 0 1 .11.18l2.44 7.49h8.1l2.44-7.51A.42.42 0 0 1 18.6 2a.43.43 0 0 1 .58 0 .42.42 0 0 1 .11.18l2.44 7.51L23 13.45a.84.84 0 0 1-.35.94z"/>
+        </svg>
+      </div>
+      <h2>GitLab not connected</h2>
+      <p>Set <code>DEVHUB_GITLAB_URL</code> and <code>DEVHUB_GITLAB_TOKEN</code> in your <code>.env</code> file to enable GitLab integration.</p>
+      <p class="not-configured-hint">Token needs <code>api</code> scope for full functionality.</p>
+    </div>
+
+    <!-- Loading -->
+    <div v-else-if="store.enabled === null" class="loading-check">
+      <svg class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+      </svg>
+      Checking GitLab connection...
+    </div>
+
+    <template v-else>
     <!-- Main tabs -->
     <nav class="main-tabs">
       <button
