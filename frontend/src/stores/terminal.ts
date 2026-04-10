@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch, onUnmounted } from 'vue'
+import { terminalApi } from '../api/terminal'
 import type {
   TerminalSession,
   TerminalTab,
@@ -147,16 +148,7 @@ export const useTerminalStore = defineStore('terminal', () => {
   // -------------------------------------------------------------------------
 
   async function createSession(cwd: string, cols = 80, rows = 24): Promise<TerminalSession> {
-    const res = await fetch('/api/terminal/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cols, rows, cwd }),
-    })
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({ error: res.statusText }))
-      throw new Error(body.error || `Failed to create session: ${res.statusText}`)
-    }
-    const data = await res.json()
+    const data = await terminalApi.createSession(cwd, cols, rows)
     const session: TerminalSession = {
       id: data.session_id,
       label: data.shell.split('/').pop() || 'shell',
@@ -167,10 +159,10 @@ export const useTerminalStore = defineStore('terminal', () => {
   }
 
   async function destroySession(id: string) {
-    const res = await fetch(`/api/terminal/sessions/${id}`, { method: 'DELETE' })
-    if (!res.ok && res.status !== 404) {
-      // best-effort: log but don't throw — callers already wrap in try/catch
-      console.warn(`destroySession: server returned ${res.status} for session ${id}`)
+    try {
+      await terminalApi.destroySession(id)
+    } catch (e) {
+      console.warn(`destroySession: failed for session ${id}`, e)
     }
     sessions.value.delete(id)
   }
@@ -193,11 +185,9 @@ export const useTerminalStore = defineStore('terminal', () => {
     if (targetPane.sessionId) {
       targetPane.status = 'reconnecting'
       try {
-        const res = await fetch(`/api/terminal/sessions/${targetPane.sessionId}`)
-        if (res.ok) {
-          targetPane.status = 'connected'
-          return targetPane.sessionId  // session alive — just open WS
-        }
+        await terminalApi.getSession(targetPane.sessionId)
+        targetPane.status = 'connected'
+        return targetPane.sessionId  // session alive — just open WS
       } catch { /* fall through */ }
       targetPane.sessionId = null  // stale, clear it
     }
@@ -403,9 +393,7 @@ export const useTerminalStore = defineStore('terminal', () => {
 
   async function cleanOrphans() {
     try {
-      const res = await fetch('/api/terminal/sessions')
-      if (!res.ok) return
-      const liveSessions: Array<{ id: string }> = await res.json()
+      const allSessions = await terminalApi.listSessions()
 
       const referencedIds = new Set<string>()
       for (const tab of tabs.value) {
@@ -414,9 +402,9 @@ export const useTerminalStore = defineStore('terminal', () => {
         }
       }
 
-      for (const sess of liveSessions) {
+      for (const sess of allSessions) {
         if (!referencedIds.has(sess.id)) {
-          await fetch(`/api/terminal/sessions/${sess.id}`, { method: 'DELETE' }).catch(() => {})
+          await terminalApi.destroySession(sess.id).catch(() => {})
         }
       }
     } catch { /* best-effort */ }
@@ -449,9 +437,7 @@ export const useTerminalStore = defineStore('terminal', () => {
 
   async function fetchLiveSessions() {
     try {
-      const res = await fetch('/api/terminal/sessions')
-      if (!res.ok) return
-      liveSessions.value = await res.json()
+      liveSessions.value = await terminalApi.listSessions() as LiveSession[]
     } catch { /* best-effort */ }
   }
 

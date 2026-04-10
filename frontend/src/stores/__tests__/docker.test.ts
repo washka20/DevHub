@@ -38,7 +38,7 @@ describe('useDockerStore', () => {
 
       expect(store.containers).toEqual(mockContainers)
       expect(store.containers).toHaveLength(3)
-      expect(fetch).toHaveBeenCalledWith('/api/projects/myapp/docker/containers')
+      expect(fetch).toHaveBeenCalledWith('/api/projects/myapp/docker/containers', undefined)
     })
   })
 
@@ -69,7 +69,7 @@ describe('useDockerStore', () => {
         expect.objectContaining({ method: 'POST' }),
       )
       // Second call is the refetch
-      expect(fetchMock).toHaveBeenCalledWith('/api/projects/myapp/docker/containers')
+      expect(fetchMock).toHaveBeenCalledWith('/api/projects/myapp/docker/containers', undefined)
       expect(fetchMock).toHaveBeenCalledTimes(2)
 
       vi.useRealTimers()

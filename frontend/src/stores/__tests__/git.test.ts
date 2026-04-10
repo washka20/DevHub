@@ -46,7 +46,7 @@ describe('useGitStore', () => {
       expect(store.status.untracked).toEqual(['newfile.ts'])
       expect(store.status.ahead).toBe(2)
       expect(store.status.behind).toBe(1)
-      expect(fetch).toHaveBeenCalledWith('/api/projects/myapp/git/status')
+      expect(fetch).toHaveBeenCalledWith('/api/projects/myapp/git/status', undefined)
     })
 
     it('handles missing fields with defaults', async () => {
@@ -103,7 +103,7 @@ describe('useGitStore', () => {
       expect(store.log[1].short_hash).toBe('bbb222c')
       expect(store.log[1].refs).toEqual([])
       expect(store.log[1].parents).toEqual([])
-      expect(fetch).toHaveBeenCalledWith('/api/projects/myapp/git/log/metadata?offset=0&limit=5')
+      expect(fetch).toHaveBeenCalledWith('/api/projects/myapp/git/log/metadata?offset=0&limit=5', undefined)
     })
   })
 

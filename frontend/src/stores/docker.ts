@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useProjectsStore } from './projects'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/error'
+import { dockerApi } from '../api/docker'
 import type { Container } from '../types'
 
 export const useDockerStore = defineStore('docker', () => {
@@ -15,10 +16,8 @@ export const useDockerStore = defineStore('docker', () => {
   const projectsStore = useProjectsStore()
   const toast = useToast()
 
-  function apiBase(): string {
-    const project = projectsStore.currentProject
-    if (!project) return '/api/projects/_'
-    return `/api/projects/${project.name}`
+  function projectName(): string {
+    return projectsStore.currentProject?.name ?? '_'
   }
 
   const runningCount = computed(() =>
@@ -30,9 +29,7 @@ export const useDockerStore = defineStore('docker', () => {
   async function fetchContainers() {
     loading.value = true
     try {
-      const res = await fetch(`${apiBase()}/docker/containers`)
-      if (!res.ok) throw new Error(`Failed to fetch containers: ${res.statusText}`)
-      containers.value = await res.json()
+      containers.value = await dockerApi.containers(projectName())
     } catch (e) {
       toast.show('error', getErrorMessage(e))
     } finally {
@@ -43,11 +40,7 @@ export const useDockerStore = defineStore('docker', () => {
   async function containerAction(name: string, action: string) {
     actionLoading.value = name
     try {
-      const res = await fetch(`${apiBase()}/docker/${name}/${action}`, {
-        method: 'POST',
-      })
-      if (!res.ok) throw new Error(`${action} failed: ${await res.text()}`)
-      // Give Docker time to change state before refetching
+      await dockerApi.action(projectName(), name, action)
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await fetchContainers()
     } catch (e) {
@@ -60,8 +53,7 @@ export const useDockerStore = defineStore('docker', () => {
   async function composeUp() {
     composeLoading.value = 'up'
     try {
-      const res = await fetch(`${apiBase()}/docker/compose/up`, { method: 'POST' })
-      if (!res.ok) throw new Error(`compose up failed: ${await res.text()}`)
+      await dockerApi.composeUp(projectName())
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await fetchContainers()
     } catch (e) {
@@ -74,8 +66,7 @@ export const useDockerStore = defineStore('docker', () => {
   async function composeUpBuild() {
     composeLoading.value = 'rebuild'
     try {
-      const res = await fetch(`${apiBase()}/docker/compose/up-build`, { method: 'POST' })
-      if (!res.ok) throw new Error(`compose rebuild failed: ${await res.text()}`)
+      await dockerApi.composeUpBuild(projectName())
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await fetchContainers()
     } catch (e) {
@@ -88,8 +79,7 @@ export const useDockerStore = defineStore('docker', () => {
   async function composeDown() {
     composeLoading.value = 'down'
     try {
-      const res = await fetch(`${apiBase()}/docker/compose/down`, { method: 'POST' })
-      if (!res.ok) throw new Error(`compose down failed: ${await res.text()}`)
+      await dockerApi.composeDown(projectName())
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await fetchContainers()
     } catch (e) {
@@ -104,7 +94,7 @@ export const useDockerStore = defineStore('docker', () => {
   }
 
   function logsUrl(name: string): string {
-    return `${apiBase()}/docker/${name}/logs`
+    return dockerApi.logsUrl(projectName(), name)
   }
 
   return {

@@ -5,6 +5,7 @@ import { useProjectsStore } from '../stores/projects'
 import { useGitStore } from '../stores/git'
 import { useDockerStore } from '../stores/docker'
 import { useProject } from '../composables/useProject'
+import { projectsApi } from '../api/projects'
 import StatusCard from '../components/StatusCard.vue'
 import CommandButton from '../components/CommandButton.vue'
 import ShimmerBlock from '../components/ShimmerBlock.vue'
@@ -30,8 +31,7 @@ async function fetchCommands() {
     return
   }
   try {
-    const res = await fetch(`/api/projects/${currentProject.value.name}/commands`)
-    if (res.ok) commands.value = await res.json()
+    commands.value = await projectsApi.commands(currentProject.value.name)
   } catch { commands.value = [] }
 }
 
@@ -84,14 +84,9 @@ function containerPillClass(state: string): string {
 async function executeCommand(name: string) {
   if (!currentProject.value) return
   loadingCmd.value = name
-  // Strip "make " prefix — backend runs make internally
   const cmd = name.replace(/^make\s+/, '')
   try {
-    await fetch(`/api/projects/${currentProject.value.name}/exec`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cmd }),
-    })
+    await projectsApi.exec(currentProject.value.name, cmd)
   } finally {
     loadingCmd.value = null
   }

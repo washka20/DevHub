@@ -3,6 +3,7 @@ import { onMounted, ref, computed, watch } from 'vue'
 import { useGitStore } from '../stores/git'
 import { useProjectsStore } from '../stores/projects'
 import { useProject } from '../composables/useProject'
+import { gitApi } from '../api/git'
 import ShimmerBlock from '../components/ShimmerBlock.vue'
 import type { DiffLine } from '../types'
 
@@ -276,9 +277,8 @@ async function viewCommitFileDiff(hash: string, filePath: string) {
   showCommitDiffModal.value = true
   try {
     const projectName = projectsStore.currentProject?.name || 'default'
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/git/commits/${hash}/diff?file=${encodeURIComponent(filePath)}`)
-    if (!res.ok) throw new Error(await res.text())
-    const data = await res.json()
+    const base = `/api/projects/${encodeURIComponent(projectName)}`
+    const data = await gitApi.commitDiff(base, hash, filePath)
     commitDiffContent.value = data.diff ?? ''
   } catch {
     commitDiffContent.value = ''

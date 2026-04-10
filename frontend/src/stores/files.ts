@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProjectsStore } from './projects'
+import { filesApi } from '../api/files'
 import type { FileNode, OpenFile } from '../types'
 
 const MAX_TABS = 5
@@ -44,10 +45,8 @@ function isImage(filename: string): boolean {
 export const useFilesStore = defineStore('files', () => {
   const projectsStore = useProjectsStore()
 
-  function apiBase(): string {
-    const project = projectsStore.currentProject
-    if (!project) return '/api/projects/_'
-    return `/api/projects/${project.name}`
+  function projectName(): string {
+    return projectsStore.currentProject?.name ?? '_'
   }
 
   const tree = ref<FileNode[]>([])
@@ -65,10 +64,7 @@ export const useFilesStore = defineStore('files', () => {
   async function fetchTree() {
     loading.value = true
     try {
-      const res = await fetch(`${apiBase()}/files/tree`)
-      if (res.ok) {
-        tree.value = await res.json()
-      }
+      tree.value = await filesApi.tree(projectName())
     } finally {
       loading.value = false
     }
@@ -81,7 +77,6 @@ export const useFilesStore = defineStore('files', () => {
       return
     }
 
-    // Enforce max tabs: close oldest non-dirty if overflow
     if (openFiles.value.length >= MAX_TABS) {
       const oldest = openFiles.value.find((f) => !f.dirty && f.path !== activeFilePath.value)
       if (oldest) {
@@ -91,7 +86,6 @@ export const useFilesStore = defineStore('files', () => {
 
     const name = path.split('/').pop() ?? path
 
-    // Image files: no content fetch
     if (isImage(name)) {
       openFiles.value.push({
         path, name, content: '', originalContent: '', dirty: false, language: 'image',
@@ -100,35 +94,30 @@ export const useFilesStore = defineStore('files', () => {
       return
     }
 
-    // Text files: fetch content (existing logic)
-    const res = await fetch(`${apiBase()}/files/content/${encodeURIComponent(path)}`)
-    if (!res.ok) return
-
-    const content = await res.text()
-    openFiles.value.push({
-      path,
-      name,
-      content,
-      originalContent: content,
-      dirty: false,
-      language: detectLanguage(name),
-    })
-    activeFilePath.value = path
+    try {
+      const content = await filesApi.content(projectName(), path)
+      openFiles.value.push({
+        path,
+        name,
+        content,
+        originalContent: content,
+        dirty: false,
+        language: detectLanguage(name),
+      })
+      activeFilePath.value = path
+    } catch { /* file not readable */ }
   }
 
   async function saveFile(path: string) {
     const file = openFiles.value.find((f) => f.path === path)
     if (!file) return
 
-    const res = await fetch(`${apiBase()}/files/content/${encodeURIComponent(path)}`, {
-      method: 'PUT',
-      body: file.content,
-    })
-    if (res.ok) {
+    try {
+      await filesApi.save(projectName(), path, file.content)
       file.originalContent = file.content
       file.dirty = false
       changedOnDisk.value.delete(path)
-    }
+    } catch { /* save failed */ }
   }
 
   function updateContent(path: string, content: string) {
@@ -155,36 +144,22 @@ export const useFilesStore = defineStore('files', () => {
   }
 
   async function createFile(path: string, isDir: boolean) {
-    await fetch(`${apiBase()}/files/create`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path, is_dir: isDir }),
-    })
+    await filesApi.create(projectName(), path, isDir)
     await fetchTree()
   }
 
   async function deleteFile(path: string) {
-    await fetch(`${apiBase()}/files/delete/${encodeURIComponent(path)}`, {
-      method: 'DELETE',
-    })
+    await filesApi.delete(projectName(), path)
     closeFile(path)
     await fetchTree()
   }
 
   async function openInFileManager(path: string) {
-    fetch(`${apiBase()}/open-in-fm`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path }),
-    })
+    filesApi.openInFileManager(projectName(), path)
   }
 
   async function renameFile(oldPath: string, newPath: string) {
-    await fetch(`${apiBase()}/files/rename/${encodeURIComponent(oldPath)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ new_path: newPath }),
-    })
+    await filesApi.rename(projectName(), oldPath, newPath)
 
     const file = openFiles.value.find((f) => f.path === oldPath)
     if (file) {
@@ -220,14 +195,13 @@ export const useFilesStore = defineStore('files', () => {
     const file = openFiles.value.find((f) => f.path === path)
     if (!file) return
 
-    const res = await fetch(`${apiBase()}/files/content/${encodeURIComponent(path)}`)
-    if (!res.ok) return
-
-    const content = await res.text()
-    file.content = content
-    file.originalContent = content
-    file.dirty = false
-    changedOnDisk.value.delete(path)
+    try {
+      const content = await filesApi.content(projectName(), path)
+      file.content = content
+      file.originalContent = content
+      file.dirty = false
+      changedOnDisk.value.delete(path)
+    } catch { /* file not readable */ }
   }
 
   return {

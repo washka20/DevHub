@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
+import { settingsApi } from '../api/projects'
 import type { ServerSettings, UISettings, TerminalTheme } from '../types'
 import { terminalThemes } from '../data/terminal-themes'
 import { siteThemes } from '../data/site-themes'
@@ -39,23 +40,25 @@ export const useSettingsStore = defineStore('settings', () => {
   })
 
   async function fetchSettings() {
-    const res = await fetch('/api/settings')
-    if (res.ok) server.value = await res.json()
+    try {
+      server.value = await settingsApi.fetch()
+    } catch { /* ignore */ }
   }
 
   async function saveSettings(updates: Partial<ServerSettings>) {
-    const res = await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    })
-    if (res.ok) await fetchSettings()
-    return res.ok
+    try {
+      await settingsApi.save(updates)
+      await fetchSettings()
+      return true
+    } catch {
+      return false
+    }
   }
 
   async function fetchShells() {
-    const res = await fetch('/api/settings/shells')
-    if (res.ok) shells.value = await res.json()
+    try {
+      shells.value = await settingsApi.shells()
+    } catch { /* ignore */ }
   }
 
   function updateUI(partial: Partial<UISettings>) {

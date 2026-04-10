@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, reactive, nextTick } from 'vue'
 import { useProjectsStore } from '../stores/projects'
+import { markdownApi } from '../api/markdown'
 import FileTreeNode from '../components/FileTreeNode.vue'
 import type { FileNode } from '../components/FileTreeNode.vue'
 import MarkdownIt from 'markdown-it'
@@ -232,10 +233,7 @@ function toggleDir(path: string) {
 async function fetchFileList() {
   if (!currentProject.value) return
   try {
-    const res = await fetch(`/api/projects/${currentProject.value.name}/markdown`)
-    if (res.ok) {
-      mdFiles.value = await res.json()
-    }
+    mdFiles.value = await markdownApi.listFiles(currentProject.value.name)
   } catch {
     mdFiles.value = []
   }
@@ -260,12 +258,7 @@ async function selectFile(path: string) {
   currentFile.value = path
 
   try {
-    const res = await fetch(`/api/projects/${currentProject.value.name}/markdown/${path}`)
-    if (res.status === 404) {
-      notFound.value = true
-      return
-    }
-    if (!res.ok) throw new Error('Failed to fetch file')
+    const res = await markdownApi.getFile(currentProject.value.name, path)
     const ct = res.headers.get('content-type') || ''
     if (ct.includes('text/html')) {
       notFound.value = true
@@ -329,15 +322,7 @@ function handleContentClick(e: MouseEvent) {
 async function toggleCheckbox(line: number) {
   if (!currentProject.value || !currentFile.value) return
   try {
-    const res = await fetch(
-      `/api/projects/${currentProject.value.name}/markdown/${currentFile.value}`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ line }),
-      }
-    )
-    if (!res.ok) throw new Error('Failed to toggle')
+    await markdownApi.toggleCheckbox(currentProject.value.name, currentFile.value, line)
 
     // Toggle locally without re-fetching — no scroll reset
     const lines = rawMarkdown.value.split('\n')

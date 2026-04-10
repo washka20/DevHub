@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useProject } from '../composables/useProject'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/error'
+import { gitApi } from '../api/git'
 import type { GitStatus, CommitDetail, BranchInfo, CommitMeta, Commit, StashEntry } from '../types'
 
 interface TopoNode {
@@ -56,7 +57,7 @@ export const useGitStore = defineStore('git', () => {
 
   const error = ref<string | null>(null)
 
-  // Local selection (checkboxes) — no git calls until user clicks Stage/Unstage button
+  // Local selection (checkboxes)
   const selectedFiles = ref<Set<string>>(new Set())
 
   const stagedFiles = computed(() => status.value.staged || [])
@@ -90,16 +91,11 @@ export const useGitStore = defineStore('git', () => {
     return selectedFiles.value.has(file)
   }
 
-  // Real git add — called by button
   async function stageSelected() {
     const files = Array.from(selectedFiles.value)
     if (files.length === 0) return
     try {
-      await fetch(`${projectApiUrl.value}/git/stage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files }),
-      })
+      await gitApi.stage(projectApiUrl.value, files)
       selectedFiles.value = new Set()
       await fetchStatus()
     } catch (e) {
@@ -107,16 +103,11 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
-  // Real git reset — called by button
   async function unstageAll() {
     const files = status.value.staged || []
     if (files.length === 0) return
     try {
-      await fetch(`${projectApiUrl.value}/git/unstage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files }),
-      })
+      await gitApi.unstage(projectApiUrl.value, files)
       await fetchStatus()
     } catch (e) {
       error.value = getErrorMessage(e)
@@ -131,9 +122,7 @@ export const useGitStore = defineStore('git', () => {
     loading.value.status = true
     error.value = null
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/status`)
-      if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
+      const data = await gitApi.status(projectApiUrl.value)
       status.value = {
         branch: data.branch ?? '',
         modified: data.modified ?? [],
@@ -147,17 +136,13 @@ export const useGitStore = defineStore('git', () => {
     } finally {
       loading.value.status = false
     }
-    // Also refresh stash list
     fetchStash()
   }
 
   async function fetchBranches() {
     loading.value.branches = true
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/branches`)
-      if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
-      // Support both string[] and BranchInfo[] responses from API
+      const data = await gitApi.branches(projectApiUrl.value)
       if (Array.isArray(data) && data.length > 0) {
         if (typeof data[0] === 'string') {
           branches.value = (data as string[]).map((name: string) => ({
@@ -187,9 +172,7 @@ export const useGitStore = defineStore('git', () => {
   async function fetchLog() {
     loading.value.log = true
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/log/metadata?offset=0&limit=5`)
-      if (!res.ok) throw new Error(await res.text())
-      const data: CommitMeta[] = await res.json()
+      const data = await gitApi.logMetadata(projectApiUrl.value, 0, 5)
       log.value = data.map(m => ({
         hash: m.hash,
         short_hash: m.short_hash,
@@ -208,31 +191,21 @@ export const useGitStore = defineStore('git', () => {
 
   const LOG_PAGE_SIZE = 50
 
-  // Topology — загружается один раз
   const topoNodes = ref<TopoNode[]>([])
-
-  // Простой вид для рендеринга
   const graphNodes = computed(() => topoNodes.value)
-
-  // Метаданные — загружаются порциями
   const metadataMap = ref<Map<string, CommitMeta>>(new Map())
   const metadataLoaded = ref(0)
   const metadataLoading = ref(false)
-
   const totalCommits = computed(() => topoNodes.value.length)
 
   async function fetchGraph() {
     loading.value.log = true
     error.value = null
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/graph`)
-      if (!res.ok) throw new Error(await res.text())
-      const data: TopoNode[] = await res.json()
-      // Нормализуем parents: null → []
+      const data = await gitApi.graph(projectApiUrl.value)
       topoNodes.value = data.map(n => ({ id: n.id, parents: n.parents ?? [] }))
       metadataMap.value = new Map()
       metadataLoaded.value = 0
-      // Сразу подгружаем первую порцию
       await fetchMetadata(0, LOG_PAGE_SIZE)
     } catch (e) {
       error.value = getErrorMessage(e)
@@ -245,13 +218,7 @@ export const useGitStore = defineStore('git', () => {
     if (metadataLoading.value) return
     metadataLoading.value = true
     try {
-      let url = `${projectApiUrl.value}/git/log/metadata?offset=${offset}&limit=${limit}`
-      if (viewingBranch.value) {
-        url += `&branch=${encodeURIComponent(viewingBranch.value)}`
-      }
-      const res = await fetch(url)
-      if (!res.ok) throw new Error(await res.text())
-      const data: CommitMeta[] = await res.json()
+      const data = await gitApi.logMetadata(projectApiUrl.value, offset, limit, viewingBranch.value || undefined)
       const map = new Map(metadataMap.value)
       for (const m of data) {
         map.set(m.hash, m)
@@ -272,12 +239,7 @@ export const useGitStore = defineStore('git', () => {
   async function fetchDiff(file?: string) {
     loading.value.diff = true
     try {
-      const url = file
-        ? `${projectApiUrl.value}/git/diff?file=${encodeURIComponent(file)}`
-        : `${projectApiUrl.value}/git/diff`
-      const res = await fetch(url)
-      if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
+      const data = await gitApi.diff(projectApiUrl.value, file)
       diff.value = data.diff ?? ''
       if (file) {
         selectedFile.value = file
@@ -293,9 +255,7 @@ export const useGitStore = defineStore('git', () => {
     loading.value.commitDetail = true
     error.value = null
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/commits/${hash}`)
-      if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
+      const data = await gitApi.commitDetail(projectApiUrl.value, hash)
       selectedCommit.value = data as CommitDetail
     } catch (e) {
       error.value = getErrorMessage(e)
@@ -308,12 +268,7 @@ export const useGitStore = defineStore('git', () => {
     loading.value.commitDiff = true
     error.value = null
     try {
-      const url = file
-        ? `${projectApiUrl.value}/git/commits/${hash}/diff?file=${encodeURIComponent(file)}`
-        : `${projectApiUrl.value}/git/commits/${hash}/diff`
-      const res = await fetch(url)
-      if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
+      const data = await gitApi.commitDiff(projectApiUrl.value, hash, file)
       diff.value = data.diff ?? ''
     } catch (e) {
       error.value = getErrorMessage(e)
@@ -326,11 +281,7 @@ export const useGitStore = defineStore('git', () => {
     generatingMessage.value = true
     error.value = null
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/generate-commit`, {
-        method: 'POST',
-      })
-      if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
+      const data = await gitApi.generateCommit(projectApiUrl.value)
       commitMessage.value = data.message ?? ''
     } catch (e) {
       error.value = getErrorMessage(e)
@@ -343,12 +294,7 @@ export const useGitStore = defineStore('git', () => {
     loading.value.commit = true
     error.value = null
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/commit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, files }),
-      })
-      if (!res.ok) throw new Error(await res.text())
+      await gitApi.commit(projectApiUrl.value, message, files)
       commitMessage.value = ''
       await Promise.all([fetchStatus(), fetchGraph()])
     } catch (e) {
@@ -362,12 +308,7 @@ export const useGitStore = defineStore('git', () => {
     loading.value.checkout = true
     error.value = null
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/checkout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branch }),
-      })
-      if (!res.ok) throw new Error(await res.text())
+      await gitApi.checkout(projectApiUrl.value, branch)
       await Promise.all([fetchStatus(), fetchBranches(), fetchGraph()])
     } catch (e) {
       error.value = getErrorMessage(e)
@@ -380,10 +321,7 @@ export const useGitStore = defineStore('git', () => {
     loading.value.pull = true
     error.value = null
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/pull`, {
-        method: 'POST',
-      })
-      if (!res.ok) throw new Error(await res.text())
+      await gitApi.pull(projectApiUrl.value)
       await Promise.all([fetchStatus(), fetchGraph()])
     } catch (e) {
       error.value = getErrorMessage(e)
@@ -396,10 +334,7 @@ export const useGitStore = defineStore('git', () => {
     loading.value.push = true
     error.value = null
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/push`, {
-        method: 'POST',
-      })
-      if (!res.ok) throw new Error(await res.text())
+      await gitApi.push(projectApiUrl.value)
       await fetchStatus()
     } catch (e) {
       error.value = getErrorMessage(e)
@@ -408,7 +343,6 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
-  // Set viewing branch and refetch metadata
   function setViewingBranch(branch: string) {
     viewingBranch.value = branch
     metadataMap.value = new Map()
@@ -416,12 +350,9 @@ export const useGitStore = defineStore('git', () => {
     fetchMetadata(0, 50)
   }
 
-  // Fetch recent commits for a specific branch (for card expansion)
   async function fetchBranchCommits(branch: string) {
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/branches/${encodeURIComponent(branch)}/commits?limit=5`)
-      if (!res.ok) throw new Error(await res.text())
-      const data: CommitMeta[] = await res.json()
+      const data = await gitApi.branchCommits(projectApiUrl.value, branch, 5)
       const map = new Map(branchCommits.value)
       map.set(branch, data)
       branchCommits.value = map
@@ -433,20 +364,14 @@ export const useGitStore = defineStore('git', () => {
   // Stash actions
   async function fetchStash() {
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/stash`)
-      if (res.ok) stashEntries.value = await res.json()
+      stashEntries.value = await gitApi.stashList(projectApiUrl.value)
     } catch { /* best-effort, non-critical */ }
   }
 
   async function stashPush(message: string) {
     stashLoading.value = true
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/stash`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
-      })
-      if (!res.ok) throw new Error(await res.text())
+      await gitApi.stashPush(projectApiUrl.value, message)
       await fetchStash()
       await fetchStatus()
     } catch (e) {
@@ -458,8 +383,7 @@ export const useGitStore = defineStore('git', () => {
 
   async function stashApply(index: number) {
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/stash/${index}/apply`, { method: 'POST' })
-      if (!res.ok) throw new Error(await res.text())
+      await gitApi.stashApply(projectApiUrl.value, index)
       await fetchStatus()
     } catch (e) {
       toast.show('error', `Stash apply failed: ${getErrorMessage(e)}`)
@@ -468,8 +392,7 @@ export const useGitStore = defineStore('git', () => {
 
   async function stashPop(index: number) {
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/stash/${index}/pop`, { method: 'POST' })
-      if (!res.ok) throw new Error(await res.text())
+      await gitApi.stashPop(projectApiUrl.value, index)
       await fetchStash()
       await fetchStatus()
     } catch (e) {
@@ -479,8 +402,7 @@ export const useGitStore = defineStore('git', () => {
 
   async function stashDrop(index: number) {
     try {
-      const res = await fetch(`${projectApiUrl.value}/git/stash/${index}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error(await res.text())
+      await gitApi.stashDrop(projectApiUrl.value, index)
       await fetchStash()
     } catch (e) {
       toast.show('error', `Stash drop failed: ${getErrorMessage(e)}`)
@@ -488,10 +410,12 @@ export const useGitStore = defineStore('git', () => {
   }
 
   async function stashDiff(index: number): Promise<string> {
-    const res = await fetch(`${projectApiUrl.value}/git/stash/${index}/diff`)
-    if (!res.ok) return ''
-    const data = await res.json()
-    return data.diff || ''
+    try {
+      const data = await gitApi.stashDiff(projectApiUrl.value, index)
+      return data.diff || ''
+    } catch {
+      return ''
+    }
   }
 
   return {

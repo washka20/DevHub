@@ -25,7 +25,7 @@ describe('useProjectsStore', () => {
     await store.fetchProjects()
 
     expect(store.projects).toEqual(mockProjects)
-    expect(fetch).toHaveBeenCalledWith('/api/projects')
+    expect(fetch).toHaveBeenCalledWith('/api/projects', undefined)
   })
 
   it('fetchProjects sets default currentProject to first item', async () => {

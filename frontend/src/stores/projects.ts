@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/error'
+import { projectsApi } from '../api/projects'
 import type { Project } from '../types'
 
 export const useProjectsStore = defineStore('projects', () => {
@@ -12,9 +13,7 @@ export const useProjectsStore = defineStore('projects', () => {
 
   async function fetchProjects() {
     try {
-      const res = await fetch('/api/projects')
-      if (!res.ok) throw new Error(`Failed to fetch projects: ${res.statusText}`)
-      projects.value = await res.json()
+      projects.value = await projectsApi.list()
       if (!currentProject.value && projects.value.length > 0) {
         currentProject.value = projects.value[0]
       }

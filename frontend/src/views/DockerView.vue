@@ -2,6 +2,8 @@
 import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { useDockerStore } from '../stores/docker'
 import { useProjectsStore } from '../stores/projects'
+import { api, postJson, projectUrl } from '../api/client'
+import { terminalApi } from '../api/terminal'
 import ShimmerBlock from '../components/ShimmerBlock.vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -26,13 +28,10 @@ async function openTerminal(containerName: string) {
   closeTerminal()
 
   try {
-    const res = await fetch(`/api/projects/${projectName}/docker/${containerName}/exec`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cols: 80, rows: 24 }),
-    })
-    if (!res.ok) throw new Error(await res.text())
-    const data = await res.json()
+    const data = await api<{ session_id: string }>(
+      `${projectUrl(projectName)}/docker/${containerName}/exec`,
+      postJson({ cols: 80, rows: 24 }),
+    )
     execContainer.value = containerName
     execSessionId.value = data.session_id
     // Mount terminal after DOM update
@@ -93,7 +92,7 @@ function mountExecTerminal(sessionId: string) {
 
 function closeTerminal() {
   if (execSessionId.value) {
-    fetch(`/api/terminal/sessions/${execSessionId.value}`, { method: 'DELETE' }).catch(() => {})
+    terminalApi.destroySession(execSessionId.value).catch(() => {})
   }
   if (execWs) {
     execWs.onclose = null

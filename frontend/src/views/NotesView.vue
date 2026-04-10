@@ -2,6 +2,7 @@
 import { ref, watch, computed, onBeforeUnmount } from 'vue'
 import { useProjectsStore } from '../stores/projects'
 import { formatRelativeTime } from '../utils/date'
+import { notesApi } from '../api/notes'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
@@ -112,8 +113,7 @@ const editor = useEditor({
 async function fetchNotes() {
   if (!currentProject.value) return
   try {
-    const res = await fetch(`/api/projects/${currentProject.value.name}/notes`)
-    if (res.ok) notes.value = await res.json()
+    notes.value = await notesApi.list(currentProject.value.name)
   } catch {
     notes.value = []
   }
@@ -123,9 +123,7 @@ async function fetchNote(slug: string) {
   if (!currentProject.value) return
   loading.value = true
   try {
-    const res = await fetch(`/api/projects/${currentProject.value.name}/notes/${slug}`)
-    if (!res.ok) throw new Error('Not found')
-    const markdown = await res.text()
+    const markdown = await notesApi.get(currentProject.value.name, slug)
     editor.value?.commands.setContent(markdownToHtml(markdown))
     selectedSlug.value = slug
   } catch {
@@ -138,13 +136,7 @@ async function fetchNote(slug: string) {
 async function createNote() {
   if (!currentProject.value || !newNoteTitle.value.trim()) return
   try {
-    const res = await fetch(`/api/projects/${currentProject.value.name}/notes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: newNoteTitle.value.trim() }),
-    })
-    if (!res.ok) throw new Error('Failed to create')
-    const data = await res.json()
+    const data = await notesApi.create(currentProject.value.name, newNoteTitle.value.trim())
     newNoteTitle.value = ''
     showNewNoteInput.value = false
     await fetchNotes()
@@ -160,15 +152,7 @@ async function saveNote() {
   try {
     const html = editor.value.getHTML()
     const markdown = htmlToMarkdown(html)
-    const res = await fetch(
-      `/api/projects/${currentProject.value.name}/notes/${selectedSlug.value}`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: markdown }),
-      }
-    )
-    if (!res.ok) throw new Error('Failed to save')
+    await notesApi.save(currentProject.value.name, selectedSlug.value, markdown)
     saveStatus.value = 'saved'
     await fetchNotes()
     setTimeout(() => {
@@ -183,10 +167,7 @@ async function deleteNote(slug: string) {
   const noteTitle = notes.value.find(n => n.slug === slug)?.title || slug
   if (!currentProject.value || !confirm(`Delete "${noteTitle}"?`)) return
   try {
-    const res = await fetch(`/api/projects/${currentProject.value.name}/notes/${slug}`, {
-      method: 'DELETE',
-    })
-    if (!res.ok) throw new Error('Failed to delete')
+    await notesApi.delete(currentProject.value.name, slug)
     if (selectedSlug.value === slug) {
       selectedSlug.value = null
       editor.value?.commands.clearContent()

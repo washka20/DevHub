@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProjectsStore } from './projects'
+import { gitlabApi } from '../api/gitlab'
 import type {
   GitLabIssue,
   GitLabMR,
@@ -137,9 +138,8 @@ export const useGitLabStore = defineStore('gitlab', () => {
     myIssuesLoading.value = true
     try {
       const s = state || myIssuesState.value
-      const res = await fetch(`/api/gitlab/my/issues?state=${s}`)
-      if (!res.ok) throw new Error(await res.text())
-      myIssues.value = enrichProjectPath(await res.json() ?? [])
+      const data = await gitlabApi.myIssues(s)
+      myIssues.value = enrichProjectPath(data ?? [])
     } catch (e) {
       console.error('Failed to fetch my issues:', e)
       myIssues.value = []
@@ -152,9 +152,8 @@ export const useGitLabStore = defineStore('gitlab', () => {
     myMRsLoading.value = true
     try {
       const s = state || myMRsState.value
-      const res = await fetch(`/api/gitlab/my/merge-requests?state=${s}`)
-      if (!res.ok) throw new Error(await res.text())
-      myMRs.value = enrichProjectPath(await res.json() ?? [])
+      const data = await gitlabApi.myMergeRequests(s)
+      myMRs.value = enrichProjectPath(data ?? [])
     } catch (e) {
       console.error('Failed to fetch my MRs:', e)
       myMRs.value = []
@@ -165,37 +164,30 @@ export const useGitLabStore = defineStore('gitlab', () => {
 
   async function fetchLabels() {
     try {
-      const res = await fetch('/api/gitlab/labels')
-      if (res.ok) labels.value = await res.json() ?? []
+      labels.value = await gitlabApi.labels() ?? []
     } catch { /* ignore */ }
   }
 
   async function fetchMilestones() {
     try {
-      const res = await fetch('/api/gitlab/milestones')
-      if (res.ok) milestones.value = await res.json() ?? []
+      milestones.value = await gitlabApi.milestones() ?? []
     } catch { /* ignore */ }
   }
 
   async function fetchCurrentUser() {
     try {
-      const res = await fetch('/api/gitlab/user')
-      if (res.ok) {
-        const user = await res.json()
-        if (user) {
-          members.value = [user, ...members.value.filter(m => m.id !== user.id)]
-        }
+      const user = await gitlabApi.currentUser()
+      if (user) {
+        members.value = [user, ...members.value.filter(m => m.id !== user.id)]
       }
     } catch { /* ignore */ }
   }
 
-  // Detail — uses GitLab project ID directly (not DevHub project)
+  // Detail
   async function fetchIssueDetail(pid: number, iid: number) {
     detailLoading.value = true
     try {
-      const res = await fetch(`/api/gitlab/projects/${pid}/issues/${iid}`)
-      if (!res.ok) throw new Error(await res.text())
-      detailIssue.value = await res.json()
+      detailIssue.value = await gitlabApi.issueDetail(pid, iid)
     } catch (e) {
       console.error('Failed to fetch issue detail:', e)
     } finally {
@@ -205,9 +197,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
 
   async function fetchIssueNotes(pid: number, iid: number) {
     try {
-      const res = await fetch(`/api/gitlab/projects/${pid}/issues/${iid}/notes`)
-      if (!res.ok) throw new Error(await res.text())
-      detailNotes.value = await res.json() ?? []
+      detailNotes.value = await gitlabApi.issueNotes(pid, iid) ?? []
     } catch (e) {
       console.error('Failed to fetch issue notes:', e)
       detailNotes.value = []
@@ -217,11 +207,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
   async function fetchMRDetail(pid: number, iid: number) {
     detailLoading.value = true
     try {
-      // MR detail: use the issue detail endpoint pattern but for MRs
-      // GitLab API: GET /projects/:id/merge_requests/:iid
-      const res = await fetch(`/api/gitlab/projects/${pid}/merge-requests/${iid}/notes`)
-      // For now just use the MR data from the list (already has all fields)
-      // We don't have a dedicated MR detail endpoint yet, so skip
+      await gitlabApi.mrNotes(pid, iid)
     } catch (e) {
       console.error('Failed to fetch MR detail:', e)
     } finally {
@@ -231,9 +217,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
 
   async function fetchMRNotes(pid: number, iid: number) {
     try {
-      const res = await fetch(`/api/gitlab/projects/${pid}/merge-requests/${iid}/notes`)
-      if (!res.ok) throw new Error(await res.text())
-      detailNotes.value = await res.json() ?? []
+      detailNotes.value = await gitlabApi.mrNotes(pid, iid) ?? []
     } catch (e) {
       console.error('Failed to fetch MR notes:', e)
       detailNotes.value = []
@@ -278,7 +262,6 @@ export const useGitLabStore = defineStore('gitlab', () => {
         fetchIssueNotes(pid, iid),
       ])
     } else {
-      // For MRs, use the data from the list + fetch notes
       const mr = myMRs.value.find(m => m.iid === iid && m.project_path === projectPath)
       if (mr) detailMR.value = mr
       await fetchMRNotes(pid, iid)
@@ -292,7 +275,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
     detailNotes.value = []
   }
 
-  // Write operations — all use GitLab project ID directly
+  // Write operations
   async function createIssue(pid: number, body: {
     title: string
     description?: string
@@ -300,14 +283,9 @@ export const useGitLabStore = defineStore('gitlab', () => {
     assignee_ids?: number[]
     milestone_id?: number
   }) {
-    const res = await fetch(`/api/gitlab/projects/${pid}/issues`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) throw new Error(await res.text())
+    const result = await gitlabApi.createIssue(pid, body)
     await fetchMyIssues()
-    return res.json()
+    return result
   }
 
   async function createMR(pid: number, body: {
@@ -320,41 +298,23 @@ export const useGitLabStore = defineStore('gitlab', () => {
     draft?: boolean
     remove_source_branch?: boolean
   }) {
-    const res = await fetch(`/api/gitlab/projects/${pid}/merge-requests`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) throw new Error(await res.text())
+    const result = await gitlabApi.createMR(pid, body)
     await fetchMyMRs()
-    return res.json()
+    return result
   }
 
   async function addComment(pid: number, type: 'issue' | 'mr', iid: number, body: string) {
-    const endpoint = type === 'issue'
-      ? `/api/gitlab/projects/${pid}/issues/${iid}/notes`
-      : `/api/gitlab/projects/${pid}/merge-requests/${iid}/notes`
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body }),
-    })
-    if (!res.ok) throw new Error(await res.text())
-
     if (type === 'issue') {
+      await gitlabApi.addIssueNote(pid, iid, body)
       await fetchIssueNotes(pid, iid)
     } else {
+      await gitlabApi.addMRNote(pid, iid, body)
       await fetchMRNotes(pid, iid)
     }
   }
 
   async function updateIssueDescription(pid: number, iid: number, description: string) {
-    const res = await fetch(`/api/gitlab/projects/${pid}/issues/${iid}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description }),
-    })
-    if (!res.ok) throw new Error(await res.text())
+    await gitlabApi.updateIssue(pid, iid, { description })
     await fetchIssueDetail(pid, iid)
   }
 
@@ -380,18 +340,12 @@ export const useGitLabStore = defineStore('gitlab', () => {
   }
 
   async function updateIssueState(pid: number, iid: number, stateEvent: 'close' | 'reopen') {
-    const res = await fetch(`/api/gitlab/projects/${pid}/issues/${iid}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state_event: stateEvent }),
-    })
-    if (!res.ok) throw new Error(await res.text())
+    await gitlabApi.updateIssue(pid, iid, { state_event: stateEvent })
     await fetchIssueDetail(pid, iid)
     await fetchMyIssues()
   }
 
   async function updateMRState(pid: number, iid: number, stateEvent: 'close' | 'reopen') {
-    // MR state update not yet implemented in direct endpoints
     console.warn('MR state update not yet available')
   }
 
@@ -399,13 +353,8 @@ export const useGitLabStore = defineStore('gitlab', () => {
   async function fetchProjectGitLab() {
     projectLoading.value = true
     try {
-      const res = await fetch(`${apiBase()}/gitlab/project`)
-      if (res.ok) {
-        project.value = await res.json()
-        enabled.value = true
-      } else {
-        enabled.value = false
-      }
+      project.value = await gitlabApi.project(apiBase())
+      enabled.value = true
     } catch {
       enabled.value = false
     } finally {
@@ -415,22 +364,19 @@ export const useGitLabStore = defineStore('gitlab', () => {
 
   async function fetchProjectIssues() {
     try {
-      const res = await fetch(`${apiBase()}/gitlab/issues`)
-      if (res.ok) issues.value = await res.json() ?? []
+      issues.value = await gitlabApi.projectIssues(apiBase()) ?? []
     } catch { /* ignore */ }
   }
 
   async function fetchProjectMRs() {
     try {
-      const res = await fetch(`${apiBase()}/gitlab/merge-requests`)
-      if (res.ok) mergeRequests.value = await res.json() ?? []
+      mergeRequests.value = await gitlabApi.projectMRs(apiBase()) ?? []
     } catch { /* ignore */ }
   }
 
   async function fetchProjectPipelines() {
     try {
-      const res = await fetch(`${apiBase()}/gitlab/pipelines`)
-      if (res.ok) pipelines.value = await res.json() ?? []
+      pipelines.value = await gitlabApi.projectPipelines(apiBase()) ?? []
     } catch { /* ignore */ }
   }
 
@@ -464,13 +410,8 @@ export const useGitLabStore = defineStore('gitlab', () => {
 
   async function checkEnabled() {
     try {
-      const res = await fetch('/api/gitlab/enabled')
-      if (res.ok) {
-        const data = await res.json()
-        enabled.value = data.enabled === true
-      } else {
-        enabled.value = false
-      }
+      const data = await gitlabApi.checkEnabled()
+      enabled.value = data.enabled === true
     } catch {
       enabled.value = false
     }
@@ -480,7 +421,6 @@ export const useGitLabStore = defineStore('gitlab', () => {
   function enrichProjectPath<T extends { web_url: string; project_path?: string }>(items: T[]): T[] {
     for (const item of items) {
       if (!item.project_path && item.web_url) {
-        // https://gitlab.example.com/group/project/-/issues/42 → group/project
         const match = item.web_url.match(/^https?:\/\/[^/]+\/(.+?)\/-\//)
         item.project_path = match ? match[1] : 'unknown'
       }

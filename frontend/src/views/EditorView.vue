@@ -9,6 +9,7 @@ import { getFileIcon } from '../components/FileIcons'
 import { useFilesStore } from '../stores/files'
 import { useSettingsStore } from '../stores/settings'
 import { useProjectsStore } from '../stores/projects'
+import { filesApi } from '../api/files'
 
 const filesStore = useFilesStore()
 const settingsStore = useSettingsStore()
@@ -34,11 +35,10 @@ const diskContent = ref('')
 async function openDiff() {
   if (!filesStore.activeFilePath) return
   const projectName = projectsStore.currentProject?.name || '_'
-  const apiBase = `/api/projects/${projectName}`
-  const res = await fetch(`${apiBase}/files/content/${encodeURIComponent(filesStore.activeFilePath)}`)
-  if (!res.ok) return
-  diskContent.value = await res.text()
-  diffMode.value = true
+  try {
+    diskContent.value = await filesApi.content(projectName, filesStore.activeFilePath)
+    diffMode.value = true
+  } catch { /* ignore */ }
 }
 
 function closeDiff() {

@@ -4,9 +4,10 @@ import CommandButton from '../components/CommandButton.vue'
 import TerminalOutput from '../components/TerminalOutput.vue'
 import { useProject } from '../composables/useProject'
 import { useWebSocket } from '../composables/useWebSocket'
+import { projectsApi } from '../api/projects'
 import type { MakeCommand } from '../types'
 
-const { currentProject, projectApiUrl } = useProject()
+const { currentProject } = useProject()
 
 const terminalLines = ref<string[]>([])
 const running = ref(false)
@@ -82,12 +83,7 @@ async function fetchCommands() {
 
   commandsLoading.value = true
   try {
-    const res = await fetch(`${projectApiUrl.value}/commands`)
-    if (res.ok) {
-      commands.value = await res.json()
-    } else {
-      commands.value = []
-    }
+    commands.value = await projectsApi.commands(currentProject.value.name)
   } catch {
     commands.value = []
   } finally {
@@ -115,18 +111,7 @@ async function execute(cmdName: string) {
   terminalLines.value = [`$ make ${cmdName}`]
 
   try {
-    const res = await fetch(`${projectApiUrl.value}/exec`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cmd: cmdName }),
-    })
-
-    if (!res.ok) {
-      const data = await res.json()
-      terminalLines.value.push(`Error: ${data.error || 'Failed to start command'}`)
-      running.value = false
-      loadingCmd.value = null
-    }
+    await projectsApi.exec(currentProject.value.name, cmdName)
     // On success (202), output will stream via WebSocket
   } catch (err) {
     terminalLines.value.push(`Error: ${err}`)
