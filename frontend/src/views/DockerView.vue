@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue'
+import { onUnmounted, ref, computed, watch, nextTick } from 'vue'
 import { useDockerStore } from '../stores/docker'
 import { useProjectsStore } from '../stores/projects'
 import { api, postJson, projectUrl } from '../api/client'
@@ -203,11 +203,18 @@ function stateClass(state: string): string {
 
 const hasDocker = computed(() => projectsStore.currentProject?.has_docker ?? false)
 
-onMounted(() => {
-  if (hasDocker.value) {
-    dockerStore.fetchContainers()
-  }
-})
+// Refetch when project changes (component survives route transitions)
+watch(
+  () => projectsStore.currentProject?.name,
+  () => {
+    closeLogs()
+    closeTerminal()
+    if (hasDocker.value) {
+      dockerStore.fetchContainers()
+    }
+  },
+  { immediate: true },
+)
 
 onUnmounted(() => {
   disconnectLogs()
