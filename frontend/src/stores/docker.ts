@@ -21,16 +21,17 @@ export const useDockerStore = defineStore('docker', () => {
   }
 
   const runningCount = computed(() =>
-    containers.value.filter((c) => c.state === 'running').length
+    (containers.value ?? []).filter((c) => c.state === 'running').length
   )
 
-  const totalCount = computed(() => containers.value.length)
+  const totalCount = computed(() => (containers.value ?? []).length)
 
   async function fetchContainers() {
     loading.value = true
     try {
-      containers.value = await dockerApi.containers(projectName())
+      containers.value = await dockerApi.containers(projectName()) ?? []
     } catch (e) {
+      containers.value = []
       toast.show('error', getErrorMessage(e))
     } finally {
       loading.value = false
