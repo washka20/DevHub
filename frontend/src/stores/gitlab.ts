@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProjectsStore } from './projects'
+import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/error'
 import { gitlabApi } from '../api/gitlab'
 import type {
   GitLabIssue,
@@ -15,6 +17,7 @@ import type {
 
 export const useGitLabStore = defineStore('gitlab', () => {
   const projectsStore = useProjectsStore()
+  const toast = useToast()
 
   function apiBase(): string {
     const project = projectsStore.currentProject
@@ -141,7 +144,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
       const data = await gitlabApi.myIssues(s)
       myIssues.value = enrichProjectPath(data ?? [])
     } catch (e) {
-      console.error('Failed to fetch my issues:', e)
+      toast.show('error', `Failed to fetch issues: ${getErrorMessage(e)}`)
       myIssues.value = []
     } finally {
       myIssuesLoading.value = false
@@ -155,7 +158,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
       const data = await gitlabApi.myMergeRequests(s)
       myMRs.value = enrichProjectPath(data ?? [])
     } catch (e) {
-      console.error('Failed to fetch my MRs:', e)
+      toast.show('error', `Failed to fetch MRs: ${getErrorMessage(e)}`)
       myMRs.value = []
     } finally {
       myMRsLoading.value = false
@@ -189,7 +192,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
     try {
       detailIssue.value = await gitlabApi.issueDetail(pid, iid)
     } catch (e) {
-      console.error('Failed to fetch issue detail:', e)
+      toast.show('error', `Failed to fetch issue: ${getErrorMessage(e)}`)
     } finally {
       detailLoading.value = false
     }
@@ -199,7 +202,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
     try {
       detailNotes.value = await gitlabApi.issueNotes(pid, iid) ?? []
     } catch (e) {
-      console.error('Failed to fetch issue notes:', e)
+      toast.show('error', `Failed to fetch issue notes: ${getErrorMessage(e)}`)
       detailNotes.value = []
     }
   }
@@ -209,7 +212,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
     try {
       await gitlabApi.mrNotes(pid, iid)
     } catch (e) {
-      console.error('Failed to fetch MR detail:', e)
+      toast.show('error', `Failed to fetch MR: ${getErrorMessage(e)}`)
     } finally {
       detailLoading.value = false
     }
@@ -219,7 +222,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
     try {
       detailNotes.value = await gitlabApi.mrNotes(pid, iid) ?? []
     } catch (e) {
-      console.error('Failed to fetch MR notes:', e)
+      toast.show('error', `Failed to fetch MR notes: ${getErrorMessage(e)}`)
       detailNotes.value = []
     }
   }
@@ -346,7 +349,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
   }
 
   async function updateMRState(pid: number, iid: number, stateEvent: 'close' | 'reopen') {
-    console.warn('MR state update not yet available')
+    toast.show('error', 'MR state update not yet available')
   }
 
   // Per-project (existing)

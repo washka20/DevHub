@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProjectsStore } from './projects'
+import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/error'
 import { filesApi } from '../api/files'
 import type { FileNode, OpenFile } from '../types'
 
@@ -44,6 +46,7 @@ function isImage(filename: string): boolean {
 
 export const useFilesStore = defineStore('files', () => {
   const projectsStore = useProjectsStore()
+  const toast = useToast()
 
   function projectName(): string {
     return projectsStore.currentProject?.name ?? '_'
@@ -65,6 +68,9 @@ export const useFilesStore = defineStore('files', () => {
     loading.value = true
     try {
       tree.value = await filesApi.tree(projectName())
+    } catch (e) {
+      toast.show('error', `Failed to load file tree: ${getErrorMessage(e)}`)
+      tree.value = []
     } finally {
       loading.value = false
     }
@@ -105,7 +111,9 @@ export const useFilesStore = defineStore('files', () => {
         language: detectLanguage(name),
       })
       activeFilePath.value = path
-    } catch { /* file not readable */ }
+    } catch (e) {
+      toast.show('error', `Failed to open file: ${getErrorMessage(e)}`)
+    }
   }
 
   async function saveFile(path: string) {
@@ -117,7 +125,9 @@ export const useFilesStore = defineStore('files', () => {
       file.originalContent = file.content
       file.dirty = false
       changedOnDisk.value.delete(path)
-    } catch { /* save failed */ }
+    } catch (e) {
+      toast.show('error', `Failed to save file: ${getErrorMessage(e)}`)
+    }
   }
 
   function updateContent(path: string, content: string) {
@@ -144,14 +154,22 @@ export const useFilesStore = defineStore('files', () => {
   }
 
   async function createFile(path: string, isDir: boolean) {
-    await filesApi.create(projectName(), path, isDir)
-    await fetchTree()
+    try {
+      await filesApi.create(projectName(), path, isDir)
+      await fetchTree()
+    } catch (e) {
+      toast.show('error', `Failed to create ${isDir ? 'folder' : 'file'}: ${getErrorMessage(e)}`)
+    }
   }
 
   async function deleteFile(path: string) {
-    await filesApi.delete(projectName(), path)
-    closeFile(path)
-    await fetchTree()
+    try {
+      await filesApi.delete(projectName(), path)
+      closeFile(path)
+      await fetchTree()
+    } catch (e) {
+      toast.show('error', `Failed to delete: ${getErrorMessage(e)}`)
+    }
   }
 
   async function openInFileManager(path: string) {
@@ -159,19 +177,23 @@ export const useFilesStore = defineStore('files', () => {
   }
 
   async function renameFile(oldPath: string, newPath: string) {
-    await filesApi.rename(projectName(), oldPath, newPath)
+    try {
+      await filesApi.rename(projectName(), oldPath, newPath)
 
-    const file = openFiles.value.find((f) => f.path === oldPath)
-    if (file) {
-      file.path = newPath
-      file.name = newPath.split('/').pop() ?? newPath
-      file.language = detectLanguage(file.name)
-      if (activeFilePath.value === oldPath) {
-        activeFilePath.value = newPath
+      const file = openFiles.value.find((f) => f.path === oldPath)
+      if (file) {
+        file.path = newPath
+        file.name = newPath.split('/').pop() ?? newPath
+        file.language = detectLanguage(file.name)
+        if (activeFilePath.value === oldPath) {
+          activeFilePath.value = newPath
+        }
       }
-    }
 
-    await fetchTree()
+      await fetchTree()
+    } catch (e) {
+      toast.show('error', `Failed to rename: ${getErrorMessage(e)}`)
+    }
   }
 
   async function checkOpenFiles(paths: string[]) {

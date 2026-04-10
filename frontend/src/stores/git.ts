@@ -55,7 +55,6 @@ export const useGitStore = defineStore('git', () => {
     commitDiff: false,
   })
 
-  const error = ref<string | null>(null)
 
   // Local selection (checkboxes)
   const selectedFiles = ref<Set<string>>(new Set())
@@ -99,7 +98,7 @@ export const useGitStore = defineStore('git', () => {
       selectedFiles.value = new Set()
       await fetchStatus()
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     }
   }
 
@@ -110,7 +109,7 @@ export const useGitStore = defineStore('git', () => {
       await gitApi.unstage(projectApiUrl.value, files)
       await fetchStatus()
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     }
   }
 
@@ -120,7 +119,6 @@ export const useGitStore = defineStore('git', () => {
 
   async function fetchStatus() {
     loading.value.status = true
-    error.value = null
     try {
       const data = await gitApi.status(projectApiUrl.value)
       status.value = {
@@ -132,7 +130,7 @@ export const useGitStore = defineStore('git', () => {
         behind: data.behind ?? 0,
       }
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     } finally {
       loading.value.status = false
     }
@@ -163,7 +161,7 @@ export const useGitStore = defineStore('git', () => {
         branches.value = []
       }
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     } finally {
       loading.value.branches = false
     }
@@ -183,7 +181,7 @@ export const useGitStore = defineStore('git', () => {
         parents: [],
       }))
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     } finally {
       loading.value.log = false
     }
@@ -200,7 +198,6 @@ export const useGitStore = defineStore('git', () => {
 
   async function fetchGraph() {
     loading.value.log = true
-    error.value = null
     try {
       const data = await gitApi.graph(projectApiUrl.value)
       topoNodes.value = data.map(n => ({ id: n.id, parents: n.parents ?? [] }))
@@ -208,7 +205,7 @@ export const useGitStore = defineStore('git', () => {
       metadataLoaded.value = 0
       await fetchMetadata(0, LOG_PAGE_SIZE)
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     } finally {
       loading.value.log = false
     }
@@ -226,7 +223,7 @@ export const useGitStore = defineStore('git', () => {
       metadataMap.value = map
       metadataLoaded.value = offset + data.length
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     } finally {
       metadataLoading.value = false
     }
@@ -245,7 +242,7 @@ export const useGitStore = defineStore('git', () => {
         selectedFile.value = file
       }
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     } finally {
       loading.value.diff = false
     }
@@ -253,12 +250,11 @@ export const useGitStore = defineStore('git', () => {
 
   async function fetchCommitDetail(hash: string) {
     loading.value.commitDetail = true
-    error.value = null
     try {
       const data = await gitApi.commitDetail(projectApiUrl.value, hash)
       selectedCommit.value = data as CommitDetail
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     } finally {
       loading.value.commitDetail = false
     }
@@ -266,12 +262,11 @@ export const useGitStore = defineStore('git', () => {
 
   async function fetchCommitDiff(hash: string, file?: string) {
     loading.value.commitDiff = true
-    error.value = null
     try {
       const data = await gitApi.commitDiff(projectApiUrl.value, hash, file)
       diff.value = data.diff ?? ''
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     } finally {
       loading.value.commitDiff = false
     }
@@ -279,12 +274,11 @@ export const useGitStore = defineStore('git', () => {
 
   async function generateCommitMessage() {
     generatingMessage.value = true
-    error.value = null
     try {
       const data = await gitApi.generateCommit(projectApiUrl.value)
       commitMessage.value = data.message ?? ''
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     } finally {
       generatingMessage.value = false
     }
@@ -292,13 +286,12 @@ export const useGitStore = defineStore('git', () => {
 
   async function commit(message: string, files: string[]) {
     loading.value.commit = true
-    error.value = null
     try {
       await gitApi.commit(projectApiUrl.value, message, files)
       commitMessage.value = ''
       await Promise.all([fetchStatus(), fetchGraph()])
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     } finally {
       loading.value.commit = false
     }
@@ -306,12 +299,11 @@ export const useGitStore = defineStore('git', () => {
 
   async function checkout(branch: string) {
     loading.value.checkout = true
-    error.value = null
     try {
       await gitApi.checkout(projectApiUrl.value, branch)
       await Promise.all([fetchStatus(), fetchBranches(), fetchGraph()])
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     } finally {
       loading.value.checkout = false
     }
@@ -319,12 +311,11 @@ export const useGitStore = defineStore('git', () => {
 
   async function pull() {
     loading.value.pull = true
-    error.value = null
     try {
       await gitApi.pull(projectApiUrl.value)
       await Promise.all([fetchStatus(), fetchGraph()])
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     } finally {
       loading.value.pull = false
     }
@@ -332,12 +323,11 @@ export const useGitStore = defineStore('git', () => {
 
   async function push() {
     loading.value.push = true
-    error.value = null
     try {
       await gitApi.push(projectApiUrl.value)
       await fetchStatus()
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     } finally {
       loading.value.push = false
     }
@@ -357,7 +347,7 @@ export const useGitStore = defineStore('git', () => {
       map.set(branch, data)
       branchCommits.value = map
     } catch (e) {
-      error.value = getErrorMessage(e)
+      toast.show('error', getErrorMessage(e))
     }
   }
 
@@ -431,7 +421,6 @@ export const useGitStore = defineStore('git', () => {
     commitMessage,
     generatingMessage,
     loading,
-    error,
     selectedFiles,
     stagedFiles,
     totalModified,

@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
+import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/error'
 import { settingsApi } from '../api/projects'
 import type { ServerSettings, UISettings, TerminalTheme } from '../types'
 import { terminalThemes } from '../data/terminal-themes'
@@ -28,6 +30,8 @@ function loadUI(): UISettings {
 }
 
 export const useSettingsStore = defineStore('settings', () => {
+  const toast = useToast()
+
   const server = ref<ServerSettings>({
     port: 9000, projects_dir: '~/project', default_project: 'cfa',
     terminal: { max_sessions: 10, shell: '' },
@@ -42,7 +46,9 @@ export const useSettingsStore = defineStore('settings', () => {
   async function fetchSettings() {
     try {
       server.value = await settingsApi.fetch()
-    } catch { /* ignore */ }
+    } catch (e) {
+      toast.show('error', `Failed to load settings: ${getErrorMessage(e)}`)
+    }
   }
 
   async function saveSettings(updates: Partial<ServerSettings>) {
@@ -50,7 +56,8 @@ export const useSettingsStore = defineStore('settings', () => {
       await settingsApi.save(updates)
       await fetchSettings()
       return true
-    } catch {
+    } catch (e) {
+      toast.show('error', `Failed to save settings: ${getErrorMessage(e)}`)
       return false
     }
   }

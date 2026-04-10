@@ -1273,10 +1273,6 @@ watch(() => gitStore.status.branch, () => {
       </div>
     </Teleport>
 
-    <!-- Error bar -->
-    <div v-if="gitStore.error" class="error-bar" @click="gitStore.error = null">
-      {{ gitStore.error }}
-    </div>
   </div>
 </template>
 
@@ -2956,24 +2952,6 @@ watch(() => gitStore.status.branch, () => {
   font-size: 13px;
 }
 
-/* ===== Error bar ===== */
-
-.error-bar {
-  position: fixed;
-  bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 10px 20px;
-  background: rgba(248, 81, 73, 0.15);
-  border: 1px solid var(--accent-red);
-  border-radius: 8px;
-  color: var(--accent-red);
-  font-size: 13px;
-  cursor: pointer;
-  z-index: 200;
-  max-width: 600px;
-  text-align: center;
-}
 
 /* ===== Stash Section ===== */
 
