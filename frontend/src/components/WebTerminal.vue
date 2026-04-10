@@ -8,6 +8,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { SearchAddon } from '@xterm/addon-search'
 import { useTerminalStore } from '../stores/terminal'
 import { useSettingsStore } from '../stores/settings'
+import { shortCwd } from '../utils/path'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
@@ -208,12 +209,6 @@ async function pollCwd() {
   } catch { /* ignore */ }
 }
 
-function shortCwd(cwd: string): string {
-  const home = '/home/'
-  const idx = cwd.indexOf('/', home.length)
-  if (idx > 0) return '~' + cwd.slice(idx)
-  return cwd
-}
 
 // ---------------------------------------------------------------------------
 // Terminal init

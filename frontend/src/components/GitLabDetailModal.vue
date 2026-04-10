@@ -3,6 +3,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { GitLabIssue, GitLabMR, GitLabNote } from '../types'
 import { useMarkdown } from '../composables/useMarkdown'
 import { useGitLabStore } from '../stores/gitlab'
+import { formatRelativeTime, formatDate, isOverdue, formatDueDate } from '../utils/date'
+import { hexToRgb } from '../utils/color'
 
 const props = defineProps<{
   item: GitLabIssue | GitLabMR | null
@@ -100,14 +102,6 @@ const canToggleState = computed(() => {
   return props.item.state === 'opened' || props.item.state === 'closed'
 })
 
-function hexToRgb(hex: string): string {
-  const h = hex.replace('#', '')
-  const r = parseInt(h.substring(0, 2), 16)
-  const g = parseInt(h.substring(2, 4), 16)
-  const b = parseInt(h.substring(4, 6), 16)
-  return `${r},${g},${b}`
-}
-
 function labelStyle(labelName: string): Record<string, string> {
   const found = gitlabStore.labels.find(l => l.name === labelName)
   if (found?.color) {
@@ -133,36 +127,7 @@ function getInitials(name: string): string {
   return name.substring(0, 2).toUpperCase()
 }
 
-function formatTimeAgo(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  if (diffMins < 1) return 'just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-  const diffHours = Math.floor(diffMins / 60)
-  if (diffHours < 24) return `${diffHours}h ago`
-  const diffDays = Math.floor(diffHours / 24)
-  if (diffDays < 30) return `${diffDays}d ago`
-  return date.toLocaleDateString()
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
-
-function isOverdue(dueDate: string): boolean {
-  return new Date(dueDate) < new Date()
-}
-
-function formatDueDate(dueDate: string): string {
-  const formatted = formatDate(dueDate)
-  return isOverdue(dueDate) ? `${formatted} (overdue)` : formatted
-}
+const formatTimeAgo = formatRelativeTime
 
 async function submitComment() {
   if (!commentText.value.trim()) return

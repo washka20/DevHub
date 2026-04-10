@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProject } from '../composables/useProject'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/error'
 import type { GitStatus, CommitDetail, BranchInfo, CommitMeta, Commit, StashEntry } from '../types'
 
 interface TopoNode {
@@ -102,7 +103,7 @@ export const useGitStore = defineStore('git', () => {
       selectedFiles.value = new Set()
       await fetchStatus()
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     }
   }
 
@@ -118,7 +119,7 @@ export const useGitStore = defineStore('git', () => {
       })
       await fetchStatus()
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     }
   }
 
@@ -142,7 +143,7 @@ export const useGitStore = defineStore('git', () => {
         behind: data.behind ?? 0,
       }
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     } finally {
       loading.value.status = false
     }
@@ -177,7 +178,7 @@ export const useGitStore = defineStore('git', () => {
         branches.value = []
       }
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     } finally {
       loading.value.branches = false
     }
@@ -199,7 +200,7 @@ export const useGitStore = defineStore('git', () => {
         parents: [],
       }))
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     } finally {
       loading.value.log = false
     }
@@ -234,7 +235,7 @@ export const useGitStore = defineStore('git', () => {
       // Сразу подгружаем первую порцию
       await fetchMetadata(0, LOG_PAGE_SIZE)
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     } finally {
       loading.value.log = false
     }
@@ -258,7 +259,7 @@ export const useGitStore = defineStore('git', () => {
       metadataMap.value = map
       metadataLoaded.value = offset + data.length
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     } finally {
       metadataLoading.value = false
     }
@@ -282,7 +283,7 @@ export const useGitStore = defineStore('git', () => {
         selectedFile.value = file
       }
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     } finally {
       loading.value.diff = false
     }
@@ -297,7 +298,7 @@ export const useGitStore = defineStore('git', () => {
       const data = await res.json()
       selectedCommit.value = data as CommitDetail
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     } finally {
       loading.value.commitDetail = false
     }
@@ -315,7 +316,7 @@ export const useGitStore = defineStore('git', () => {
       const data = await res.json()
       diff.value = data.diff ?? ''
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     } finally {
       loading.value.commitDiff = false
     }
@@ -332,7 +333,7 @@ export const useGitStore = defineStore('git', () => {
       const data = await res.json()
       commitMessage.value = data.message ?? ''
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     } finally {
       generatingMessage.value = false
     }
@@ -351,7 +352,7 @@ export const useGitStore = defineStore('git', () => {
       commitMessage.value = ''
       await Promise.all([fetchStatus(), fetchGraph()])
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     } finally {
       loading.value.commit = false
     }
@@ -369,7 +370,7 @@ export const useGitStore = defineStore('git', () => {
       if (!res.ok) throw new Error(await res.text())
       await Promise.all([fetchStatus(), fetchBranches(), fetchGraph()])
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     } finally {
       loading.value.checkout = false
     }
@@ -385,7 +386,7 @@ export const useGitStore = defineStore('git', () => {
       if (!res.ok) throw new Error(await res.text())
       await Promise.all([fetchStatus(), fetchGraph()])
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     } finally {
       loading.value.pull = false
     }
@@ -401,7 +402,7 @@ export const useGitStore = defineStore('git', () => {
       if (!res.ok) throw new Error(await res.text())
       await fetchStatus()
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     } finally {
       loading.value.push = false
     }
@@ -425,7 +426,7 @@ export const useGitStore = defineStore('git', () => {
       map.set(branch, data)
       branchCommits.value = map
     } catch (e) {
-      error.value = (e as Error).message
+      error.value = getErrorMessage(e)
     }
   }
 
@@ -449,7 +450,7 @@ export const useGitStore = defineStore('git', () => {
       await fetchStash()
       await fetchStatus()
     } catch (e) {
-      toast.show('error', `Stash push failed: ${(e as Error).message}`)
+      toast.show('error', `Stash push failed: ${getErrorMessage(e)}`)
     } finally {
       stashLoading.value = false
     }
@@ -461,7 +462,7 @@ export const useGitStore = defineStore('git', () => {
       if (!res.ok) throw new Error(await res.text())
       await fetchStatus()
     } catch (e) {
-      toast.show('error', `Stash apply failed: ${(e as Error).message}`)
+      toast.show('error', `Stash apply failed: ${getErrorMessage(e)}`)
     }
   }
 
@@ -472,7 +473,7 @@ export const useGitStore = defineStore('git', () => {
       await fetchStash()
       await fetchStatus()
     } catch (e) {
-      toast.show('error', `Stash pop failed: ${(e as Error).message}`)
+      toast.show('error', `Stash pop failed: ${getErrorMessage(e)}`)
     }
   }
 
@@ -482,7 +483,7 @@ export const useGitStore = defineStore('git', () => {
       if (!res.ok) throw new Error(await res.text())
       await fetchStash()
     } catch (e) {
-      toast.show('error', `Stash drop failed: ${(e as Error).message}`)
+      toast.show('error', `Stash drop failed: ${getErrorMessage(e)}`)
     }
   }
 

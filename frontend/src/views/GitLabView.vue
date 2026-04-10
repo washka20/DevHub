@@ -3,6 +3,9 @@ import { onMounted, onUnmounted, computed, ref } from 'vue'
 import { useGitLabStore } from '../stores/gitlab'
 import { useGitStore } from '../stores/git'
 import { useToast } from '../composables/useToast'
+import { formatRelativeTime, isOverdue } from '../utils/date'
+import { hexToRgb } from '../utils/color'
+import { getErrorMessage } from '../utils/error'
 import GitLabDetailModal from '../components/GitLabDetailModal.vue'
 import GitLabCreateIssue from '../components/GitLabCreateIssue.vue'
 import GitLabCreateMR from '../components/GitLabCreateMR.vue'
@@ -39,32 +42,7 @@ function isGroupCollapsed(key: string): boolean {
   return collapsedGroups.value.has(key)
 }
 
-function formatTimeAgo(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  if (diffMins < 1) return 'just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-  const diffHours = Math.floor(diffMins / 60)
-  if (diffHours < 24) return `${diffHours}h ago`
-  const diffDays = Math.floor(diffHours / 24)
-  if (diffDays < 30) return `${diffDays}d ago`
-  return date.toLocaleDateString()
-}
-
-function isOverdue(dueDate: string | null): boolean {
-  if (!dueDate) return false
-  return new Date(dueDate) < new Date()
-}
-
-function hexToRgb(hex: string): string {
-  const h = hex.replace('#', '')
-  const r = parseInt(h.substring(0, 2), 16)
-  const g = parseInt(h.substring(2, 4), 16)
-  const b = parseInt(h.substring(4, 6), 16)
-  return `${r},${g},${b}`
-}
+const formatTimeAgo = formatRelativeTime
 
 // Build label color map from label_details across all issues and MRs
 const labelColorMap = computed(() => {
@@ -148,7 +126,7 @@ async function handleAddComment(body: string) {
     )
     toast.show('success', 'Comment added')
   } catch (e) {
-    toast.show('error', `Failed to add comment: ${(e as Error).message}`)
+    toast.show('error', `Failed to add comment: ${getErrorMessage(e)}`)
   }
 }
 
@@ -157,7 +135,7 @@ async function handleToggleCheckbox(index: number) {
   try {
     await store.toggleCheckbox(store.selectedItem.projectId, store.selectedItem.iid, index)
   } catch (e) {
-    toast.show('error', `Failed to toggle checkbox: ${(e as Error).message}`)
+    toast.show('error', `Failed to toggle checkbox: ${getErrorMessage(e)}`)
   }
 }
 
@@ -171,7 +149,7 @@ async function handleUpdateState(stateEvent: 'close' | 'reopen') {
     }
     toast.show('success', `${store.selectedItem.type === 'issue' ? 'Issue' : 'MR'} ${stateEvent === 'close' ? 'closed' : 'reopened'}`)
   } catch (e) {
-    toast.show('error', `Failed: ${(e as Error).message}`)
+    toast.show('error', `Failed: ${getErrorMessage(e)}`)
   }
 }
 
@@ -194,7 +172,7 @@ async function handleCreateIssue(data: {
     store.showCreateIssue = false
     toast.show('success', 'Issue created')
   } catch (e) {
-    toast.show('error', `Failed to create issue: ${(e as Error).message}`)
+    toast.show('error', `Failed to create issue: ${getErrorMessage(e)}`)
   }
 }
 
@@ -223,7 +201,7 @@ async function handleCreateMR(data: {
     store.showCreateMR = false
     toast.show('success', 'Merge request created')
   } catch (e) {
-    toast.show('error', `Failed to create MR: ${(e as Error).message}`)
+    toast.show('error', `Failed to create MR: ${getErrorMessage(e)}`)
   }
 }
 

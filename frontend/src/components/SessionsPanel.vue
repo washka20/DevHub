@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, computed } from 'vue'
 import { useTerminalStore, type LiveSession } from '../stores/terminal'
+import { formatRelativeTime } from '../utils/date'
+import { shortCwd } from '../utils/path'
 
 const terminalStore = useTerminalStore()
 
@@ -8,23 +10,7 @@ onMounted(() => {
   terminalStore.fetchLiveSessions()
 })
 
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const sec = Math.floor(diff / 1000)
-  if (sec < 60) return `${sec}s`
-  const min = Math.floor(sec / 60)
-  if (min < 60) return `${min}m`
-  const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr}h`
-  return `${Math.floor(hr / 24)}d`
-}
-
-function shortCwd(cwd: string): string {
-  const home = '/home/'
-  const idx = cwd.indexOf('/', home.length)
-  if (idx > 0) return '~' + cwd.slice(idx)
-  return cwd
-}
+const relativeTime = formatRelativeTime
 
 const enrichedSessions = computed(() => {
   return terminalStore.liveSessions.map((s: LiveSession) => ({

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, onBeforeUnmount } from 'vue'
 import { useProjectsStore } from '../stores/projects'
+import { formatRelativeTime } from '../utils/date'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
@@ -243,18 +244,7 @@ onBeforeUnmount(() => {
   }
 })
 
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  const diffMs = Date.now() - d.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  if (diffMins < 1) return 'just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-  const diffHours = Math.floor(diffMins / 60)
-  if (diffHours < 24) return `${diffHours}h ago`
-  const diffDays = Math.floor(diffHours / 24)
-  if (diffDays < 7) return `${diffDays}d ago`
-  return d.toLocaleDateString()
-}
+const formatDate = formatRelativeTime
 </script>
 
 <template>

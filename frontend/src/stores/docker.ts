@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProjectsStore } from './projects'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/error'
 import type { Container } from '../types'
 
 export const useDockerStore = defineStore('docker', () => {
@@ -33,7 +34,7 @@ export const useDockerStore = defineStore('docker', () => {
       if (!res.ok) throw new Error(`Failed to fetch containers: ${res.statusText}`)
       containers.value = await res.json()
     } catch (e) {
-      toast.show('error', (e as Error).message)
+      toast.show('error', getErrorMessage(e))
     } finally {
       loading.value = false
     }
@@ -50,7 +51,7 @@ export const useDockerStore = defineStore('docker', () => {
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await fetchContainers()
     } catch (e) {
-      toast.show('error', (e as Error).message)
+      toast.show('error', getErrorMessage(e))
     } finally {
       actionLoading.value = null
     }
@@ -64,7 +65,7 @@ export const useDockerStore = defineStore('docker', () => {
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await fetchContainers()
     } catch (e) {
-      toast.show('error', (e as Error).message)
+      toast.show('error', getErrorMessage(e))
     } finally {
       composeLoading.value = null
     }
@@ -78,7 +79,7 @@ export const useDockerStore = defineStore('docker', () => {
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await fetchContainers()
     } catch (e) {
-      toast.show('error', (e as Error).message)
+      toast.show('error', getErrorMessage(e))
     } finally {
       composeLoading.value = null
     }
@@ -92,7 +93,7 @@ export const useDockerStore = defineStore('docker', () => {
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await fetchContainers()
     } catch (e) {
-      toast.show('error', (e as Error).message)
+      toast.show('error', getErrorMessage(e))
     } finally {
       composeLoading.value = null
     }

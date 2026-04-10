@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/error'
 import type { Project } from '../types'
 
 export const useProjectsStore = defineStore('projects', () => {
@@ -18,7 +19,7 @@ export const useProjectsStore = defineStore('projects', () => {
         currentProject.value = projects.value[0]
       }
     } catch (e) {
-      toast.show('error', (e as Error).message)
+      toast.show('error', getErrorMessage(e))
     }
   }
 
