@@ -4,7 +4,7 @@ import { useGitBranchesStore } from './gitBranches'
 import { useGitDiffStore } from './gitDiff'
 import { useGitStashStore } from './gitStash'
 import { useGitCommitStore } from './gitCommit'
-import { computed, ref, toRef } from 'vue'
+import { computed, ref } from 'vue'
 
 export { useGitStatusStore } from './gitStatus'
 export { useGitLogStore } from './gitLog'
@@ -50,9 +50,9 @@ export function useGitStore() {
     set diff(v) { statusStore.diff = v },
     get selectedFiles() { return statusStore.selectedFiles },
     set selectedFiles(v) { statusStore.selectedFiles = v },
-    stagedFiles: toRef(statusStore, 'stagedFiles'),
-    totalModified: toRef(statusStore, 'totalModified'),
-    totalStaged: toRef(statusStore, 'totalStaged'),
+    get stagedFiles() { return statusStore.stagedFiles },
+    get totalModified() { return statusStore.totalModified },
+    get totalStaged() { return statusStore.totalStaged },
     toggleSelectFile: statusStore.toggleSelectFile,
     selectAllUnstaged: statusStore.selectAllUnstaged,
     clearSelection: statusStore.clearSelection,
@@ -68,12 +68,12 @@ export function useGitStore() {
     set log(v) { logStore.log = v },
     get viewingBranch() { return logStore.viewingBranch },
     set viewingBranch(v) { logStore.viewingBranch = v },
-    graphNodes: toRef(logStore, 'graphNodes'),
+    get graphNodes() { return logStore.graphNodes },
     get metadataMap() { return logStore.metadataMap },
     get metadataLoaded() { return logStore.metadataLoaded },
     set metadataLoaded(v) { logStore.metadataLoaded = v },
-    metadataLoading: toRef(logStore, 'metadataLoading'),
-    totalCommits: toRef(logStore, 'totalCommits'),
+    get metadataLoading() { return logStore.metadataLoading },
+    get totalCommits() { return logStore.totalCommits },
     fetchLog: logStore.fetchLog,
     fetchGraph: logStore.fetchGraph,
     fetchMetadata: logStore.fetchMetadata,
@@ -98,7 +98,7 @@ export function useGitStore() {
     // gitCommit
     get commitMessage() { return commitStore.commitMessage },
     set commitMessage(v) { commitStore.commitMessage = v },
-    generatingMessage: toRef(commitStore, 'generatingMessage'),
+    get generatingMessage() { return commitStore.generatingMessage },
     generateCommitMessage: commitStore.generateCommitMessage,
     commit: commitStore.commit,
     pull: commitStore.pull,
@@ -106,7 +106,7 @@ export function useGitStore() {
 
     // gitStash
     get stashEntries() { return stashStore.stashEntries },
-    stashLoading: toRef(stashStore, 'stashLoading'),
+    get stashLoading() { return stashStore.stashLoading },
     fetchStash: stashStore.fetchStash,
     stashPush: stashStore.stashPush,
     stashApply: stashStore.stashApply,
