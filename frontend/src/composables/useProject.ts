@@ -1,14 +1,20 @@
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useProjectsStore } from '../stores/projects'
 import { useGitStore } from '../stores/git'
 import { useDockerStore } from '../stores/docker'
+import { useGitLabStore } from '../stores/gitlab'
+import { useToast } from './useToast'
 
 const STORAGE_KEY = 'devhub_current_project'
+
+const switching = ref(false)
 
 export function useProject() {
   const store = useProjectsStore()
   const gitStore = useGitStore()
   const dockerStore = useDockerStore()
+  const gitlabStore = useGitLabStore()
+  const { show: showToast } = useToast()
 
   const currentProject = computed(() => store.currentProject)
 
@@ -22,6 +28,7 @@ export function useProject() {
     gitStore.log = []
     gitStore.diff = ''
     dockerStore.containers = []
+    gitlabStore.reset()
   }
 
   async function refreshStores() {
@@ -37,13 +44,19 @@ export function useProject() {
     if (project.has_docker) {
       fetches.push(dockerStore.fetchContainers())
     }
-    await Promise.all(fetches)
+    await Promise.allSettled(fetches)
   }
 
   async function switchProject(name: string) {
+    switching.value = true
     resetStores()
     store.setCurrentProject(name)
-    await refreshStores()
+    try {
+      await refreshStores()
+    } finally {
+      switching.value = false
+    }
+    showToast('info', `Switched to ${name}`)
   }
 
   async function initProject() {
@@ -58,6 +71,7 @@ export function useProject() {
   return {
     currentProject,
     projectApiUrl,
+    switching,
     switchProject,
     initProject,
   }

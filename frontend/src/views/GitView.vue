@@ -2,10 +2,13 @@
 import { onMounted, ref, computed, watch } from 'vue'
 import { useGitStore } from '../stores/git'
 import { useProjectsStore } from '../stores/projects'
+import { useProject } from '../composables/useProject'
+import ShimmerBlock from '../components/ShimmerBlock.vue'
 import type { DiffLine } from '../types'
 
 const gitStore = useGitStore()
 const projectsStore = useProjectsStore()
+const { switching } = useProject()
 const selectedFile = ref<string | null>(null)
 const branchDropdownOpen = ref(false)
 const stagedCollapsed = ref(false)
@@ -629,7 +632,10 @@ watch(() => gitStore.status.branch, () => {
       <div v-if="gitStore.activeTab === 'changes'" class="changes-layout" :style="{ 'grid-template-columns': filesPanelWidth + 'px 4px 1fr' }">
         <!-- Left: File list -->
         <div class="files-panel">
-          <div v-if="totalChanges === 0" class="empty-state">
+          <div v-if="switching || gitStore.loading.status" class="shimmer-pad">
+            <ShimmerBlock variant="row" :lines="3" />
+          </div>
+          <div v-else-if="totalChanges === 0" class="empty-state">
             <span class="empty-text">No changes</span>
           </div>
           <template v-else>
@@ -2053,6 +2059,14 @@ watch(() => gitStore.status.branch, () => {
 @keyframes pulse {
   0%, 100% { opacity: 0.3; }
   50% { opacity: 0.6; }
+}
+
+.shimmer-pad {
+  padding: 12px;
+}
+
+.log-commit-col {
+  animation: data-appear 0.2s ease;
 }
 
 /* Ref badges */

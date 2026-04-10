@@ -1,16 +1,24 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { useToast } from '../composables/useToast'
 import type { Project } from '../types'
 
 export const useProjectsStore = defineStore('projects', () => {
   const projects = ref<Project[]>([])
   const currentProject = ref<Project | null>(null)
 
+  const toast = useToast()
+
   async function fetchProjects() {
-    const res = await fetch('/api/projects')
-    projects.value = await res.json()
-    if (!currentProject.value && projects.value.length > 0) {
-      currentProject.value = projects.value[0]
+    try {
+      const res = await fetch('/api/projects')
+      if (!res.ok) throw new Error(`Failed to fetch projects: ${res.statusText}`)
+      projects.value = await res.json()
+      if (!currentProject.value && projects.value.length > 0) {
+        currentProject.value = projects.value[0]
+      }
+    } catch (e) {
+      toast.show('error', (e as Error).message)
     }
   }
 

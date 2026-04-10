@@ -4,8 +4,10 @@ import { useRouter } from 'vue-router'
 import { useProjectsStore } from '../stores/projects'
 import { useGitStore } from '../stores/git'
 import { useDockerStore } from '../stores/docker'
+import { useProject } from '../composables/useProject'
 import StatusCard from '../components/StatusCard.vue'
 import CommandButton from '../components/CommandButton.vue'
+import ShimmerBlock from '../components/ShimmerBlock.vue'
 import type { MakeCommand } from '../types'
 
 const router = useRouter()
@@ -13,6 +15,9 @@ const router = useRouter()
 const projectsStore = useProjectsStore()
 const gitStore = useGitStore()
 const dockerStore = useDockerStore()
+const { switching } = useProject()
+
+const isLoading = computed(() => switching.value || gitStore.loading.status || dockerStore.loading)
 
 const loadingCmd = ref<string | null>(null)
 const commands = ref<MakeCommand[]>([])
@@ -106,27 +111,40 @@ async function executeCommand(name: string) {
     </header>
 
     <section class="cards-row">
-      <StatusCard
-        label="Git"
-        :value="gitStore.status.branch || '---'"
-        :subtext="`${gitChanges} changes`"
-        :color="gitCardColor"
-        to="/git"
-      />
-      <StatusCard
-        label="Docker"
-        :value="dockerUp"
-        subtext="containers UP"
-        :color="dockerCardColor"
-        to="/docker"
-      />
-      <StatusCard
-        label="Last Commit"
-        :value="lastCommitMessage"
-        :subtext="lastCommitTime"
-        color="var(--text-primary)"
-        to="/git"
-      />
+      <template v-if="isLoading">
+        <ShimmerBlock variant="card" />
+        <ShimmerBlock variant="card" />
+        <ShimmerBlock variant="card" />
+      </template>
+      <template v-else>
+        <div class="fade-in-data">
+          <StatusCard
+            label="Git"
+            :value="gitStore.status.branch || '---'"
+            :subtext="`${gitChanges} changes`"
+            :color="gitCardColor"
+            to="/git"
+          />
+        </div>
+        <div class="fade-in-data">
+          <StatusCard
+            label="Docker"
+            :value="dockerUp"
+            subtext="containers UP"
+            :color="dockerCardColor"
+            to="/docker"
+          />
+        </div>
+        <div class="fade-in-data">
+          <StatusCard
+            label="Last Commit"
+            :value="lastCommitMessage"
+            :subtext="lastCommitTime"
+            color="var(--text-primary)"
+            to="/git"
+          />
+        </div>
+      </template>
     </section>
 
     <section v-if="currentProject?.has_makefile" class="section">

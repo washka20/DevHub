@@ -93,8 +93,9 @@ onUnmounted(() => {
         </span>
       </span>
       <span v-else class="selector-name">Select project</span>
-      <span class="selector-arrow">{{ open ? '\u25B2' : '\u25BC' }}</span>
+      <span class="selector-arrow" :class="{ 'arrow-open': open }">&#9662;</span>
     </button>
+    <Transition name="dropdown">
     <div v-if="open" class="selector-dropdown">
       <div class="search-wrap">
         <input
@@ -130,6 +131,7 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+    </Transition>
   </div>
 </template>
 
@@ -215,6 +217,11 @@ onUnmounted(() => {
   font-size: 10px;
   color: var(--text-secondary);
   flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.selector-arrow.arrow-open {
+  transform: rotate(180deg);
 }
 
 .selector-dropdown {

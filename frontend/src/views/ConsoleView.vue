@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'ConsoleView' })
 
-import { onActivated, onDeactivated } from 'vue'
+import { onActivated, onDeactivated, nextTick } from 'vue'
 import { Splitpanes, Pane } from 'splitpanes'
 import 'splitpanes/dist/splitpanes.css'
 import TerminalTabBar from '../components/TerminalTabBar.vue'
@@ -22,6 +22,9 @@ onActivated(async () => {
   if (terminalStore.panel.visible) {
     terminalStore.updatePanel({ visible: false })
   }
+
+  await nextTick()
+  terminalStore.triggerReconnect()
 
   // Request notification permission for terminal bell
   if ('Notification' in window && Notification.permission === 'default') {
@@ -64,6 +67,11 @@ function handlePaneClose(paneId: string) {
   if (!terminalStore.activeTab) return
   terminalStore.closePane(terminalStore.activeTab.id, paneId)
 }
+
+function handlePaneDetach(paneId: string) {
+  if (!terminalStore.activeTab) return
+  terminalStore.detachToTab(terminalStore.activeTab.id, paneId)
+}
 </script>
 
 <template>
@@ -89,6 +97,11 @@ function handlePaneClose(paneId: string) {
                   <span class="pane-title">
                     {{ pane.sessionId ? (terminalStore.sessions.get(pane.sessionId)?.label || 'shell') : 'disconnected' }}
                   </span>
+                  <button class="pane-detach" @click="handlePaneDetach(pane.id)" title="Detach to tab">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M3.5 3.5v9h9v-4.5h1.5v4.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5v-9A1.5 1.5 0 0 1 3.5 2H8v1.5H3.5ZM10 2h4v4h-1.5V3.5H10V2Z"/>
+                    </svg>
+                  </button>
                   <button class="pane-close" @click="handlePaneClose(pane.id)" title="Close pane">
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                       <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>
@@ -162,6 +175,27 @@ function handlePaneClose(paneId: string) {
 
 .pane-title {
   font-family: var(--font-mono);
+}
+
+.pane-detach {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  opacity: 0.5;
+  padding: 0;
+  border-radius: 4px;
+}
+
+.pane-detach:hover {
+  opacity: 1;
+  color: var(--accent-blue);
+  background: rgba(88, 166, 255, 0.15);
 }
 
 .pane-close {

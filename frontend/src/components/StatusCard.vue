@@ -39,7 +39,7 @@ function handleClick() {
   border-radius: 10px;
   display: flex;
   overflow: hidden;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .status-card.clickable {

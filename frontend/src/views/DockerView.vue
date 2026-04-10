@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { useDockerStore } from '../stores/docker'
 import { useProjectsStore } from '../stores/projects'
+import ShimmerBlock from '../components/ShimmerBlock.vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -20,6 +21,9 @@ let execWs: WebSocket | null = null
 async function openTerminal(containerName: string) {
   const projectName = projectsStore.currentProject?.name
   if (!projectName) return
+
+  // Clean up previous terminal to prevent leak
+  closeTerminal()
 
   try {
     const res = await fetch(`/api/projects/${projectName}/docker/${containerName}/exec`, {
@@ -285,8 +289,8 @@ onUnmounted(() => {
 
     <!-- Container table -->
     <section class="section">
-      <div v-if="dockerStore.loading && !dockerStore.containers?.length" class="empty">
-        Loading containers...
+      <div v-if="dockerStore.loading && !dockerStore.containers?.length" class="shimmer-rows">
+        <ShimmerBlock variant="row" :lines="4" />
       </div>
       <div v-else-if="!dockerStore.containers?.length" class="empty">
         No containers found

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProject } from '../composables/useProject'
+import { useToast } from '../composables/useToast'
 import type { GitStatus, CommitDetail, BranchInfo, CommitMeta, Commit, StashEntry } from '../types'
 
 interface TopoNode {
@@ -10,6 +11,7 @@ interface TopoNode {
 
 export const useGitStore = defineStore('git', () => {
   const { projectApiUrl } = useProject()
+  const toast = useToast()
 
   const status = ref<GitStatus>({
     branch: '',
@@ -432,38 +434,56 @@ export const useGitStore = defineStore('git', () => {
     try {
       const res = await fetch(`${projectApiUrl.value}/git/stash`)
       if (res.ok) stashEntries.value = await res.json()
-    } catch { /* ignore */ }
+    } catch { /* best-effort, non-critical */ }
   }
 
   async function stashPush(message: string) {
     stashLoading.value = true
     try {
-      await fetch(`${projectApiUrl.value}/git/stash`, {
+      const res = await fetch(`${projectApiUrl.value}/git/stash`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),
       })
+      if (!res.ok) throw new Error(await res.text())
       await fetchStash()
       await fetchStatus()
+    } catch (e) {
+      toast.show('error', `Stash push failed: ${(e as Error).message}`)
     } finally {
       stashLoading.value = false
     }
   }
 
   async function stashApply(index: number) {
-    await fetch(`${projectApiUrl.value}/git/stash/${index}/apply`, { method: 'POST' })
-    await fetchStatus()
+    try {
+      const res = await fetch(`${projectApiUrl.value}/git/stash/${index}/apply`, { method: 'POST' })
+      if (!res.ok) throw new Error(await res.text())
+      await fetchStatus()
+    } catch (e) {
+      toast.show('error', `Stash apply failed: ${(e as Error).message}`)
+    }
   }
 
   async function stashPop(index: number) {
-    await fetch(`${projectApiUrl.value}/git/stash/${index}/pop`, { method: 'POST' })
-    await fetchStash()
-    await fetchStatus()
+    try {
+      const res = await fetch(`${projectApiUrl.value}/git/stash/${index}/pop`, { method: 'POST' })
+      if (!res.ok) throw new Error(await res.text())
+      await fetchStash()
+      await fetchStatus()
+    } catch (e) {
+      toast.show('error', `Stash pop failed: ${(e as Error).message}`)
+    }
   }
 
   async function stashDrop(index: number) {
-    await fetch(`${projectApiUrl.value}/git/stash/${index}`, { method: 'DELETE' })
-    await fetchStash()
+    try {
+      const res = await fetch(`${projectApiUrl.value}/git/stash/${index}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(await res.text())
+      await fetchStash()
+    } catch (e) {
+      toast.show('error', `Stash drop failed: ${(e as Error).message}`)
+    }
   }
 
   async function stashDiff(index: number): Promise<string> {

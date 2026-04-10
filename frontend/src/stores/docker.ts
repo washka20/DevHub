@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProjectsStore } from './projects'
+import { useToast } from '../composables/useToast'
 import type { Container } from '../types'
 
 export const useDockerStore = defineStore('docker', () => {
@@ -11,6 +12,7 @@ export const useDockerStore = defineStore('docker', () => {
   const composeLoading = ref<'up' | 'rebuild' | 'down' | null>(null)
 
   const projectsStore = useProjectsStore()
+  const toast = useToast()
 
   function apiBase(): string {
     const project = projectsStore.currentProject
@@ -28,9 +30,10 @@ export const useDockerStore = defineStore('docker', () => {
     loading.value = true
     try {
       const res = await fetch(`${apiBase()}/docker/containers`)
-      if (res.ok) {
-        containers.value = await res.json()
-      }
+      if (!res.ok) throw new Error(`Failed to fetch containers: ${res.statusText}`)
+      containers.value = await res.json()
+    } catch (e) {
+      toast.show('error', (e as Error).message)
     } finally {
       loading.value = false
     }
@@ -39,12 +42,15 @@ export const useDockerStore = defineStore('docker', () => {
   async function containerAction(name: string, action: string) {
     actionLoading.value = name
     try {
-      await fetch(`${apiBase()}/docker/${name}/${action}`, {
+      const res = await fetch(`${apiBase()}/docker/${name}/${action}`, {
         method: 'POST',
       })
+      if (!res.ok) throw new Error(`${action} failed: ${await res.text()}`)
       // Give Docker time to change state before refetching
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await fetchContainers()
+    } catch (e) {
+      toast.show('error', (e as Error).message)
     } finally {
       actionLoading.value = null
     }
@@ -53,9 +59,12 @@ export const useDockerStore = defineStore('docker', () => {
   async function composeUp() {
     composeLoading.value = 'up'
     try {
-      await fetch(`${apiBase()}/docker/compose/up`, { method: 'POST' })
+      const res = await fetch(`${apiBase()}/docker/compose/up`, { method: 'POST' })
+      if (!res.ok) throw new Error(`compose up failed: ${await res.text()}`)
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await fetchContainers()
+    } catch (e) {
+      toast.show('error', (e as Error).message)
     } finally {
       composeLoading.value = null
     }
@@ -64,9 +73,12 @@ export const useDockerStore = defineStore('docker', () => {
   async function composeUpBuild() {
     composeLoading.value = 'rebuild'
     try {
-      await fetch(`${apiBase()}/docker/compose/up-build`, { method: 'POST' })
+      const res = await fetch(`${apiBase()}/docker/compose/up-build`, { method: 'POST' })
+      if (!res.ok) throw new Error(`compose rebuild failed: ${await res.text()}`)
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await fetchContainers()
+    } catch (e) {
+      toast.show('error', (e as Error).message)
     } finally {
       composeLoading.value = null
     }
@@ -75,9 +87,12 @@ export const useDockerStore = defineStore('docker', () => {
   async function composeDown() {
     composeLoading.value = 'down'
     try {
-      await fetch(`${apiBase()}/docker/compose/down`, { method: 'POST' })
+      const res = await fetch(`${apiBase()}/docker/compose/down`, { method: 'POST' })
+      if (!res.ok) throw new Error(`compose down failed: ${await res.text()}`)
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await fetchContainers()
+    } catch (e) {
+      toast.show('error', (e as Error).message)
     } finally {
       composeLoading.value = null
     }
