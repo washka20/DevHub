@@ -2,17 +2,22 @@
 import { ref, watch, computed } from 'vue'
 import type { GitLabMember } from '../types'
 
+interface GitLabProjectRef {
+  id: number
+  path: string
+}
+
 const props = defineProps<{
   visible: boolean
   members: GitLabMember[]
   currentBranch: string
-  projectNames: string[]
+  projects: GitLabProjectRef[]
 }>()
 
 const emit = defineEmits<{
   close: []
   create: [data: {
-    projectName: string
+    projectId: number
     title: string
     description: string
     source_branch: string
@@ -25,7 +30,7 @@ const emit = defineEmits<{
 }>()
 
 const form = ref({
-  projectName: '',
+  projectId: null as number | null,
   title: '',
   description: '',
   sourceBranch: '',
@@ -50,7 +55,7 @@ const suggestedTitle = computed(() => {
 watch(() => props.visible, (val) => {
   if (val) {
     form.value = {
-      projectName: props.projectNames[0] ?? '',
+      projectId: props.projects[0]?.id ?? null,
       title: '',
       description: '',
       sourceBranch: props.currentBranch,
@@ -79,11 +84,11 @@ function toggleReviewer(id: number) {
 }
 
 async function submit() {
-  if (!form.value.title.trim() || !form.value.sourceBranch || !form.value.projectName) return
+  if (!form.value.title.trim() || !form.value.sourceBranch || !form.value.projectId) return
   submitting.value = true
   try {
     emit('create', {
-      projectName: form.value.projectName,
+      projectId: form.value.projectId,
       title: (form.value.draft ? 'Draft: ' : '') + form.value.title.trim(),
       description: form.value.description,
       source_branch: form.value.sourceBranch,
@@ -112,9 +117,9 @@ async function submit() {
           <form class="modal-body" @submit.prevent="submit">
             <div class="form-group">
               <label class="form-label">Project</label>
-              <select v-model="form.projectName" class="form-select">
-                <option v-for="name in projectNames" :key="name" :value="name">
-                  {{ name }}
+              <select v-model="form.projectId" class="form-select">
+                <option v-for="p in projects" :key="p.id" :value="p.id">
+                  {{ p.path }}
                 </option>
               </select>
             </div>
@@ -210,7 +215,7 @@ async function submit() {
               <button
                 type="submit"
                 class="btn-submit"
-                :disabled="!form.title.trim() || !form.sourceBranch || !form.projectName || submitting"
+                :disabled="!form.title.trim() || !form.sourceBranch || !form.projectId || submitting"
               >
                 <svg v-if="submitting" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 12a9 9 0 1 1-6.219-8.56"/>

@@ -2,18 +2,23 @@
 import { ref, watch } from 'vue'
 import type { GitLabLabel, GitLabMilestone, GitLabMember } from '../types'
 
+interface GitLabProjectRef {
+  id: number
+  path: string
+}
+
 const props = defineProps<{
   visible: boolean
   members: GitLabMember[]
   labels: GitLabLabel[]
   milestones: GitLabMilestone[]
-  projectNames: string[]
+  projects: GitLabProjectRef[]
 }>()
 
 const emit = defineEmits<{
   close: []
   create: [data: {
-    projectName: string
+    projectId: number
     title: string
     description: string
     labels: string[]
@@ -23,7 +28,7 @@ const emit = defineEmits<{
 }>()
 
 const form = ref({
-  projectName: '',
+  projectId: null as number | null,
   title: '',
   description: '',
   selectedLabels: [] as string[],
@@ -36,7 +41,7 @@ const submitting = ref(false)
 watch(() => props.visible, (val) => {
   if (val) {
     form.value = {
-      projectName: props.projectNames[0] ?? '',
+      projectId: props.projects[0]?.id ?? null,
       title: '',
       description: '',
       selectedLabels: [],
@@ -56,11 +61,11 @@ function toggleLabel(name: string) {
 }
 
 async function submit() {
-  if (!form.value.title.trim() || !form.value.projectName) return
+  if (!form.value.title.trim() || !form.value.projectId) return
   submitting.value = true
   try {
     emit('create', {
-      projectName: form.value.projectName,
+      projectId: form.value.projectId,
       title: form.value.title.trim(),
       description: form.value.description,
       labels: form.value.selectedLabels,
@@ -86,9 +91,9 @@ async function submit() {
           <form class="modal-body" @submit.prevent="submit">
             <div class="form-group">
               <label class="form-label">Project</label>
-              <select v-model="form.projectName" class="form-select">
-                <option v-for="name in projectNames" :key="name" :value="name">
-                  {{ name }}
+              <select v-model="form.projectId" class="form-select">
+                <option v-for="p in projects" :key="p.id" :value="p.id">
+                  {{ p.path }}
                 </option>
               </select>
             </div>
@@ -159,7 +164,7 @@ async function submit() {
               <button
                 type="submit"
                 class="btn-submit"
-                :disabled="!form.title.trim() || !form.projectName || submitting"
+                :disabled="!form.title.trim() || !form.projectId || submitting"
               >
                 <svg v-if="submitting" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 12a9 9 0 1 1-6.219-8.56"/>

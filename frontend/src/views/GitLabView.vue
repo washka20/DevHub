@@ -2,7 +2,6 @@
 import { onMounted, onUnmounted, computed, ref } from 'vue'
 import { useGitLabStore } from '../stores/gitlab'
 import { useGitStore } from '../stores/git'
-import { useProjectsStore } from '../stores/projects'
 import { useToast } from '../composables/useToast'
 import GitLabDetailModal from '../components/GitLabDetailModal.vue'
 import GitLabCreateIssue from '../components/GitLabCreateIssue.vue'
@@ -11,14 +10,11 @@ import type { GitLabIssue, GitLabMR } from '../types'
 
 const store = useGitLabStore()
 const gitStore = useGitStore()
-const projectsStore = useProjectsStore()
 const toast = useToast()
 
 const collapsedGroups = ref<Set<string>>(new Set())
 
-const projectNames = computed(() =>
-  projectsStore.projects.map(p => p.name)
-)
+const gitlabProjects = computed(() => store.availableProjects)
 
 const currentBranch = computed(() => gitStore.status.branch || 'main')
 
@@ -143,47 +139,44 @@ function selectMR(mr: GitLabMR) {
 
 async function handleAddComment(body: string) {
   if (!store.selectedItem) return
-  const projectName = store.extractProjectName(store.selectedItem.projectPath)
   try {
     await store.addComment(
-      projectName,
+      store.selectedItem.projectId,
       store.selectedItem.type,
       store.selectedItem.iid,
       body,
     )
-    toast.success('Comment added')
+    toast.show('success', 'Comment added')
   } catch (e) {
-    toast.error(`Failed to add comment: ${(e as Error).message}`)
+    toast.show('error', `Failed to add comment: ${(e as Error).message}`)
   }
 }
 
 async function handleToggleCheckbox(index: number) {
   if (!store.selectedItem || store.selectedItem.type !== 'issue') return
-  const projectName = store.extractProjectName(store.selectedItem.projectPath)
   try {
-    await store.toggleCheckbox(projectName, store.selectedItem.iid, index)
+    await store.toggleCheckbox(store.selectedItem.projectId, store.selectedItem.iid, index)
   } catch (e) {
-    toast.error(`Failed to toggle checkbox: ${(e as Error).message}`)
+    toast.show('error', `Failed to toggle checkbox: ${(e as Error).message}`)
   }
 }
 
 async function handleUpdateState(stateEvent: 'close' | 'reopen') {
   if (!store.selectedItem) return
-  const projectName = store.extractProjectName(store.selectedItem.projectPath)
   try {
     if (store.selectedItem.type === 'issue') {
-      await store.updateIssueState(projectName, store.selectedItem.iid, stateEvent)
+      await store.updateIssueState(store.selectedItem.projectId, store.selectedItem.iid, stateEvent)
     } else {
-      await store.updateMRState(projectName, store.selectedItem.iid, stateEvent)
+      await store.updateMRState(store.selectedItem.projectId, store.selectedItem.iid, stateEvent)
     }
-    toast.success(`${store.selectedItem.type === 'issue' ? 'Issue' : 'MR'} ${stateEvent === 'close' ? 'closed' : 'reopened'}`)
+    toast.show('success', `${store.selectedItem.type === 'issue' ? 'Issue' : 'MR'} ${stateEvent === 'close' ? 'closed' : 'reopened'}`)
   } catch (e) {
-    toast.error(`Failed: ${(e as Error).message}`)
+    toast.show('error', `Failed: ${(e as Error).message}`)
   }
 }
 
 async function handleCreateIssue(data: {
-  projectName: string
+  projectId: number
   title: string
   description: string
   labels: string[]
@@ -191,7 +184,7 @@ async function handleCreateIssue(data: {
   milestone_id: number | undefined
 }) {
   try {
-    await store.createIssue(data.projectName, {
+    await store.createIssue(data.projectId, {
       title: data.title,
       description: data.description,
       labels: data.labels,
@@ -199,14 +192,14 @@ async function handleCreateIssue(data: {
       milestone_id: data.milestone_id,
     })
     store.showCreateIssue = false
-    toast.success('Issue created')
+    toast.show('success', 'Issue created')
   } catch (e) {
-    toast.error(`Failed to create issue: ${(e as Error).message}`)
+    toast.show('error', `Failed to create issue: ${(e as Error).message}`)
   }
 }
 
 async function handleCreateMR(data: {
-  projectName: string
+  projectId: number
   title: string
   description: string
   source_branch: string
@@ -217,7 +210,7 @@ async function handleCreateMR(data: {
   remove_source_branch: boolean
 }) {
   try {
-    await store.createMR(data.projectName, {
+    await store.createMR(data.projectId, {
       title: data.title,
       description: data.description,
       source_branch: data.source_branch,
@@ -228,9 +221,9 @@ async function handleCreateMR(data: {
       remove_source_branch: data.remove_source_branch,
     })
     store.showCreateMR = false
-    toast.success('Merge request created')
+    toast.show('success', 'Merge request created')
   } catch (e) {
-    toast.error(`Failed to create MR: ${(e as Error).message}`)
+    toast.show('error', `Failed to create MR: ${(e as Error).message}`)
   }
 }
 
@@ -628,7 +621,7 @@ onUnmounted(() => {
       :members="store.members"
       :labels="store.labels"
       :milestones="store.milestones"
-      :project-names="projectNames"
+      :projects="gitlabProjects"
       @close="store.showCreateIssue = false"
       @create="handleCreateIssue"
     />
@@ -637,7 +630,7 @@ onUnmounted(() => {
       :visible="store.showCreateMR"
       :members="store.members"
       :current-branch="currentBranch"
-      :project-names="projectNames"
+      :projects="gitlabProjects"
       @close="store.showCreateMR = false"
       @create="handleCreateMR"
     />

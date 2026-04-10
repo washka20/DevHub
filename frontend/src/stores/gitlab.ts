@@ -35,7 +35,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
   const myMRsLoading = ref(false)
 
   // Detail panel
-  const selectedItem = ref<{ type: 'issue' | 'mr'; projectPath: string; iid: number } | null>(null)
+  const selectedItem = ref<{ type: 'issue' | 'mr'; projectPath: string; iid: number; projectId: number } | null>(null)
   const detailIssue = ref<GitLabIssue | null>(null)
   const detailMR = ref<GitLabMR | null>(null)
   const detailNotes = ref<GitLabNote[]>([])
@@ -240,24 +240,37 @@ export const useGitLabStore = defineStore('gitlab', () => {
     }
   }
 
+  // Unique GitLab projects derived from user's issues and MRs.
+  const availableProjects = computed(() => {
+    const map = new Map<number, string>()
+    for (const issue of myIssues.value) {
+      if (issue.project_id && issue.project_path) {
+        map.set(issue.project_id, issue.project_path)
+      }
+    }
+    for (const mr of myMRs.value) {
+      if (mr.project_id && mr.project_path) {
+        map.set(mr.project_id, mr.project_path)
+      }
+    }
+    return Array.from(map, ([id, path]) => ({ id, path }))
+  })
+
+  function findProjectId(type: 'issue' | 'mr', projectPath: string, iid: number): number | undefined {
+    if (type === 'issue') {
+      return myIssues.value.find(i => i.iid === iid && i.project_path === projectPath)?.project_id
+    }
+    return myMRs.value.find(m => m.iid === iid && m.project_path === projectPath)?.project_id
+  }
+
   async function selectItem(type: 'issue' | 'mr', projectPath: string, iid: number, projectId?: number) {
-    selectedItem.value = { type, projectPath, iid }
+    const pid = projectId ?? findProjectId(type, projectPath, iid)
+    if (!pid) return
+
+    selectedItem.value = { type, projectPath, iid, projectId: pid }
     detailIssue.value = null
     detailMR.value = null
     detailNotes.value = []
-
-    // Find project_id from the item data
-    let pid = projectId
-    if (!pid) {
-      if (type === 'issue') {
-        const issue = myIssues.value.find(i => i.iid === iid && i.project_path === projectPath)
-        pid = issue?.project_id
-      } else {
-        const mr = myMRs.value.find(m => m.iid === iid && m.project_path === projectPath)
-        pid = mr?.project_id
-      }
-    }
-    if (!pid) return
 
     if (type === 'issue') {
       await Promise.all([
@@ -464,11 +477,6 @@ export const useGitLabStore = defineStore('gitlab', () => {
   }
 
   // Helpers
-  function extractProjectName(projectPath: string): string {
-    const parts = projectPath.split('/')
-    return parts[parts.length - 1]
-  }
-
   function enrichProjectPath<T extends { web_url: string; project_path?: string }>(items: T[]): T[] {
     for (const item of items) {
       if (!item.project_path && item.web_url) {
@@ -558,6 +566,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
     groupedMyMRs,
     filteredMyIssues,
     filteredMyMRs,
+    availableProjects,
 
     // Cross-project fetches
     fetchMyIssues,
@@ -600,6 +609,5 @@ export const useGitLabStore = defineStore('gitlab', () => {
     clearFilters,
     reset,
     checkEnabled,
-    extractProjectName,
   }
 })
