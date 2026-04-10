@@ -15,6 +15,8 @@ import (
 	"github.com/creack/pty"
 )
 
+const maxLogSize = 2 * 1024 * 1024 // 2MB per session log
+
 type Session struct {
 	ID        string
 	Cmd       *exec.Cmd
@@ -25,6 +27,9 @@ type Session struct {
 
 	mu     sync.Mutex
 	closed bool
+
+	// Log file access: protects concurrent truncate/read.
+	logMu sync.Mutex
 
 	// Output routing: pump writes PTY data via this function.
 	outputMu sync.Mutex
@@ -50,7 +55,13 @@ func (s *Session) startPump() {
 
 				// Always write to log first (data survives WS disconnects)
 				if s.LogFile != nil {
+					s.logMu.Lock()
+					if stat, err := s.LogFile.Stat(); err == nil && stat.Size() > maxLogSize {
+						s.LogFile.Truncate(0)
+						s.LogFile.Seek(0, 0)
+					}
 					s.LogFile.Write(data)
+					s.logMu.Unlock()
 				}
 
 				s.outputMu.Lock()
@@ -103,6 +114,9 @@ func (s *Session) ExitCh() <-chan struct{} {
 func (s *Session) ExitCode() int {
 	return s.exitCode
 }
+
+func (s *Session) LockLog()   { s.logMu.Lock() }
+func (s *Session) UnlockLog() { s.logMu.Unlock() }
 
 func (s *Session) Resize(cols, rows uint16) error {
 	s.mu.Lock()
@@ -168,6 +182,16 @@ type Manager struct {
 var ErrMaxSessions = errors.New("max sessions limit reached")
 
 func NewManager(maxSessions int) *Manager {
+	logDir := filepath.Join(os.TempDir(), "devhub-terminal-logs")
+	if entries, err := os.ReadDir(logDir); err == nil {
+		for _, e := range entries {
+			os.Remove(filepath.Join(logDir, e.Name()))
+		}
+		if len(entries) > 0 {
+			log.Printf("terminal: cleaned %d orphaned log files", len(entries))
+		}
+	}
+
 	return &Manager{
 		sessions:    make(map[string]*Session),
 		maxSessions: maxSessions,

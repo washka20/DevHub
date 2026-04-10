@@ -52,6 +52,17 @@ export function useWebSocket() {
       url = `${proto}//${window.location.host}/api/ws`
     }
 
+    // Close previous connection to prevent stacking
+    if (ws) {
+      ws.onclose = null
+      ws.close()
+      ws = null
+    }
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+
     ws = new WebSocket(url)
 
     ws.onopen = () => {
@@ -59,6 +70,7 @@ export function useWebSocket() {
     }
 
     ws.onclose = () => {
+      ws = null
       connected.value = false
       reconnectTimer = setTimeout(() => connect(url), 3000)
     }

@@ -2,11 +2,13 @@
 import { ref } from 'vue'
 import { useTerminalStore } from '../stores/terminal'
 import { useProjectsStore } from '../stores/projects'
+import { useToast } from '../composables/useToast'
 import TabContextMenu from './TabContextMenu.vue'
 import type { TerminalTab } from '../types'
 
 const terminalStore = useTerminalStore()
 const projectsStore = useProjectsStore()
+const { show: showToast } = useToast()
 
 const emit = defineEmits<{
   split: [direction: 'horizontal' | 'vertical']
@@ -15,6 +17,8 @@ const emit = defineEmits<{
 const contextMenu = ref<{ x: number; y: number; tabId: string } | null>(null)
 const renamingTabId = ref<string | null>(null)
 const renameValue = ref('')
+const dragIndex = ref<number | null>(null)
+const dragOverIndex = ref<number | null>(null)
 
 function tabHasActivity(tab: TerminalTab): boolean {
   return tab.panes.some((p) => p.hasActivity)
@@ -52,12 +56,50 @@ function handleSplitFromMenu(tabId: string, direction: 'horizontal' | 'vertical'
   emit('split', direction)
 }
 
+function getMergeTabs(tabId: string) {
+  return terminalStore.tabs
+    .filter((t) => t.id !== tabId && t.panes.length > 0)
+    .map((t) => ({ id: t.id, label: t.label }))
+}
+
+function handleMerge(targetTabId: string, sourceTabId: string, direction: 'horizontal' | 'vertical') {
+  terminalStore.mergeToSplit(targetTabId, sourceTabId, direction)
+}
+
+function handleDragStart(e: DragEvent, index: number) {
+  dragIndex.value = index
+  e.dataTransfer!.effectAllowed = 'move'
+}
+
+function handleDragOver(e: DragEvent, index: number) {
+  e.preventDefault()
+  dragOverIndex.value = index
+}
+
+function handleDragLeave() {
+  dragOverIndex.value = null
+}
+
+function handleDrop(e: DragEvent, toIndex: number) {
+  e.preventDefault()
+  if (dragIndex.value !== null && dragIndex.value !== toIndex) {
+    terminalStore.reorderTab(dragIndex.value, toIndex)
+  }
+  dragIndex.value = null
+  dragOverIndex.value = null
+}
+
+function handleDragEnd() {
+  dragIndex.value = null
+  dragOverIndex.value = null
+}
+
 async function handleNewTab() {
   const cwd = projectsStore.currentProject?.path || ''
   try {
     await terminalStore.addTab(cwd)
-  } catch {
-    // max sessions reached or backend unavailable
+  } catch (e) {
+    showToast('error', e instanceof Error ? e.message : 'Failed to create terminal')
   }
 }
 </script>
@@ -66,12 +108,21 @@ async function handleNewTab() {
   <div class="tab-bar">
     <div class="tabs">
       <div
-        v-for="tab in terminalStore.tabs"
+        v-for="(tab, index) in terminalStore.tabs"
         :key="tab.id"
         class="tab"
-        :class="{ active: terminalStore.activeTabId === tab.id }"
+        :class="{
+          active: terminalStore.activeTabId === tab.id,
+          'drag-over': dragOverIndex === index && dragIndex !== index,
+        }"
+        draggable="true"
         @click="terminalStore.setActiveTab(tab.id)"
         @contextmenu="handleContextMenu($event, tab.id)"
+        @dragstart="handleDragStart($event, index)"
+        @dragover="handleDragOver($event, index)"
+        @dragleave="handleDragLeave"
+        @drop="handleDrop($event, index)"
+        @dragend="handleDragEnd"
       >
         <span
           class="tab-dot"
@@ -125,6 +176,14 @@ async function handleNewTab() {
       >
         &#9783; Split V
       </button>
+      <button
+        class="toolbar-btn"
+        :class="{ active: terminalStore.broadcastMode }"
+        @click="terminalStore.toggleBroadcast()"
+        title="Broadcast input to all panes"
+      >
+        BC
+      </button>
       <div class="toolbar-sep"></div>
       <button
         class="toolbar-btn"
@@ -146,10 +205,12 @@ async function handleNewTab() {
         :y="contextMenu.y"
         :tab-id="contextMenu.tabId"
         :can-split="(terminalStore.tabs.find(t => t.id === contextMenu?.tabId)?.panes.length ?? 0) < 2"
+        :merge-tabs="getMergeTabs(contextMenu.tabId)"
         @close="contextMenu = null"
         @rename="startRename"
         @split-h="(id: string) => handleSplitFromMenu(id, 'horizontal')"
         @split-v="(id: string) => handleSplitFromMenu(id, 'vertical')"
+        @merge-with="handleMerge"
         @close-tab="terminalStore.closeTab"
         @close-others="terminalStore.closeOtherTabs"
         @close-all="terminalStore.closeAllTabs"
@@ -189,6 +250,10 @@ async function handleNewTab() {
   cursor: pointer;
   white-space: nowrap;
   user-select: none;
+}
+
+.tab.drag-over {
+  border-left: 2px solid var(--accent-blue);
 }
 
 .tab.active {

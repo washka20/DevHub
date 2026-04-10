@@ -13,6 +13,13 @@ const ROUTE_MAP: Record<string, string> = {
   Digit8: '/editor',
 }
 
+const shortcutsListeners = new Set<() => void>()
+
+export function onToggleShortcuts(cb: () => void) {
+  shortcutsListeners.add(cb)
+  return () => shortcutsListeners.delete(cb)
+}
+
 export function useKeyboardShortcuts() {
   const router = useRouter()
   const route = useRoute()
@@ -20,6 +27,7 @@ export function useKeyboardShortcuts() {
 
   function handleKeydown(e: KeyboardEvent) {
     const inTerminal = (e.target as HTMLElement)?.closest?.('.xterm')
+    const inInput = (e.target as HTMLElement)?.closest?.('input, textarea, [contenteditable]')
 
     // Ctrl+` — toggle bottom terminal (works everywhere including in terminal)
     if (e.ctrlKey && e.code === 'Backquote') {
@@ -31,8 +39,75 @@ export function useKeyboardShortcuts() {
       return
     }
 
-    // Everything below blocked when focus is in terminal
-    if (inTerminal) return
+    // Terminal-specific shortcuts (only when focus is in terminal)
+    if (inTerminal) {
+      // Ctrl+Shift+D — toggle split on active tab
+      if (e.ctrlKey && e.shiftKey && e.code === 'KeyD') {
+        e.preventDefault()
+        e.stopPropagation()
+        const tab = terminalStore.activeTab
+        if (tab) {
+          if (tab.panes.length >= 2) {
+            terminalStore.detachToTab(tab.id, tab.panes[1].id)
+          } else {
+            const cwd = tab.panes[0]?.cwd || ''
+            terminalStore.splitPane(tab.id, 'horizontal', cwd)
+          }
+        }
+        return
+      }
+
+      // Ctrl+Shift+T — new tab
+      if (e.ctrlKey && e.shiftKey && e.code === 'KeyT') {
+        e.preventDefault()
+        e.stopPropagation()
+        terminalStore.addTab('')
+        return
+      }
+
+      // Ctrl+Shift+W — close current tab
+      if (e.ctrlKey && e.shiftKey && e.code === 'KeyW') {
+        e.preventDefault()
+        e.stopPropagation()
+        if (terminalStore.activeTabId) {
+          terminalStore.closeTab(terminalStore.activeTabId)
+        }
+        return
+      }
+
+      // Ctrl+PageDown — next tab
+      if (e.ctrlKey && e.code === 'PageDown') {
+        e.preventDefault()
+        e.stopPropagation()
+        const tabs = terminalStore.tabs
+        const idx = tabs.findIndex((t) => t.id === terminalStore.activeTabId)
+        if (idx >= 0 && tabs.length > 1) {
+          terminalStore.setActiveTab(tabs[(idx + 1) % tabs.length].id)
+        }
+        return
+      }
+
+      // Ctrl+PageUp — previous tab
+      if (e.ctrlKey && e.code === 'PageUp') {
+        e.preventDefault()
+        e.stopPropagation()
+        const tabs = terminalStore.tabs
+        const idx = tabs.findIndex((t) => t.id === terminalStore.activeTabId)
+        if (idx >= 0 && tabs.length > 1) {
+          terminalStore.setActiveTab(tabs[(idx - 1 + tabs.length) % tabs.length].id)
+        }
+        return
+      }
+
+      return
+    }
+
+    // ? — toggle shortcuts modal (not in input fields)
+    if (e.key === '?' && !inInput && !e.ctrlKey && !e.altKey) {
+      e.preventDefault()
+      shortcutsListeners.forEach(cb => cb())
+      return
+    }
 
     // Alt+N — navigate
     if (e.altKey && !e.ctrlKey && !e.shiftKey) {

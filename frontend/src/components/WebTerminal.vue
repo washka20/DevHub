@@ -2,8 +2,10 @@
 import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { SearchAddon } from '@xterm/addon-search'
 import { useTerminalStore } from '../stores/terminal'
 import { useSettingsStore } from '../stores/settings'
 import '@xterm/xterm/css/xterm.css'
@@ -18,6 +20,7 @@ const settingsStore = useSettingsStore()
 const terminalEl = ref<HTMLDivElement>()
 let term: Terminal | null = null
 let fitAddon: FitAddon | null = null
+let searchAddon: SearchAddon | null = null
 let ws: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
 let resizeTimer: ReturnType<typeof setTimeout> | null = null
@@ -25,11 +28,17 @@ let disposed = false
 let intentionalClose = false
 let oscCwdReceived = false
 let cwdPollTimer: ReturnType<typeof setInterval> | null = null
+let cwdStartTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectAttempts = 0
 let connectedSessionId: string | null = null  // tracks which session WS is connected to
+let hasConnectedOnce = false
 const MAX_RECONNECT_ATTEMPTS = 5
 const watchStopHandles: (() => void)[] = []
+
+const searchVisible = ref(false)
+const searchQuery = ref('')
+const searchInputEl = ref<HTMLInputElement>()
 
 // Find the pane reactively
 const pane = computed(() => {
@@ -84,9 +93,15 @@ function connectWs(sessionId: string) {
     reconnectTimer = null
   }
 
+  if (hasConnectedOnce && term) {
+    term.reset()
+  }
+
+  oscCwdReceived = false
   intentionalClose = false
   connectedSessionId = sessionId
   reconnectAttempts = 0
+  hasConnectedOnce = true
 
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
@@ -97,6 +112,9 @@ function connectWs(sessionId: string) {
 
   ws.onopen = () => {
     reconnectAttempts = 0
+    // Reset so the first resize after connect always goes through
+    lastSentCols = 0
+    lastSentRows = 0
     if (term && fitAddon) {
       fitAddon.fit()
       sendResize(term.cols, term.rows)
@@ -104,7 +122,9 @@ function connectWs(sessionId: string) {
 
     // Start CWD polling fallback after 10s if no OSC 7 received
     if (cwdPollTimer) { clearInterval(cwdPollTimer); cwdPollTimer = null }
-    setTimeout(() => {
+    if (cwdStartTimer) { clearTimeout(cwdStartTimer); cwdStartTimer = null }
+    cwdStartTimer = setTimeout(() => {
+      cwdStartTimer = null
       if (!oscCwdReceived && !disposed && pane.value?.sessionId) {
         cwdPollTimer = setInterval(() => pollCwd(), 5000)
       }
@@ -137,6 +157,7 @@ function connectWs(sessionId: string) {
   ws.onclose = () => {
     ws = null
     if (!disposed && !intentionalClose) {
+      connectedSessionId = null
       scheduleReconnect(sessionId)
     }
     intentionalClose = false
@@ -154,15 +175,21 @@ function scheduleReconnect(sessionId: string) {
   }
   const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000)
   reconnectAttempts++
+  if (reconnectTimer) clearTimeout(reconnectTimer)
   reconnectTimer = setTimeout(() => {
     if (!disposed) connectWs(sessionId)
   }, delay)
 }
 
+let lastSentCols = 0
+let lastSentRows = 0
+
 function sendResize(cols: number, rows: number) {
-  if (ws?.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'resize', cols, rows }))
-  }
+  if (ws?.readyState !== WebSocket.OPEN) return
+  if (cols === lastSentCols && rows === lastSentRows) return
+  lastSentCols = cols
+  lastSentRows = rows
+  ws.send(JSON.stringify({ type: 'resize', cols, rows }))
 }
 
 async function pollCwd() {
@@ -215,6 +242,9 @@ function initTerminal() {
   term.loadAddon(unicode11)
   term.unicode.activeVersion = '11'
 
+  searchAddon = new SearchAddon()
+  term.loadAddon(searchAddon)
+
   // OSC 7: shell reports current working directory
   // Format: \e]7;file://hostname/path\a
   term.parser.registerOscHandler(7, (data) => {
@@ -231,13 +261,42 @@ function initTerminal() {
     return false // don't prevent default handling
   })
 
+  term.onTitleChange((title) => {
+    if (!title) return
+    for (const tab of terminalStore.tabs) {
+      if (tab.panes.some((p) => p.id === props.paneId)) {
+        tab.label = title
+        break
+      }
+    }
+  })
+
   term.open(terminalEl.value)
   fitAddon.fit()
+
+  try {
+    const webgl = new WebglAddon()
+    webgl.onContextLost(() => { webgl.dispose() })
+    term.loadAddon(webgl)
+  } catch { /* fallback to canvas */ }
+
+  import('@xterm/addon-image').then(({ ImageAddon }) => {
+    if (term && !disposed) term.loadAddon(new ImageAddon())
+  }).catch(() => {})
+
+  import('@xterm/addon-ligatures').then(({ LigaturesAddon }) => {
+    if (term && !disposed) term.loadAddon(new LigaturesAddon())
+  }).catch(() => {})
 
   const encoder = new TextEncoder()
   term.onData((data: string) => {
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(encoder.encode(data))
+    }
+    if (terminalStore.broadcastMode) {
+      window.dispatchEvent(new CustomEvent('terminal:broadcast', {
+        detail: { data, sourcePaneId: props.paneId },
+      }))
     }
   })
 
@@ -259,6 +318,26 @@ function initTerminal() {
     }
   })
 
+  term.onSelectionChange(() => {
+    const sel = term?.getSelection()
+    if (sel) navigator.clipboard.writeText(sel).catch(() => {})
+  })
+
+  terminalEl.value.addEventListener('contextmenu', (e) => {
+    e.preventDefault()
+    navigator.clipboard.readText().then((text) => {
+      if (text && term) term.paste(text)
+    }).catch(() => {})
+  })
+
+  term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+    if (e.ctrlKey && e.shiftKey && e.code === 'KeyF' && e.type === 'keydown') {
+      toggleSearch()
+      return false
+    }
+    return true
+  })
+
   resizeObserver = new ResizeObserver((entries) => {
     const { width, height } = entries[0].contentRect
     if (width === 0 || height === 0) return
@@ -269,7 +348,7 @@ function initTerminal() {
         fitAddon.fit()
         sendResize(term.cols, term.rows)
       }
-    }, 50)
+    }, 16)
   })
   resizeObserver.observe(terminalEl.value)
 
@@ -298,6 +377,46 @@ function initTerminal() {
 }
 
 // ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
+
+function toggleSearch() {
+  searchVisible.value = !searchVisible.value
+  if (searchVisible.value) {
+    nextTick(() => searchInputEl.value?.focus())
+  } else {
+    searchAddon?.clearDecorations()
+    searchQuery.value = ''
+  }
+}
+
+function searchNext() {
+  if (searchQuery.value && searchAddon) {
+    searchAddon.findNext(searchQuery.value, { caseSensitive: false })
+  }
+}
+
+function searchPrev() {
+  if (searchQuery.value && searchAddon) {
+    searchAddon.findPrevious(searchQuery.value, { caseSensitive: false })
+  }
+}
+
+function handleSearchInput() {
+  if (searchQuery.value && searchAddon) {
+    searchAddon.findNext(searchQuery.value, { caseSensitive: false })
+  }
+}
+
+function handleSearchKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    toggleSearch()
+  } else if (e.key === 'Enter') {
+    e.shiftKey ? searchPrev() : searchNext()
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Lazy connect: user clicks the placeholder
 // ---------------------------------------------------------------------------
 
@@ -310,6 +429,7 @@ async function handleConnect() {
     term.dispose()
     term = null
     fitAddon = null
+    searchAddon = null
   }
 
   const sessionId = await terminalStore.connectPane(props.paneId)
@@ -323,10 +443,24 @@ async function handleConnect() {
 }
 
 // ---------------------------------------------------------------------------
+// Broadcast
+// ---------------------------------------------------------------------------
+
+function handleBroadcast(e: Event) {
+  const { data, sourcePaneId } = (e as CustomEvent).detail
+  if (sourcePaneId === props.paneId) return
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(new TextEncoder().encode(data))
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
 
 onMounted(async () => {
+  window.addEventListener('terminal:broadcast', handleBroadcast)
+
   // If the pane is already connected (e.g. freshly created via addTab), init immediately
   if (pane.value?.status === 'connected' && pane.value.sessionId) {
     await document.fonts.ready
@@ -353,7 +487,9 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('terminal:broadcast', handleBroadcast)
   if (cwdPollTimer) { clearInterval(cwdPollTimer); cwdPollTimer = null }
+  if (cwdStartTimer) { clearTimeout(cwdStartTimer); cwdStartTimer = null }
   disposed = true
   connectedSessionId = null
   watchStopHandles.forEach(stop => stop())
@@ -369,6 +505,7 @@ onBeforeUnmount(() => {
   term = null
   ws = null
   fitAddon = null
+  searchAddon = null
   resizeObserver = null
   resizeTimer = null
   reconnectTimer = null
@@ -381,6 +518,23 @@ watch(
     if (newId && term) {
       connectWs(newId)  // idempotent — skips if already connected to this session
     }
+  },
+)
+
+// Force reconnect when ConsoleView reactivates (reclaim output after BottomTerminal stole it)
+watch(
+  () => terminalStore.reconnectSignal,
+  () => {
+    if (!pane.value?.sessionId || !term || disposed) return
+    const sessionId = pane.value.sessionId
+    if (ws) {
+      intentionalClose = true
+      ws.onclose = null
+      ws.close()
+      ws = null
+    }
+    connectedSessionId = null
+    connectWs(sessionId)
   },
 )
 </script>
@@ -419,6 +573,19 @@ watch(
 
   <!-- Connected terminal -->
   <div v-else class="terminal-wrapper">
+    <div v-if="searchVisible" class="search-bar">
+      <input
+        ref="searchInputEl"
+        v-model="searchQuery"
+        class="search-input"
+        placeholder="Search..."
+        @input="handleSearchInput"
+        @keydown="handleSearchKeydown"
+      />
+      <button class="search-btn" @click="searchPrev" title="Previous">&#9650;</button>
+      <button class="search-btn" @click="searchNext" title="Next">&#9660;</button>
+      <button class="search-btn" @click="toggleSearch" title="Close">&#10005;</button>
+    </div>
     <div ref="terminalEl" class="web-terminal"></div>
     <div v-if="pane?.cwd" class="cwd-badge" :title="pane.cwd">
       {{ shortCwd(pane.cwd) }}
@@ -467,6 +634,51 @@ watch(
 
 .web-terminal :deep(.xterm-viewport) {
   overflow-y: auto !important;
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 3px 8px;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: var(--accent-blue);
+}
+
+.search-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.search-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .placeholder-overlay {

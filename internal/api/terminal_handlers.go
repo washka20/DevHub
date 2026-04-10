@@ -60,7 +60,7 @@ func (th *TerminalHandlers) CreateSession(w http.ResponseWriter, r *http.Request
 	sess, err := th.Manager.Create(id, shell, cwd, body.Cols, body.Rows)
 	if err != nil {
 		if errors.Is(err, terminal.ErrMaxSessions) {
-			jsonError(w, err.Error(), http.StatusTooManyRequests)
+			jsonError(w, fmt.Sprintf("max sessions limit reached (%d)", th.Manager.MaxSessions()), http.StatusTooManyRequests)
 		} else {
 			jsonError(w, err.Error(), http.StatusInternalServerError)
 		}

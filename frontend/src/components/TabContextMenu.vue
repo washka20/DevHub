@@ -6,6 +6,7 @@ const props = defineProps<{
   y: number
   tabId: string
   canSplit: boolean
+  mergeTabs: Array<{ id: string; label: string }>
 }>()
 
 const emit = defineEmits<{
@@ -13,10 +14,13 @@ const emit = defineEmits<{
   rename: [tabId: string]
   splitH: [tabId: string]
   splitV: [tabId: string]
+  mergeWith: [targetTabId: string, sourceTabId: string, direction: 'horizontal' | 'vertical']
   closeTab: [tabId: string]
   closeOthers: [tabId: string]
   closeAll: []
 }>()
+
+const mergeSubmenu = ref<'horizontal' | 'vertical' | null>(null)
 
 const menuEl = ref<HTMLDivElement>()
 
@@ -55,6 +59,43 @@ onBeforeUnmount(() => {
       Split Vertical
     </div>
     <div class="menu-sep"></div>
+    <div
+      class="menu-item has-submenu"
+      :class="{ disabled: !canSplit || mergeTabs.length === 0 }"
+      @mouseenter="mergeSubmenu = 'horizontal'"
+      @mouseleave="mergeSubmenu = null"
+    >
+      Merge H &#9656;
+      <div v-if="mergeSubmenu === 'horizontal' && canSplit && mergeTabs.length > 0" class="submenu">
+        <div
+          v-for="mt in mergeTabs"
+          :key="mt.id"
+          class="menu-item"
+          @click="emit('mergeWith', tabId, mt.id, 'horizontal'); emit('close')"
+        >
+          {{ mt.label }}
+        </div>
+      </div>
+    </div>
+    <div
+      class="menu-item has-submenu"
+      :class="{ disabled: !canSplit || mergeTabs.length === 0 }"
+      @mouseenter="mergeSubmenu = 'vertical'"
+      @mouseleave="mergeSubmenu = null"
+    >
+      Merge V &#9656;
+      <div v-if="mergeSubmenu === 'vertical' && canSplit && mergeTabs.length > 0" class="submenu">
+        <div
+          v-for="mt in mergeTabs"
+          :key="mt.id"
+          class="menu-item"
+          @click="emit('mergeWith', tabId, mt.id, 'vertical'); emit('close')"
+        >
+          {{ mt.label }}
+        </div>
+      </div>
+    </div>
+    <div class="menu-sep"></div>
     <div class="menu-item" @click="emit('closeTab', tabId); emit('close')">Close</div>
     <div class="menu-item" @click="emit('closeOthers', tabId); emit('close')">Close Others</div>
     <div class="menu-item danger" @click="emit('closeAll'); emit('close')">Close All</div>
@@ -76,12 +117,25 @@ onBeforeUnmount(() => {
 }
 
 .menu-item {
+  position: relative;
   padding: 6px 12px;
   color: var(--text-primary);
   cursor: pointer;
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.submenu {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 0;
+  min-width: 140px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 .menu-item:hover {

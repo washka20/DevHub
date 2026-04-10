@@ -114,6 +114,9 @@ export const useTerminalStore = defineStore('terminal', () => {
     counter = maxNum
   }
 
+  const reconnectSignal = ref(0)
+  const broadcastMode = ref(false)
+
   const activeTab = computed(() =>
     tabs.value.find((t) => t.id === activeTabId.value) ?? null,
   )
@@ -150,7 +153,8 @@ export const useTerminalStore = defineStore('terminal', () => {
       body: JSON.stringify({ cols, rows, cwd }),
     })
     if (!res.ok) {
-      throw new Error(`Failed to create session: ${res.statusText}`)
+      const body = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error(body.error || `Failed to create session: ${res.statusText}`)
     }
     const data = await res.json()
     const session: TerminalSession = {
@@ -297,6 +301,49 @@ export const useTerminalStore = defineStore('terminal', () => {
     tab.splitDirection = direction
   }
 
+  function mergeToSplit(targetTabId: string, sourceTabId: string, direction: 'horizontal' | 'vertical') {
+    if (targetTabId === sourceTabId) return
+    const targetTab = tabs.value.find((t) => t.id === targetTabId)
+    const sourceTab = tabs.value.find((t) => t.id === sourceTabId)
+    if (!targetTab || !sourceTab) return
+    if (targetTab.panes.length >= 2 || sourceTab.panes.length === 0) return
+
+    const movedPane = sourceTab.panes[0]
+    targetTab.panes.push(movedPane)
+    targetTab.splitDirection = direction
+    sourceTab.panes = sourceTab.panes.filter((p) => p.id !== movedPane.id)
+
+    if (sourceTab.panes.length === 0) {
+      tabs.value = tabs.value.filter((t) => t.id !== sourceTabId)
+      if (activeTabId.value === sourceTabId) activeTabId.value = targetTabId
+    } else if (sourceTab.panes.length <= 1) {
+      sourceTab.splitDirection = null
+    }
+    activeTabId.value = targetTabId
+  }
+
+  function detachToTab(tabId: string, paneId: string) {
+    const tab = tabs.value.find((t) => t.id === tabId)
+    if (!tab || tab.panes.length < 2) return
+
+    const pane = tab.panes.find((p) => p.id === paneId)
+    if (!pane) return
+
+    tab.panes = tab.panes.filter((p) => p.id !== paneId)
+    if (tab.panes.length <= 1) tab.splitDirection = null
+
+    const label = pane.sessionId
+      ? (sessions.value.get(pane.sessionId)?.label || 'shell')
+      : 'shell'
+    const newTab: TerminalTab = {
+      id: nextId('tab'),
+      label,
+      panes: [pane],
+      splitDirection: null,
+    }
+    tabs.value.push(newTab)
+  }
+
   async function closePane(tabId: string, paneId: string) {
     const tab = tabs.value.find((t) => t.id === tabId)
     if (!tab) return
@@ -328,6 +375,22 @@ export const useTerminalStore = defineStore('terminal', () => {
 
   function togglePanel() {
     panel.value.visible = !panel.value.visible
+  }
+
+  function triggerReconnect() {
+    reconnectSignal.value++
+  }
+
+  function toggleBroadcast() {
+    broadcastMode.value = !broadcastMode.value
+  }
+
+  function reorderTab(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) return
+    if (fromIndex < 0 || toIndex < 0) return
+    if (fromIndex >= tabs.value.length || toIndex >= tabs.value.length) return
+    const [moved] = tabs.value.splice(fromIndex, 1)
+    tabs.value.splice(toIndex, 0, moved)
   }
 
   function setPanelMode(mode: 'pinned' | 'floating') {
@@ -439,6 +502,8 @@ export const useTerminalStore = defineStore('terminal', () => {
     activeTabId,
     activeTab,
     panel,
+    reconnectSignal,
+    broadcastMode,
     sessionsPanelOpen,
     liveSessions,
     attachedSessionIds,
@@ -450,10 +515,15 @@ export const useTerminalStore = defineStore('terminal', () => {
     closeAllTabs,
     clearPaneAlerts,
     splitPane,
+    mergeToSplit,
+    detachToTab,
     closePane,
     connectPane,
     updatePanel,
     togglePanel,
+    triggerReconnect,
+    toggleBroadcast,
+    reorderTab,
     setPanelMode,
     cleanOrphans,
     handleSessionExit,

@@ -101,6 +101,7 @@ func (h *Hub) run() {
 			h.mu.Unlock()
 
 		case event := <-h.broadcast:
+			var dead []*client
 			h.mu.RLock()
 			for c := range h.clients {
 				if !c.subscribedTo(event.Project) {
@@ -108,11 +109,18 @@ func (h *Hub) run() {
 				}
 				if err := c.writeJSON(event); err != nil {
 					log.Printf("ws write error: %v", err)
-					c.conn.Close()
-					delete(h.clients, c)
+					dead = append(dead, c)
 				}
 			}
 			h.mu.RUnlock()
+			if len(dead) > 0 {
+				h.mu.Lock()
+				for _, c := range dead {
+					delete(h.clients, c)
+					c.conn.Close()
+				}
+				h.mu.Unlock()
+			}
 		}
 	}
 }

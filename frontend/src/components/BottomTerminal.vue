@@ -1,18 +1,24 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { Splitpanes, Pane } from 'splitpanes'
+import 'splitpanes/dist/splitpanes.css'
 import WebTerminal from './WebTerminal.vue'
 import { useTerminalStore } from '../stores/terminal'
 import { useProjectsStore } from '../stores/projects'
+import { useToast } from '../composables/useToast'
 
 const terminalStore = useTerminalStore()
 const projectsStore = useProjectsStore()
 const router = useRouter()
+const { show: showToast } = useToast()
 
 async function handleNewTab() {
   const cwd = projectsStore.currentProject?.path || ''
   try {
     await terminalStore.addTab(cwd)
-  } catch { /* max sessions */ }
+  } catch (e) {
+    showToast('error', e instanceof Error ? e.message : 'Failed to create terminal')
+  }
 }
 
 function handleClose() {
@@ -44,6 +50,15 @@ function toggleMode() {
         >
           <span class="bt-dot" :class="{ active: terminalStore.activeTabId === tab.id }"></span>
           <span class="bt-tab-label">{{ tab.label }}</span>
+          <button
+            class="bt-tab-close"
+            @click.stop="terminalStore.closeTab(tab.id)"
+            title="Close tab"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>
+            </svg>
+          </button>
         </div>
         <button class="bt-tab-add" @click="handleNewTab" title="New terminal">+</button>
       </div>
@@ -74,10 +89,18 @@ function toggleMode() {
         v-show="tab.id === terminalStore.activeTabId"
         class="bt-terminal-area"
       >
+        <Splitpanes
+          v-if="tab.panes.length > 1"
+          :horizontal="tab.splitDirection === 'vertical'"
+          class="default-theme"
+        >
+          <Pane v-for="pane in tab.panes" :key="pane.id">
+            <WebTerminal :pane-id="pane.id" />
+          </Pane>
+        </Splitpanes>
         <WebTerminal
-          v-for="pane in tab.panes"
-          :key="pane.id"
-          :pane-id="pane.id"
+          v-else-if="tab.panes.length === 1"
+          :pane-id="tab.panes[0].id"
         />
       </div>
       <div v-if="terminalStore.tabs.length === 0" class="bt-empty" @click="handleNewTab">
@@ -146,6 +169,33 @@ function toggleMode() {
   background: var(--accent-green);
 }
 
+.bt-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.bt-tab:hover .bt-tab-close,
+.bt-tab.active .bt-tab-close {
+  opacity: 0.6;
+}
+
+.bt-tab-close:hover {
+  opacity: 1 !important;
+  color: var(--accent-red);
+  background: rgba(248, 81, 73, 0.15);
+}
+
 .bt-tab-add {
   font-size: 12px;
   color: var(--text-secondary);
@@ -212,5 +262,20 @@ function toggleMode() {
 
 .bt-empty:hover {
   color: var(--text-primary);
+}
+
+:deep(.splitpanes.default-theme .splitpanes__splitter) {
+  background: var(--border);
+  min-width: 3px;
+  min-height: 3px;
+}
+
+:deep(.splitpanes.default-theme .splitpanes__splitter:hover) {
+  background: var(--accent-blue);
+}
+
+:deep(.splitpanes.default-theme .splitpanes__splitter::before),
+:deep(.splitpanes.default-theme .splitpanes__splitter::after) {
+  display: none;
 }
 </style>

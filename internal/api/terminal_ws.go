@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"devhub/internal/terminal"
 
@@ -70,8 +71,22 @@ func HandleTerminalWS(manager *terminal.Manager) http.HandlerFunc {
 		default:
 		}
 
-		// Scrollback replay: send tail of log file before live stream
+		// Process initial resize from client before replay so PTY has correct dimensions.
+		// Frontend sends resize immediately on WS open.
+		conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		if msgType, data, err := conn.ReadMessage(); err == nil && msgType == websocket.TextMessage {
+			var msg terminalControlMsg
+			if json.Unmarshal(data, &msg) == nil && msg.Type == "resize" && msg.Cols > 0 && msg.Rows > 0 {
+				sess.Resize(msg.Cols, msg.Rows)
+			}
+		}
+		conn.SetReadDeadline(time.Time{})
+
+		// Scrollback replay: send tail of log file before live stream.
+		// Lock log to prevent concurrent truncation by the pump goroutine.
+		sess.LockLog()
 		replayScrollback(conn, id)
+		sess.UnlockLog()
 
 		// Attach live output: pump goroutine will call this for every PTY chunk
 		sess.AttachOutput(func(data []byte) {
