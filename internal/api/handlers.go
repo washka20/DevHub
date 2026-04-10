@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"devhub/internal/docker"
 	"devhub/internal/git"
@@ -23,6 +24,7 @@ import (
 type Handlers struct {
 	ProjectsDir string
 	Hub         *Hub
+	mu          sync.RWMutex
 	projects    []scanner.Project // cached project list
 	Git         *git.GitService
 	Docker      *docker.DockerService
@@ -43,7 +45,9 @@ func NewHandlers(projectsDir string, hub *Hub, gitSvc *git.GitService, dockerSvc
 func (h *Handlers) RefreshProjects() {
 	projects, err := scanner.Scan(h.ProjectsDir)
 	if err == nil {
+		h.mu.Lock()
 		h.projects = projects
+		h.mu.Unlock()
 	}
 }
 
@@ -63,6 +67,8 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 // projectPath resolves the project {id} to its actual directory path from cached scan.
 func (h *Handlers) projectPath(r *http.Request) (string, error) {
 	id := mux.Vars(r)["id"]
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	// Look up in cached projects (handles nested dirs like poop/status-online)
 	for _, p := range h.projects {
 		if p.Name == id {
@@ -86,12 +92,17 @@ func composeFilePath(projectPath string) (string, error) {
 // ListProjects handles GET /api/projects
 func (h *Handlers) ListProjects(w http.ResponseWriter, r *http.Request) {
 	h.RefreshProjects()
-	jsonResponse(w, h.projects)
+	h.mu.RLock()
+	projects := h.projects
+	h.mu.RUnlock()
+	jsonResponse(w, projects)
 }
 
 // GetProject handles GET /api/projects/{id}
 func (h *Handlers) GetProject(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	for _, p := range h.projects {
 		if p.Name == id {
 			jsonResponse(w, p)
