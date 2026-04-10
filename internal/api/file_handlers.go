@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
-	"log"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -14,6 +14,13 @@ import (
 
 	"github.com/gorilla/mux"
 )
+
+// --- Markdown handlers ---
+
+// MarkdownHandlers manages REST endpoints for README and markdown files.
+type MarkdownHandlers struct {
+	Base *Handlers
+}
 
 // readmeNames lists files to look for in order of priority.
 var readmeNames = []string{
@@ -39,8 +46,8 @@ var skipDirs = map[string]bool{
 }
 
 // GetReadme handles GET /api/projects/{id}/readme
-func (h *Handlers) GetReadme(w http.ResponseWriter, r *http.Request) {
-	projectPath, err := h.projectPath(r)
+func (mh *MarkdownHandlers) GetReadme(w http.ResponseWriter, r *http.Request) {
+	projectPath, err := mh.Base.projectPath(r)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -60,9 +67,8 @@ func (h *Handlers) GetReadme(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListMarkdownFiles handles GET /api/projects/{id}/markdown
-// Returns a JSON array of relative paths to all .md files in the project.
-func (h *Handlers) ListMarkdownFiles(w http.ResponseWriter, r *http.Request) {
-	projectPath, err := h.projectPath(r)
+func (mh *MarkdownHandlers) ListMarkdownFiles(w http.ResponseWriter, r *http.Request) {
+	projectPath, err := mh.Base.projectPath(r)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -93,9 +99,8 @@ func (h *Handlers) ListMarkdownFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetMarkdownFile handles GET /api/projects/{id}/markdown/{path:.*}
-// Returns the content of a specific .md file.
-func (h *Handlers) GetMarkdownFile(w http.ResponseWriter, r *http.Request) {
-	projectPath, err := h.projectPath(r)
+func (mh *MarkdownHandlers) GetMarkdownFile(w http.ResponseWriter, r *http.Request) {
+	projectPath, err := mh.Base.projectPath(r)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -107,7 +112,6 @@ func (h *Handlers) GetMarkdownFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Security: prevent path traversal
 	clean := filepath.Clean(mdPath)
 	if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
 		jsonError(w, "invalid path", http.StatusBadRequest)
@@ -116,7 +120,6 @@ func (h *Handlers) GetMarkdownFile(w http.ResponseWriter, r *http.Request) {
 
 	fullPath := filepath.Join(projectPath, clean)
 
-	// Ensure the resolved path is still within the project directory
 	if !strings.HasPrefix(fullPath, projectPath) {
 		jsonError(w, "invalid path", http.StatusBadRequest)
 		return
@@ -133,9 +136,8 @@ func (h *Handlers) GetMarkdownFile(w http.ResponseWriter, r *http.Request) {
 }
 
 // ToggleMarkdownCheckbox handles PUT /api/projects/{id}/markdown/{path:.*}
-// Toggles a task list checkbox at the given line number.
-func (h *Handlers) ToggleMarkdownCheckbox(w http.ResponseWriter, r *http.Request) {
-	projectPath, err := h.projectPath(r)
+func (mh *MarkdownHandlers) ToggleMarkdownCheckbox(w http.ResponseWriter, r *http.Request) {
+	projectPath, err := mh.Base.projectPath(r)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -203,18 +205,23 @@ func (h *Handlers) ToggleMarkdownCheckbox(w http.ResponseWriter, r *http.Request
 
 // --- File tree / editor API ---
 
+// FileHandlers manages REST endpoints for file operations.
+type FileHandlers struct {
+	Base *Handlers
+}
+
 // Directories to skip when building the file tree.
 var treeSkipDirs = map[string]bool{
-	".git":          true,
-	"node_modules":  true,
-	"vendor":        true,
-	"dist":          true,
-	"build":         true,
-	".superpowers":  true,
-	".claude":       true,
-	".idea":         true,
-	".vscode":       true,
-	".worktrees":    true,
+	".git":         true,
+	"node_modules": true,
+	"vendor":       true,
+	"dist":         true,
+	"build":        true,
+	".superpowers": true,
+	".claude":      true,
+	".idea":        true,
+	".vscode":      true,
+	".worktrees":   true,
 }
 
 // FileNode represents a node in the project file tree.
@@ -226,7 +233,7 @@ type FileNode struct {
 }
 
 // safePath resolves a relative path inside projectDir and guards against path traversal.
-func (h *Handlers) safePath(projectDir, relPath string) (string, error) {
+func safePath(projectDir, relPath string) (string, error) {
 	full := filepath.Join(projectDir, filepath.Clean(relPath))
 	full, err := filepath.Abs(full)
 	if err != nil {
@@ -250,7 +257,6 @@ func buildTree(root, dir string, depth int) []FileNode {
 		return nil
 	}
 
-	// Sort: dirs first, then alphabetical within each group.
 	sort.Slice(entries, func(i, j int) bool {
 		iDir := entries[i].IsDir()
 		jDir := entries[j].IsDir()
@@ -264,7 +270,6 @@ func buildTree(root, dir string, depth int) []FileNode {
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() {
-			// Skip known heavy/meta dirs and any hidden dir (starting with '.')
 			if treeSkipDirs[name] || strings.HasPrefix(name, ".") {
 				continue
 			}
@@ -293,8 +298,8 @@ func buildTree(root, dir string, depth int) []FileNode {
 }
 
 // FileTree handles GET /api/projects/{id}/files/tree
-func (h *Handlers) FileTree(w http.ResponseWriter, r *http.Request) {
-	projectPath, err := h.projectPath(r)
+func (fh *FileHandlers) FileTree(w http.ResponseWriter, r *http.Request) {
+	projectPath, err := fh.Base.projectPath(r)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -308,8 +313,8 @@ func (h *Handlers) FileTree(w http.ResponseWriter, r *http.Request) {
 }
 
 // FileContent handles GET /api/projects/{id}/files/content/{path:.*}
-func (h *Handlers) FileContent(w http.ResponseWriter, r *http.Request) {
-	projectPath, err := h.projectPath(r)
+func (fh *FileHandlers) FileContent(w http.ResponseWriter, r *http.Request) {
+	projectPath, err := fh.Base.projectPath(r)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -321,13 +326,12 @@ func (h *Handlers) FileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath, err := h.safePath(projectPath, relPath)
+	fullPath, err := safePath(projectPath, relPath)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Raw file serving (for images etc.)
 	if r.URL.Query().Get("raw") == "true" {
 		ext := strings.ToLower(filepath.Ext(relPath))
 		contentTypes := map[string]string{
@@ -353,7 +357,7 @@ func (h *Handlers) FileContent(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "path is a directory", http.StatusBadRequest)
 		return
 	}
-	const maxSize = 1 << 20 // 1 MB
+	const maxSize = 1 << 20
 	if info.Size() > maxSize {
 		jsonError(w, "file too large (max 1MB)", http.StatusRequestEntityTooLarge)
 		return
@@ -370,8 +374,8 @@ func (h *Handlers) FileContent(w http.ResponseWriter, r *http.Request) {
 }
 
 // FileWrite handles PUT /api/projects/{id}/files/content/{path:.*}
-func (h *Handlers) FileWrite(w http.ResponseWriter, r *http.Request) {
-	projectPath, err := h.projectPath(r)
+func (fh *FileHandlers) FileWrite(w http.ResponseWriter, r *http.Request) {
+	projectPath, err := fh.Base.projectPath(r)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -383,7 +387,7 @@ func (h *Handlers) FileWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath, err := h.safePath(projectPath, relPath)
+	fullPath, err := safePath(projectPath, relPath)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -404,8 +408,8 @@ func (h *Handlers) FileWrite(w http.ResponseWriter, r *http.Request) {
 }
 
 // FileCreate handles POST /api/projects/{id}/files/create
-func (h *Handlers) FileCreate(w http.ResponseWriter, r *http.Request) {
-	projectPath, err := h.projectPath(r)
+func (fh *FileHandlers) FileCreate(w http.ResponseWriter, r *http.Request) {
+	projectPath, err := fh.Base.projectPath(r)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -420,7 +424,7 @@ func (h *Handlers) FileCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath, err := h.safePath(projectPath, body.Path)
+	fullPath, err := safePath(projectPath, body.Path)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -447,8 +451,8 @@ func (h *Handlers) FileCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 // FileDelete handles DELETE /api/projects/{id}/files/delete/{path:.*}
-func (h *Handlers) FileDelete(w http.ResponseWriter, r *http.Request) {
-	projectPath, err := h.projectPath(r)
+func (fh *FileHandlers) FileDelete(w http.ResponseWriter, r *http.Request) {
+	projectPath, err := fh.Base.projectPath(r)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -460,7 +464,7 @@ func (h *Handlers) FileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath, err := h.safePath(projectPath, relPath)
+	fullPath, err := safePath(projectPath, relPath)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -475,8 +479,8 @@ func (h *Handlers) FileDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 // FileRename handles PATCH /api/projects/{id}/files/rename/{path:.*}
-func (h *Handlers) FileRename(w http.ResponseWriter, r *http.Request) {
-	projectPath, err := h.projectPath(r)
+func (fh *FileHandlers) FileRename(w http.ResponseWriter, r *http.Request) {
+	projectPath, err := fh.Base.projectPath(r)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -496,13 +500,13 @@ func (h *Handlers) FileRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oldFull, err := h.safePath(projectPath, relPath)
+	oldFull, err := safePath(projectPath, relPath)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	newFull, err := h.safePath(projectPath, body.NewPath)
+	newFull, err := safePath(projectPath, body.NewPath)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -523,8 +527,8 @@ func (h *Handlers) FileRename(w http.ResponseWriter, r *http.Request) {
 }
 
 // OpenInFileManager handles POST /api/projects/{id}/open-in-fm
-func (h *Handlers) OpenInFileManager(w http.ResponseWriter, r *http.Request) {
-	projectPath, err := h.projectPath(r)
+func (fh *FileHandlers) OpenInFileManager(w http.ResponseWriter, r *http.Request) {
+	projectPath, err := fh.Base.projectPath(r)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -538,7 +542,7 @@ func (h *Handlers) OpenInFileManager(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath, err := h.safePath(projectPath, body.Path)
+	fullPath, err := safePath(projectPath, body.Path)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return

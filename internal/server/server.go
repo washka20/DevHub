@@ -41,9 +41,16 @@ func New(cfg *config.Config) *Server {
 	// Terminal
 	termManager := terminal.NewManager(cfg.Terminal.MaxSessions)
 
-	h := api.NewHandlers(cfg.ProjectsDir, hub, gitSvc, dockerSvc)
-	h.TermManager = termManager
+	h := api.NewHandlers(cfg.ProjectsDir, hub)
 	h.RefreshProjects()
+
+	// Domain handler structs
+	gitH := &api.GitHandlers{Base: h, Git: gitSvc}
+	dockerH := &api.DockerHandlers{Base: h, Docker: dockerSvc, TermManager: termManager}
+	fileH := &api.FileHandlers{Base: h}
+	mdH := &api.MarkdownHandlers{Base: h}
+	notesH := &api.NotesHandlers{Base: h}
+	execH := &api.ExecHandlers{Base: h}
 
 	// File watcher: broadcast debounced fs changes to WebSocket clients.
 	var fw *watcher.Watcher
@@ -73,63 +80,63 @@ func New(cfg *config.Config) *Server {
 	// Projects
 	apiRouter.HandleFunc("/projects", h.ListProjects).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}", h.GetProject).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/commands", h.ListCommands).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/exec", h.ExecCommand).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/commands", execH.ListCommands).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/exec", execH.ExecCommand).Methods("POST")
 
 	// Git
-	apiRouter.HandleFunc("/projects/{id}/git/status", h.GitStatus).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/git/branches", h.GitBranches).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/git/log", h.GitLog).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/git/graph", h.GitGraph).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/git/log/metadata", h.GitLogMetadata).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/git/branches/{name:.+}/commits", h.GitBranchCommits).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/git/diff", h.GitDiff).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/git/commit", h.GitCommit).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/git/checkout", h.GitCheckout).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/git/pull", h.GitPull).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/git/push", h.GitPush).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/git/generate-commit", h.GitGenerateCommit).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/git/stage", h.GitStage).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/git/unstage", h.GitUnstage).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/git/commits/{hash}", h.GitCommitDetail).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/git/commits/{hash}/diff", h.GitCommitDiff).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/git/stash", h.GitStashList).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/git/stash", h.GitStashPush).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}/apply", h.GitStashApply).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}/pop", h.GitStashPop).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}", h.GitStashDrop).Methods("DELETE")
-	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}/diff", h.GitStashDiff).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/status", gitH.GitStatus).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/branches", gitH.GitBranches).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/log", gitH.GitLog).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/graph", gitH.GitGraph).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/log/metadata", gitH.GitLogMetadata).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/branches/{name:.+}/commits", gitH.GitBranchCommits).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/diff", gitH.GitDiff).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/commit", gitH.GitCommit).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/git/checkout", gitH.GitCheckout).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/git/pull", gitH.GitPull).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/git/push", gitH.GitPush).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/git/generate-commit", gitH.GitGenerateCommit).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/git/stage", gitH.GitStage).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/git/unstage", gitH.GitUnstage).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/git/commits/{hash}", gitH.GitCommitDetail).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/commits/{hash}/diff", gitH.GitCommitDiff).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/stash", gitH.GitStashList).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/stash", gitH.GitStashPush).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}/apply", gitH.GitStashApply).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}/pop", gitH.GitStashPop).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}", gitH.GitStashDrop).Methods("DELETE")
+	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}/diff", gitH.GitStashDiff).Methods("GET")
 
 	// Files
-	apiRouter.HandleFunc("/projects/{id}/readme", h.GetReadme).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/markdown", h.ListMarkdownFiles).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/markdown/{path:.*}", h.GetMarkdownFile).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/markdown/{path:.*}", h.ToggleMarkdownCheckbox).Methods("PUT")
+	apiRouter.HandleFunc("/projects/{id}/readme", mdH.GetReadme).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/markdown", mdH.ListMarkdownFiles).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/markdown/{path:.*}", mdH.GetMarkdownFile).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/markdown/{path:.*}", mdH.ToggleMarkdownCheckbox).Methods("PUT")
 
 	// File editor API
-	apiRouter.HandleFunc("/projects/{id}/files/tree", h.FileTree).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/files/content/{path:.*}", h.FileContent).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/files/content/{path:.*}", h.FileWrite).Methods("PUT")
-	apiRouter.HandleFunc("/projects/{id}/files/create", h.FileCreate).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/files/delete/{path:.*}", h.FileDelete).Methods("DELETE")
-	apiRouter.HandleFunc("/projects/{id}/files/rename/{path:.*}", h.FileRename).Methods("PATCH")
-	apiRouter.HandleFunc("/projects/{id}/open-in-fm", h.OpenInFileManager).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/files/tree", fileH.FileTree).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/files/content/{path:.*}", fileH.FileContent).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/files/content/{path:.*}", fileH.FileWrite).Methods("PUT")
+	apiRouter.HandleFunc("/projects/{id}/files/create", fileH.FileCreate).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/files/delete/{path:.*}", fileH.FileDelete).Methods("DELETE")
+	apiRouter.HandleFunc("/projects/{id}/files/rename/{path:.*}", fileH.FileRename).Methods("PATCH")
+	apiRouter.HandleFunc("/projects/{id}/open-in-fm", fileH.OpenInFileManager).Methods("POST")
 
 	// Notes
-	apiRouter.HandleFunc("/projects/{id}/notes", h.ListNotes).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/notes/{slug}", h.GetNote).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/notes", h.CreateNote).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/notes/{slug}", h.UpdateNote).Methods("PUT")
-	apiRouter.HandleFunc("/projects/{id}/notes/{slug}", h.DeleteNote).Methods("DELETE")
+	apiRouter.HandleFunc("/projects/{id}/notes", notesH.ListNotes).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/notes/{slug}", notesH.GetNote).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/notes", notesH.CreateNote).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/notes/{slug}", notesH.UpdateNote).Methods("PUT")
+	apiRouter.HandleFunc("/projects/{id}/notes/{slug}", notesH.DeleteNote).Methods("DELETE")
 
 	// Docker
-	apiRouter.HandleFunc("/projects/{id}/docker/containers", h.DockerContainers).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/docker/compose/up", h.DockerComposeUp).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/docker/compose/up-build", h.DockerComposeUpBuild).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/docker/compose/down", h.DockerComposeDown).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/docker/{name}/logs", h.DockerLogs).Methods("GET")
-	apiRouter.HandleFunc("/projects/{id}/docker/{name}/exec", h.DockerExec).Methods("POST")
-	apiRouter.HandleFunc("/projects/{id}/docker/{name}/{action}", h.DockerAction).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/docker/containers", dockerH.DockerContainers).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/docker/compose/up", dockerH.DockerComposeUp).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/docker/compose/up-build", dockerH.DockerComposeUpBuild).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/docker/compose/down", dockerH.DockerComposeDown).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/docker/{name}/logs", dockerH.DockerLogs).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/docker/{name}/exec", dockerH.DockerExec).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/docker/{name}/{action}", dockerH.DockerAction).Methods("POST")
 
 	// Terminal
 	th := &api.TerminalHandlers{Manager: termManager, Cfg: cfg}

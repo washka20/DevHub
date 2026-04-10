@@ -1,43 +1,16 @@
 package git
 
 import (
-	"context"
-	"fmt"
 	"testing"
+
+	"devhub/internal/testutil"
 )
 
-// MockRunner implements runner.CommandRunner for testing.
-type MockRunner struct {
-	calls   []MockCall
-	current int
-}
-
-// MockCall describes an expected call and its response.
-type MockCall struct {
-	ExpectedCmd  string
-	ExpectedArgs []string
-	Output       string
-	Err          error
-}
-
-func (m *MockRunner) Run(dir, name string, args ...string) (string, error) {
-	if m.current >= len(m.calls) {
-		return "", fmt.Errorf("unexpected call #%d: %s %v", m.current, name, args)
-	}
-	call := m.calls[m.current]
-	m.current++
-	return call.Output, call.Err
-}
-
-func (m *MockRunner) RunContext(ctx context.Context, dir, name string, args ...string) (string, error) {
-	return m.Run(dir, name, args...)
-}
-
 func TestStatus_Clean(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
-		{Output: "main\n"},                   // git rev-parse --abbrev-ref HEAD
-		{Output: "0\t0\n"},                   // git rev-list --left-right --count
-		{Output: ""},                         // git status --porcelain
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
+		{Output: "main\n"},
+		{Output: "0\t0\n"},
+		{Output: ""},
 	}}
 
 	svc := NewGitService(mock)
@@ -60,7 +33,7 @@ func TestStatus_Clean(t *testing.T) {
 }
 
 func TestStatus_Modified(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: "develop\n"},
 		{Output: "2\t1\n"},
 		{Output: " M file.go\n M main.go\n"},
@@ -83,7 +56,7 @@ func TestStatus_Modified(t *testing.T) {
 }
 
 func TestStatus_Staged(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: "main\n"},
 		{Output: ""},
 		{Output: "M  file.go\nA  new.go\n"},
@@ -103,7 +76,7 @@ func TestStatus_Staged(t *testing.T) {
 }
 
 func TestBranches(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: "main\ndevelop\nfeature/auth\n"},
 	}}
 
@@ -121,14 +94,10 @@ func TestBranches(t *testing.T) {
 }
 
 func TestBranchesDetailed(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
-		// git rev-parse --abbrev-ref HEAD
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: "main\n"},
-		// git branch -a --format=...
 		{Output: "main|abc1234|initial commit|John|2 hours ago|\ndevelop|def5678|add feature|Jane|1 hour ago|\n"},
-		// git branch --merged
 		{Output: "* main\n  develop\n"},
-		// git rev-list for develop (not current branch)
 		{Output: "0\t3\n"},
 	}}
 
@@ -159,7 +128,7 @@ func TestLog(t *testing.T) {
 	logOutput := `* abc1234567890abc1234567890abc1234567890ab|abc1234|initial commit|John|2 hours ago|HEAD -> main|
 * def5678901234def5678901234def5678901234de|def5678|add feature|Jane|1 hour ago||abc1234567890abc1234567890abc1234567890ab`
 
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: logOutput},
 	}}
 
@@ -187,7 +156,7 @@ func TestLog_WithParents(t *testing.T) {
 * def5678901234def5678901234def5678901234de|def5678|add feature|Jane|1 hour ago|HEAD -> main|abc1234567890abc1234567890abc1234567890ab
 *   cde9012345678cde9012345678cde9012345678cd|cde9012|merge branch|Bob|30 min ago||def5678901234def5678901234def5678901234de abc1234567890abc1234567890abc1234567890ab`
 
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: logOutput},
 	}}
 
@@ -213,7 +182,7 @@ func TestLog_WithParents(t *testing.T) {
 func TestDiff(t *testing.T) {
 	diffOutput := "diff --git a/file.go b/file.go\n--- a/file.go\n+++ b/file.go\n@@ -1 +1 @@\n-old\n+new\n"
 
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: diffOutput},
 	}}
 
@@ -230,7 +199,7 @@ func TestDiff(t *testing.T) {
 func TestDiffFile(t *testing.T) {
 	diffOutput := "diff --git a/main.go b/main.go\n"
 
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: diffOutput},
 	}}
 
@@ -245,9 +214,9 @@ func TestDiffFile(t *testing.T) {
 }
 
 func TestCommitChanges(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
-		{Output: ""},              // git add -- file.go
-		{Output: "[main abc] msg\n"}, // git commit -m "msg"
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
+		{Output: ""},
+		{Output: "[main abc] msg\n"},
 	}}
 
 	svc := NewGitService(mock)
@@ -258,7 +227,7 @@ func TestCommitChanges(t *testing.T) {
 }
 
 func TestStageFiles(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: ""},
 	}}
 
@@ -270,7 +239,7 @@ func TestStageFiles(t *testing.T) {
 }
 
 func TestUnstageFiles(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: ""},
 	}}
 
@@ -282,7 +251,7 @@ func TestUnstageFiles(t *testing.T) {
 }
 
 func TestCheckout(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: "Switched to branch 'develop'\n"},
 	}}
 
@@ -297,7 +266,7 @@ func TestCommitDetail(t *testing.T) {
 	showOutput := "abc123def456abc123def456abc123def456abc123|fix bug|John|john@test.com|2024-01-15 10:00:00 +0300|\n file.go | 2 +-\n 1 file changed"
 	treeOutput := "M\tfile.go\n"
 
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: showOutput},
 		{Output: treeOutput},
 	}}
@@ -325,8 +294,7 @@ func TestCommitDetail(t *testing.T) {
 }
 
 func TestCommitDetail_InvalidHash(t *testing.T) {
-	// Should fail without calling runner
-	mock := &MockRunner{calls: []MockCall{}}
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{}}
 
 	svc := NewGitService(mock)
 	_, err := svc.CommitDetail("/test", "not-a-valid-hash!")
@@ -338,7 +306,7 @@ func TestCommitDetail_InvalidHash(t *testing.T) {
 func TestCommitDiff(t *testing.T) {
 	diffOutput := "commit abc123\nAuthor: John\n\ndiff content\n"
 
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: diffOutput},
 	}}
 
@@ -355,7 +323,7 @@ func TestCommitDiff(t *testing.T) {
 func TestCommitDiff_WithFile(t *testing.T) {
 	diffOutput := "diff for specific file\n"
 
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: diffOutput},
 	}}
 

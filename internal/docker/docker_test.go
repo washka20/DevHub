@@ -1,40 +1,15 @@
 package docker
 
 import (
-	"context"
-	"fmt"
 	"testing"
+
+	"devhub/internal/testutil"
 )
-
-// MockRunner implements runner.CommandRunner for testing.
-type MockRunner struct {
-	calls   []MockCall
-	current int
-}
-
-// MockCall describes an expected call and its response.
-type MockCall struct {
-	Output string
-	Err    error
-}
-
-func (m *MockRunner) Run(dir, name string, args ...string) (string, error) {
-	if m.current >= len(m.calls) {
-		return "", fmt.Errorf("unexpected call #%d: %s %v", m.current, name, args)
-	}
-	call := m.calls[m.current]
-	m.current++
-	return call.Output, call.Err
-}
-
-func (m *MockRunner) RunContext(ctx context.Context, dir, name string, args ...string) (string, error) {
-	return m.Run(dir, name, args...)
-}
 
 func TestContainers_JSONArray(t *testing.T) {
 	jsonOutput := `[{"Name":"myapp-web-1","Image":"nginx:latest","Status":"Up 2 hours","State":"running","Service":"web","Ports":"0.0.0.0:80->80/tcp"},{"Name":"myapp-db-1","Image":"postgres:15","Status":"Up 2 hours","State":"running","Service":"db","Ports":"5432/tcp"}]`
 
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: jsonOutput},
 	}}
 
@@ -61,7 +36,7 @@ func TestContainers_JSONLines(t *testing.T) {
 	jsonOutput := `{"Name":"myapp-web-1","Image":"nginx","Status":"Up","State":"running","Service":"web","Ports":"80/tcp"}
 {"Name":"myapp-redis-1","Image":"redis:7","Status":"Up","State":"running","Service":"redis","Ports":"6379/tcp"}`
 
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: jsonOutput},
 	}}
 
@@ -79,7 +54,7 @@ func TestContainers_JSONLines(t *testing.T) {
 }
 
 func TestContainers_Empty(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: ""},
 	}}
 
@@ -94,7 +69,7 @@ func TestContainers_Empty(t *testing.T) {
 }
 
 func TestAction_Start(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: ""},
 	}}
 
@@ -106,7 +81,7 @@ func TestAction_Start(t *testing.T) {
 }
 
 func TestAction_Stop(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: ""},
 	}}
 
@@ -118,7 +93,7 @@ func TestAction_Stop(t *testing.T) {
 }
 
 func TestAction_Restart(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: ""},
 	}}
 
@@ -130,7 +105,7 @@ func TestAction_Restart(t *testing.T) {
 }
 
 func TestAction_Up(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: ""},
 	}}
 
@@ -142,7 +117,7 @@ func TestAction_Up(t *testing.T) {
 }
 
 func TestAction_StartAll(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: ""},
 	}}
 
@@ -154,7 +129,7 @@ func TestAction_StartAll(t *testing.T) {
 }
 
 func TestAction_StopAll(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: ""},
 	}}
 
@@ -166,7 +141,7 @@ func TestAction_StopAll(t *testing.T) {
 }
 
 func TestAction_Invalid(t *testing.T) {
-	mock := &MockRunner{calls: []MockCall{}}
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{}}
 
 	svc := NewDockerService(mock)
 	err := svc.Action("/project/docker-compose.yml", "web", "invalid-action")
@@ -178,7 +153,7 @@ func TestAction_Invalid(t *testing.T) {
 func TestLogs(t *testing.T) {
 	logOutput := "2024-01-15 10:00:00 Starting server...\n2024-01-15 10:00:01 Server ready\n"
 
-	mock := &MockRunner{calls: []MockCall{
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
 		{Output: logOutput},
 	}}
 

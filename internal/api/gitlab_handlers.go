@@ -50,7 +50,184 @@ func (gh *GitLabHandlers) resolveGitLabProject(r *http.Request) (*gitlab.Project
 	return gh.Client.ProjectByRemote(remoteURL)
 }
 
-// --- Existing per-project handlers ---
+func (gh *GitLabHandlers) glProjectID(r *http.Request) (int, error) {
+	return strconv.Atoi(mux.Vars(r)["pid"])
+}
+
+// resolveProjectID extracts GitLab project ID from either DevHub project or direct {pid}.
+func (gh *GitLabHandlers) resolveProjectID(r *http.Request, direct bool) (int, error) {
+	if direct {
+		return gh.glProjectID(r)
+	}
+	project, err := gh.resolveGitLabProject(r)
+	if err != nil {
+		return 0, err
+	}
+	return project.ID, nil
+}
+
+func (gh *GitLabHandlers) projectIDError(w http.ResponseWriter, err error, direct bool) {
+	if direct {
+		jsonError(w, "invalid project ID", http.StatusBadRequest)
+	} else {
+		jsonError(w, "gitlab project not found: "+err.Error(), http.StatusNotFound)
+	}
+}
+
+// --- Shared private methods ---
+
+func (gh *GitLabHandlers) issueDetail(w http.ResponseWriter, pid, iid int) {
+	issue, err := gh.Client.IssueDetail(pid, iid)
+	if err != nil {
+		jsonError(w, "failed to fetch issue: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, issue)
+}
+
+func (gh *GitLabHandlers) issueNotes(w http.ResponseWriter, pid, iid int) {
+	notes, err := gh.Client.IssueNotes(pid, iid)
+	if err != nil {
+		jsonError(w, "failed to fetch issue notes: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, notes)
+}
+
+func (gh *GitLabHandlers) addIssueNote(w http.ResponseWriter, r *http.Request, pid, iid int) {
+	var body struct {
+		Body string `json:"body"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Body == "" {
+		jsonError(w, "body is required", http.StatusBadRequest)
+		return
+	}
+	note, err := gh.Client.AddIssueNote(pid, iid, body.Body)
+	if err != nil {
+		jsonError(w, "failed to add issue note: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(note)
+}
+
+func (gh *GitLabHandlers) updateIssue(w http.ResponseWriter, r *http.Request, pid, iid int) {
+	var req gitlab.UpdateIssueRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	issue, err := gh.Client.UpdateIssue(pid, iid, req)
+	if err != nil {
+		jsonError(w, "failed to update issue: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, issue)
+}
+
+func (gh *GitLabHandlers) createIssue(w http.ResponseWriter, r *http.Request, pid int) {
+	var req gitlab.CreateIssueRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Title == "" {
+		jsonError(w, "title is required", http.StatusBadRequest)
+		return
+	}
+	issue, err := gh.Client.CreateIssue(pid, req)
+	if err != nil {
+		jsonError(w, "failed to create issue: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(issue)
+}
+
+func (gh *GitLabHandlers) mrNotes(w http.ResponseWriter, pid, iid int) {
+	notes, err := gh.Client.MRNotes(pid, iid)
+	if err != nil {
+		jsonError(w, "failed to fetch MR notes: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, notes)
+}
+
+func (gh *GitLabHandlers) addMRNote(w http.ResponseWriter, r *http.Request, pid, iid int) {
+	var body struct {
+		Body string `json:"body"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Body == "" {
+		jsonError(w, "body is required", http.StatusBadRequest)
+		return
+	}
+	note, err := gh.Client.AddMRNote(pid, iid, body.Body)
+	if err != nil {
+		jsonError(w, "failed to add MR note: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(note)
+}
+
+func (gh *GitLabHandlers) createMR(w http.ResponseWriter, r *http.Request, pid int) {
+	var req gitlab.CreateMRRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Title == "" || req.SourceBranch == "" || req.TargetBranch == "" {
+		jsonError(w, "title, source_branch, and target_branch are required", http.StatusBadRequest)
+		return
+	}
+	mr, err := gh.Client.CreateMR(pid, req)
+	if err != nil {
+		jsonError(w, "failed to create merge request: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(mr)
+}
+
+func (gh *GitLabHandlers) projectMembers(w http.ResponseWriter, pid int) {
+	members, err := gh.Client.ProjectMembers(pid)
+	if err != nil {
+		jsonError(w, "failed to fetch project members: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, members)
+}
+
+// --- Handler that resolves project ID and IID, then delegates ---
+
+func (gh *GitLabHandlers) handleWithProjectAndIID(w http.ResponseWriter, r *http.Request, direct bool, fn func(http.ResponseWriter, *http.Request, int, int)) {
+	pid, err := gh.resolveProjectID(r, direct)
+	if err != nil {
+		gh.projectIDError(w, err, direct)
+		return
+	}
+	iid, err := strconv.Atoi(mux.Vars(r)["iid"])
+	if err != nil {
+		jsonError(w, "invalid IID", http.StatusBadRequest)
+		return
+	}
+	fn(w, r, pid, iid)
+}
+
+func (gh *GitLabHandlers) handleWithProject(w http.ResponseWriter, r *http.Request, direct bool, fn func(http.ResponseWriter, *http.Request, int)) {
+	pid, err := gh.resolveProjectID(r, direct)
+	if err != nil {
+		gh.projectIDError(w, err, direct)
+		return
+	}
+	fn(w, r, pid)
+}
+
+// --- Per-project handlers ---
 
 // GitLabProject handles GET /api/projects/{id}/gitlab/project
 func (gh *GitLabHandlers) GitLabProject(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +297,7 @@ func (gh *GitLabHandlers) GitLabPipelines(w http.ResponseWriter, r *http.Request
 	jsonResponse(w, pipelines)
 }
 
-// --- Cross-project handlers (no project ID needed) ---
+// --- Cross-project handlers ---
 
 // GitLabMyIssues handles GET /api/gitlab/my/issues?state=opened
 func (gh *GitLabHandlers) GitLabMyIssues(w http.ResponseWriter, r *http.Request) {
@@ -182,447 +359,119 @@ func (gh *GitLabHandlers) GitLabMilestones(w http.ResponseWriter, _ *http.Reques
 	jsonResponse(w, milestones)
 }
 
-// --- Per-project detail handlers ---
+// --- Per-project detail handlers (delegate to shared methods) ---
 
-// GitLabIssueDetail handles GET /api/projects/{id}/gitlab/issues/{iid}
 func (gh *GitLabHandlers) GitLabIssueDetail(w http.ResponseWriter, r *http.Request) {
-	project, err := gh.resolveGitLabProject(r)
-	if err != nil {
-		jsonError(w, "gitlab project not found: "+err.Error(), http.StatusNotFound)
-		return
-	}
-
-	iid, err := strconv.Atoi(mux.Vars(r)["iid"])
-	if err != nil {
-		jsonError(w, "invalid issue IID", http.StatusBadRequest)
-		return
-	}
-
-	issue, err := gh.Client.IssueDetail(project.ID, iid)
-	if err != nil {
-		jsonError(w, "failed to fetch issue: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	jsonResponse(w, issue)
+	gh.handleWithProjectAndIID(w, r, false, func(w http.ResponseWriter, _ *http.Request, pid, iid int) {
+		gh.issueDetail(w, pid, iid)
+	})
 }
 
-// GitLabIssueNotes handles GET /api/projects/{id}/gitlab/issues/{iid}/notes
 func (gh *GitLabHandlers) GitLabIssueNotes(w http.ResponseWriter, r *http.Request) {
-	project, err := gh.resolveGitLabProject(r)
-	if err != nil {
-		jsonError(w, "gitlab project not found: "+err.Error(), http.StatusNotFound)
-		return
-	}
-
-	iid, err := strconv.Atoi(mux.Vars(r)["iid"])
-	if err != nil {
-		jsonError(w, "invalid issue IID", http.StatusBadRequest)
-		return
-	}
-
-	notes, err := gh.Client.IssueNotes(project.ID, iid)
-	if err != nil {
-		jsonError(w, "failed to fetch issue notes: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	jsonResponse(w, notes)
+	gh.handleWithProjectAndIID(w, r, false, func(w http.ResponseWriter, _ *http.Request, pid, iid int) {
+		gh.issueNotes(w, pid, iid)
+	})
 }
 
-// GitLabMRNotes handles GET /api/projects/{id}/gitlab/merge-requests/{iid}/notes
-func (gh *GitLabHandlers) GitLabMRNotes(w http.ResponseWriter, r *http.Request) {
-	project, err := gh.resolveGitLabProject(r)
-	if err != nil {
-		jsonError(w, "gitlab project not found: "+err.Error(), http.StatusNotFound)
-		return
-	}
-
-	iid, err := strconv.Atoi(mux.Vars(r)["iid"])
-	if err != nil {
-		jsonError(w, "invalid merge request IID", http.StatusBadRequest)
-		return
-	}
-
-	notes, err := gh.Client.MRNotes(project.ID, iid)
-	if err != nil {
-		jsonError(w, "failed to fetch MR notes: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	jsonResponse(w, notes)
-}
-
-// GitLabProjectMembers handles GET /api/projects/{id}/gitlab/members
-func (gh *GitLabHandlers) GitLabProjectMembers(w http.ResponseWriter, r *http.Request) {
-	project, err := gh.resolveGitLabProject(r)
-	if err != nil {
-		jsonError(w, "gitlab project not found: "+err.Error(), http.StatusNotFound)
-		return
-	}
-
-	members, err := gh.Client.ProjectMembers(project.ID)
-	if err != nil {
-		jsonError(w, "failed to fetch project members: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	jsonResponse(w, members)
-}
-
-// --- Write handlers ---
-
-// GitLabCreateIssue handles POST /api/projects/{id}/gitlab/issues
-func (gh *GitLabHandlers) GitLabCreateIssue(w http.ResponseWriter, r *http.Request) {
-	project, err := gh.resolveGitLabProject(r)
-	if err != nil {
-		jsonError(w, "gitlab project not found: "+err.Error(), http.StatusNotFound)
-		return
-	}
-
-	var req gitlab.CreateIssueRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	if req.Title == "" {
-		jsonError(w, "title is required", http.StatusBadRequest)
-		return
-	}
-
-	issue, err := gh.Client.CreateIssue(project.ID, req)
-	if err != nil {
-		jsonError(w, "failed to create issue: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(issue)
-}
-
-// GitLabCreateMR handles POST /api/projects/{id}/gitlab/merge-requests
-func (gh *GitLabHandlers) GitLabCreateMR(w http.ResponseWriter, r *http.Request) {
-	project, err := gh.resolveGitLabProject(r)
-	if err != nil {
-		jsonError(w, "gitlab project not found: "+err.Error(), http.StatusNotFound)
-		return
-	}
-
-	var req gitlab.CreateMRRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	if req.Title == "" || req.SourceBranch == "" || req.TargetBranch == "" {
-		jsonError(w, "title, source_branch, and target_branch are required", http.StatusBadRequest)
-		return
-	}
-
-	mr, err := gh.Client.CreateMR(project.ID, req)
-	if err != nil {
-		jsonError(w, "failed to create merge request: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(mr)
-}
-
-// GitLabAddIssueNote handles POST /api/projects/{id}/gitlab/issues/{iid}/notes
 func (gh *GitLabHandlers) GitLabAddIssueNote(w http.ResponseWriter, r *http.Request) {
-	project, err := gh.resolveGitLabProject(r)
-	if err != nil {
-		jsonError(w, "gitlab project not found: "+err.Error(), http.StatusNotFound)
-		return
-	}
-
-	iid, err := strconv.Atoi(mux.Vars(r)["iid"])
-	if err != nil {
-		jsonError(w, "invalid issue IID", http.StatusBadRequest)
-		return
-	}
-
-	var body struct {
-		Body string `json:"body"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Body == "" {
-		jsonError(w, "body is required", http.StatusBadRequest)
-		return
-	}
-
-	note, err := gh.Client.AddIssueNote(project.ID, iid, body.Body)
-	if err != nil {
-		jsonError(w, "failed to add issue note: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(note)
+	gh.handleWithProjectAndIID(w, r, false, func(w http.ResponseWriter, r *http.Request, pid, iid int) {
+		gh.addIssueNote(w, r, pid, iid)
+	})
 }
 
-// GitLabAddMRNote handles POST /api/projects/{id}/gitlab/merge-requests/{iid}/notes
-func (gh *GitLabHandlers) GitLabAddMRNote(w http.ResponseWriter, r *http.Request) {
-	project, err := gh.resolveGitLabProject(r)
-	if err != nil {
-		jsonError(w, "gitlab project not found: "+err.Error(), http.StatusNotFound)
-		return
-	}
-
-	iid, err := strconv.Atoi(mux.Vars(r)["iid"])
-	if err != nil {
-		jsonError(w, "invalid merge request IID", http.StatusBadRequest)
-		return
-	}
-
-	var body struct {
-		Body string `json:"body"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Body == "" {
-		jsonError(w, "body is required", http.StatusBadRequest)
-		return
-	}
-
-	note, err := gh.Client.AddMRNote(project.ID, iid, body.Body)
-	if err != nil {
-		jsonError(w, "failed to add MR note: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(note)
-}
-
-// GitLabUpdateIssue handles PUT /api/projects/{id}/gitlab/issues/{iid}
 func (gh *GitLabHandlers) GitLabUpdateIssue(w http.ResponseWriter, r *http.Request) {
-	project, err := gh.resolveGitLabProject(r)
-	if err != nil {
-		jsonError(w, "gitlab project not found: "+err.Error(), http.StatusNotFound)
-		return
-	}
-
-	iid, err := strconv.Atoi(mux.Vars(r)["iid"])
-	if err != nil {
-		jsonError(w, "invalid issue IID", http.StatusBadRequest)
-		return
-	}
-
-	var req gitlab.UpdateIssueRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	issue, err := gh.Client.UpdateIssue(project.ID, iid, req)
-	if err != nil {
-		jsonError(w, "failed to update issue: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	jsonResponse(w, issue)
+	gh.handleWithProjectAndIID(w, r, false, func(w http.ResponseWriter, r *http.Request, pid, iid int) {
+		gh.updateIssue(w, r, pid, iid)
+	})
 }
 
-// --- Direct handlers by GitLab project ID (no DevHub project binding) ---
-
-func (gh *GitLabHandlers) glProjectID(r *http.Request) (int, error) {
-	return strconv.Atoi(mux.Vars(r)["pid"])
+func (gh *GitLabHandlers) GitLabCreateIssue(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProject(w, r, false, func(w http.ResponseWriter, r *http.Request, pid int) {
+		gh.createIssue(w, r, pid)
+	})
 }
 
-// DirectIssueDetail handles GET /api/gitlab/projects/{pid}/issues/{iid}
+func (gh *GitLabHandlers) GitLabMRNotes(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, false, func(w http.ResponseWriter, _ *http.Request, pid, iid int) {
+		gh.mrNotes(w, pid, iid)
+	})
+}
+
+func (gh *GitLabHandlers) GitLabAddMRNote(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, false, func(w http.ResponseWriter, r *http.Request, pid, iid int) {
+		gh.addMRNote(w, r, pid, iid)
+	})
+}
+
+func (gh *GitLabHandlers) GitLabCreateMR(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProject(w, r, false, func(w http.ResponseWriter, r *http.Request, pid int) {
+		gh.createMR(w, r, pid)
+	})
+}
+
+func (gh *GitLabHandlers) GitLabProjectMembers(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProject(w, r, false, func(w http.ResponseWriter, _ *http.Request, pid int) {
+		gh.projectMembers(w, pid)
+	})
+}
+
+// --- Direct handlers by GitLab project ID ---
+
 func (gh *GitLabHandlers) DirectIssueDetail(w http.ResponseWriter, r *http.Request) {
-	pid, err := gh.glProjectID(r)
-	if err != nil {
-		jsonError(w, "invalid project ID", http.StatusBadRequest)
-		return
-	}
-	iid, err := strconv.Atoi(mux.Vars(r)["iid"])
-	if err != nil {
-		jsonError(w, "invalid issue IID", http.StatusBadRequest)
-		return
-	}
-	issue, err := gh.Client.IssueDetail(pid, iid)
-	if err != nil {
-		jsonError(w, "failed to fetch issue: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	jsonResponse(w, issue)
+	gh.handleWithProjectAndIID(w, r, true, func(w http.ResponseWriter, _ *http.Request, pid, iid int) {
+		gh.issueDetail(w, pid, iid)
+	})
 }
 
-// DirectIssueNotes handles GET /api/gitlab/projects/{pid}/issues/{iid}/notes
 func (gh *GitLabHandlers) DirectIssueNotes(w http.ResponseWriter, r *http.Request) {
-	pid, err := gh.glProjectID(r)
-	if err != nil {
-		jsonError(w, "invalid project ID", http.StatusBadRequest)
-		return
-	}
-	iid, err := strconv.Atoi(mux.Vars(r)["iid"])
-	if err != nil {
-		jsonError(w, "invalid issue IID", http.StatusBadRequest)
-		return
-	}
-	notes, err := gh.Client.IssueNotes(pid, iid)
-	if err != nil {
-		jsonError(w, "failed to fetch issue notes: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	jsonResponse(w, notes)
+	gh.handleWithProjectAndIID(w, r, true, func(w http.ResponseWriter, _ *http.Request, pid, iid int) {
+		gh.issueNotes(w, pid, iid)
+	})
 }
 
-// DirectAddIssueNote handles POST /api/gitlab/projects/{pid}/issues/{iid}/notes
 func (gh *GitLabHandlers) DirectAddIssueNote(w http.ResponseWriter, r *http.Request) {
-	pid, err := gh.glProjectID(r)
-	if err != nil {
-		jsonError(w, "invalid project ID", http.StatusBadRequest)
-		return
-	}
-	iid, err := strconv.Atoi(mux.Vars(r)["iid"])
-	if err != nil {
-		jsonError(w, "invalid issue IID", http.StatusBadRequest)
-		return
-	}
-	var body struct {
-		Body string `json:"body"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Body == "" {
-		jsonError(w, "body is required", http.StatusBadRequest)
-		return
-	}
-	note, err := gh.Client.AddIssueNote(pid, iid, body.Body)
-	if err != nil {
-		jsonError(w, "failed to add note: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(note)
+	gh.handleWithProjectAndIID(w, r, true, func(w http.ResponseWriter, r *http.Request, pid, iid int) {
+		gh.addIssueNote(w, r, pid, iid)
+	})
 }
 
-// DirectUpdateIssue handles PUT /api/gitlab/projects/{pid}/issues/{iid}
 func (gh *GitLabHandlers) DirectUpdateIssue(w http.ResponseWriter, r *http.Request) {
-	pid, err := gh.glProjectID(r)
-	if err != nil {
-		jsonError(w, "invalid project ID", http.StatusBadRequest)
-		return
-	}
-	iid, err := strconv.Atoi(mux.Vars(r)["iid"])
-	if err != nil {
-		jsonError(w, "invalid issue IID", http.StatusBadRequest)
-		return
-	}
-	var req gitlab.UpdateIssueRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	issue, err := gh.Client.UpdateIssue(pid, iid, req)
-	if err != nil {
-		jsonError(w, "failed to update issue: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	jsonResponse(w, issue)
+	gh.handleWithProjectAndIID(w, r, true, func(w http.ResponseWriter, r *http.Request, pid, iid int) {
+		gh.updateIssue(w, r, pid, iid)
+	})
 }
 
-// DirectMRNotes handles GET /api/gitlab/projects/{pid}/merge-requests/{iid}/notes
-func (gh *GitLabHandlers) DirectMRNotes(w http.ResponseWriter, r *http.Request) {
-	pid, err := gh.glProjectID(r)
-	if err != nil {
-		jsonError(w, "invalid project ID", http.StatusBadRequest)
-		return
-	}
-	iid, err := strconv.Atoi(mux.Vars(r)["iid"])
-	if err != nil {
-		jsonError(w, "invalid MR IID", http.StatusBadRequest)
-		return
-	}
-	notes, err := gh.Client.MRNotes(pid, iid)
-	if err != nil {
-		jsonError(w, "failed to fetch MR notes: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	jsonResponse(w, notes)
-}
-
-// DirectAddMRNote handles POST /api/gitlab/projects/{pid}/merge-requests/{iid}/notes
-func (gh *GitLabHandlers) DirectAddMRNote(w http.ResponseWriter, r *http.Request) {
-	pid, err := gh.glProjectID(r)
-	if err != nil {
-		jsonError(w, "invalid project ID", http.StatusBadRequest)
-		return
-	}
-	iid, err := strconv.Atoi(mux.Vars(r)["iid"])
-	if err != nil {
-		jsonError(w, "invalid MR IID", http.StatusBadRequest)
-		return
-	}
-	var body struct {
-		Body string `json:"body"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Body == "" {
-		jsonError(w, "body is required", http.StatusBadRequest)
-		return
-	}
-	note, err := gh.Client.AddMRNote(pid, iid, body.Body)
-	if err != nil {
-		jsonError(w, "failed to add MR note: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(note)
-}
-
-// DirectCreateIssue handles POST /api/gitlab/projects/{pid}/issues
 func (gh *GitLabHandlers) DirectCreateIssue(w http.ResponseWriter, r *http.Request) {
-	pid, err := gh.glProjectID(r)
-	if err != nil {
-		jsonError(w, "invalid project ID", http.StatusBadRequest)
-		return
-	}
-	var req gitlab.CreateIssueRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	if req.Title == "" {
-		jsonError(w, "title is required", http.StatusBadRequest)
-		return
-	}
-	issue, err := gh.Client.CreateIssue(pid, req)
-	if err != nil {
-		jsonError(w, "failed to create issue: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(issue)
+	gh.handleWithProject(w, r, true, func(w http.ResponseWriter, r *http.Request, pid int) {
+		gh.createIssue(w, r, pid)
+	})
 }
 
-// DirectCreateMR handles POST /api/gitlab/projects/{pid}/merge-requests
+func (gh *GitLabHandlers) DirectMRNotes(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, true, func(w http.ResponseWriter, _ *http.Request, pid, iid int) {
+		gh.mrNotes(w, pid, iid)
+	})
+}
+
+func (gh *GitLabHandlers) DirectAddMRNote(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, true, func(w http.ResponseWriter, r *http.Request, pid, iid int) {
+		gh.addMRNote(w, r, pid, iid)
+	})
+}
+
 func (gh *GitLabHandlers) DirectCreateMR(w http.ResponseWriter, r *http.Request) {
-	pid, err := gh.glProjectID(r)
-	if err != nil {
-		jsonError(w, "invalid project ID", http.StatusBadRequest)
-		return
-	}
-	var req gitlab.CreateMRRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	if req.Title == "" || req.SourceBranch == "" || req.TargetBranch == "" {
-		jsonError(w, "title, source_branch, and target_branch are required", http.StatusBadRequest)
-		return
-	}
-	mr, err := gh.Client.CreateMR(pid, req)
-	if err != nil {
-		jsonError(w, "failed to create MR: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(mr)
+	gh.handleWithProject(w, r, true, func(w http.ResponseWriter, r *http.Request, pid int) {
+		gh.createMR(w, r, pid)
+	})
+}
+
+func (gh *GitLabHandlers) DirectProjectMembers(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProject(w, r, true, func(w http.ResponseWriter, _ *http.Request, pid int) {
+		gh.projectMembers(w, pid)
+	})
 }
 
 // GitLabProxy handles GET /api/gitlab/proxy?url=<encoded-url>
-// Proxies files (images, attachments) from GitLab with authentication.
 func (gh *GitLabHandlers) GitLabProxy(w http.ResponseWriter, r *http.Request) {
 	targetURL := r.URL.Query().Get("url")
 	if targetURL == "" {
@@ -643,24 +492,8 @@ func (gh *GitLabHandlers) GitLabProxy(w http.ResponseWriter, r *http.Request) {
 	if contentLength > 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
 	}
-	// Uploaded files in GitLab are immutable (hash-addressed), safe to cache.
 	w.Header().Set("Cache-Control", "public, max-age=86400, immutable")
 
-	const maxProxySize = 50 << 20 // 50 MB
+	const maxProxySize = 50 << 20
 	io.Copy(w, io.LimitReader(body, maxProxySize))
-}
-
-// DirectProjectMembers handles GET /api/gitlab/projects/{pid}/members
-func (gh *GitLabHandlers) DirectProjectMembers(w http.ResponseWriter, r *http.Request) {
-	pid, err := gh.glProjectID(r)
-	if err != nil {
-		jsonError(w, "invalid project ID", http.StatusBadRequest)
-		return
-	}
-	members, err := gh.Client.ProjectMembers(pid)
-	if err != nil {
-		jsonError(w, "failed to fetch members: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	jsonResponse(w, members)
 }

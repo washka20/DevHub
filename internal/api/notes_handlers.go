@@ -15,6 +15,11 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// NotesHandlers manages REST endpoints for project notes.
+type NotesHandlers struct {
+	Base *Handlers
+}
+
 var multipleHyphens = regexp.MustCompile(`-{2,}`)
 
 // noteInfo represents a note in the list response.
@@ -87,7 +92,7 @@ func validateProjectName(name string) bool {
 }
 
 // ListNotes handles GET /api/projects/{id}/notes
-func (h *Handlers) ListNotes(w http.ResponseWriter, r *http.Request) {
+func (nh *NotesHandlers) ListNotes(w http.ResponseWriter, r *http.Request) {
 	projectName := mux.Vars(r)["id"]
 	if !validateProjectName(projectName) {
 		jsonError(w, "invalid project name", http.StatusBadRequest)
@@ -138,7 +143,7 @@ func (h *Handlers) ListNotes(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetNote handles GET /api/projects/{id}/notes/{slug}
-func (h *Handlers) GetNote(w http.ResponseWriter, r *http.Request) {
+func (nh *NotesHandlers) GetNote(w http.ResponseWriter, r *http.Request) {
 	projectName := mux.Vars(r)["id"]
 	if !validateProjectName(projectName) {
 		jsonError(w, "invalid project name", http.StatusBadRequest)
@@ -167,7 +172,7 @@ func (h *Handlers) GetNote(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateNote handles POST /api/projects/{id}/notes
-func (h *Handlers) CreateNote(w http.ResponseWriter, r *http.Request) {
+func (nh *NotesHandlers) CreateNote(w http.ResponseWriter, r *http.Request) {
 	projectName := mux.Vars(r)["id"]
 	if !validateProjectName(projectName) {
 		jsonError(w, "invalid project name", http.StatusBadRequest)
@@ -190,7 +195,6 @@ func (h *Handlers) CreateNote(w http.ResponseWriter, r *http.Request) {
 	slug := slugify(body.Title)
 	filePath := filepath.Join(dir, slug+".md")
 
-	// Deduplicate: append number if file exists
 	if _, err := os.Stat(filePath); err == nil {
 		found := false
 		for i := 2; i < 100; i++ {
@@ -219,7 +223,7 @@ func (h *Handlers) CreateNote(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateNote handles PUT /api/projects/{id}/notes/{slug}
-func (h *Handlers) UpdateNote(w http.ResponseWriter, r *http.Request) {
+func (nh *NotesHandlers) UpdateNote(w http.ResponseWriter, r *http.Request) {
 	projectName := mux.Vars(r)["id"]
 	if !validateProjectName(projectName) {
 		jsonError(w, "invalid project name", http.StatusBadRequest)
@@ -266,7 +270,7 @@ func (h *Handlers) UpdateNote(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteNote handles DELETE /api/projects/{id}/notes/{slug}
-func (h *Handlers) DeleteNote(w http.ResponseWriter, r *http.Request) {
+func (nh *NotesHandlers) DeleteNote(w http.ResponseWriter, r *http.Request) {
 	projectName := mux.Vars(r)["id"]
 	if !validateProjectName(projectName) {
 		jsonError(w, "invalid project name", http.StatusBadRequest)
