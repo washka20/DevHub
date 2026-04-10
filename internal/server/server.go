@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -26,6 +27,7 @@ type Server struct {
 	hub         *api.Hub
 	termManager *terminal.Manager
 	fileWatcher *watcher.Watcher
+	httpSrv     *http.Server
 }
 
 // New creates a new Server with all routes configured.
@@ -212,8 +214,17 @@ func New(cfg *config.Config) *Server {
 	return s
 }
 
-// Shutdown cleans up all terminal sessions and the file watcher.
-func (s *Server) Shutdown() {
+// Shutdown gracefully stops the HTTP server, closes the WebSocket hub,
+// cleans up terminal sessions, and stops the file watcher.
+func (s *Server) Shutdown(ctx context.Context) {
+	if s.httpSrv != nil {
+		if err := s.httpSrv.Shutdown(ctx); err != nil {
+			log.Printf("http server shutdown error: %v", err)
+		}
+	}
+	if s.hub != nil {
+		s.hub.Close()
+	}
 	if s.termManager != nil {
 		s.termManager.DestroyAll()
 	}
@@ -223,11 +234,13 @@ func (s *Server) Shutdown() {
 }
 
 // Start launches the HTTP server on localhost:port.
+// It blocks until the server is shut down; returns http.ErrServerClosed
+// on graceful shutdown.
 func (s *Server) Start() error {
 	addr := fmt.Sprintf("127.0.0.1:%d", s.cfg.Port)
 	log.Printf("DevHub server starting on http://%s", addr)
 
-	srv := &http.Server{
+	s.httpSrv = &http.Server{
 		Addr:        addr,
 		Handler:     corsMiddleware(loggerMiddleware(s.router)),
 		ReadTimeout: 15 * time.Second,
@@ -237,7 +250,7 @@ func (s *Server) Start() error {
 		IdleTimeout: 120 * time.Second,
 	}
 
-	return srv.ListenAndServe()
+	return s.httpSrv.ListenAndServe()
 }
 
 // --- Middleware ---

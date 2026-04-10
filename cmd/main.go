@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
-	"os"
+	"net/http"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"devhub/internal/config"
 	"devhub/internal/server"
@@ -16,18 +19,24 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	srv := server.New(cfg)
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		<-sigCh
+		<-ctx.Done()
 		log.Println("Shutting down...")
-		srv.Shutdown()
-		os.Exit(0)
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		srv.Shutdown(shutdownCtx)
 	}()
 
-	if err := srv.Start(); err != nil {
+	if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("Server error: %v", err)
 	}
+
+	log.Println("Server stopped")
 }

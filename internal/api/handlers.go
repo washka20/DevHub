@@ -170,9 +170,9 @@ func (h *Handlers) ExecCommand(w http.ResponseWriter, r *http.Request) {
 	projectName := mux.Vars(r)["id"]
 	cmdName := body.Cmd
 
-	// Execute make target in a goroutine and stream output via WebSocket
-	ctx := context.Background()
-	outputChan, errChan := execMake(ctx, path, cmdName)
+	// Execute make target in a goroutine and stream output via WebSocket.
+	// Use request context so the process is killed when the client disconnects.
+	outputChan, errChan := execMake(r.Context(), path, cmdName)
 
 	go func() {
 		for line := range outputChan {
