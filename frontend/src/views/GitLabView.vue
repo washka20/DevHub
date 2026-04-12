@@ -22,7 +22,7 @@ const gitlabProjects = computed(() => store.availableProjects)
 const currentBranch = computed(() => gitStore.status.branch || 'main')
 
 const isRefreshing = computed(() =>
-  store.myIssuesLoading || store.myMRsLoading
+  store.myIssuesLoading || store.myMRsLoading || store.reviewMRsLoading
 )
 
 const detailItem = computed(() => {
@@ -53,6 +53,11 @@ const labelColorMap = computed(() => {
     }
   }
   for (const mr of store.myMRs) {
+    for (const ld of mr.label_details || []) {
+      if (ld.color) map.set(ld.name, ld.color)
+    }
+  }
+  for (const mr of store.reviewMRs) {
     for (const ld of mr.label_details || []) {
       if (ld.color) map.set(ld.name, ld.color)
     }
@@ -100,6 +105,8 @@ async function handleRefresh() {
     await store.fetchMyIssues()
   } else if (store.activeMainTab === 'mrs') {
     await store.fetchMyMRs()
+  } else if (store.activeMainTab === 'reviews') {
+    await store.fetchReviewMRs()
   } else if (store.activeMainTab === 'project') {
     await Promise.all([store.fetchProjectIssues(), store.fetchProjectMRs()])
   } else {
@@ -288,6 +295,14 @@ onUnmounted(() => {
       </button>
       <button
         class="tab-btn"
+        :class="{ active: store.activeMainTab === 'reviews' }"
+        @click="store.activeMainTab = 'reviews'"
+      >
+        My Reviews
+        <span v-if="store.reviewMRs.length > 0" class="tab-badge">{{ store.reviewMRs.length }}</span>
+      </button>
+      <button
+        class="tab-btn"
         :class="{ active: store.activeMainTab === 'project' }"
         @click="store.activeMainTab = 'project'; store.fetchProjectIssues(); store.fetchProjectMRs()"
       >
@@ -458,6 +473,104 @@ onUnmounted(() => {
           <div v-else class="grouped-list">
             <div
               v-for="(mrs, projectPath) in store.groupedMyMRs"
+              :key="projectPath"
+              class="group"
+            >
+              <div class="group-header" @click="toggleGroup(projectPath)">
+                <svg
+                  class="group-chevron"
+                  :class="{ collapsed: isGroupCollapsed(projectPath) }"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                >
+                  <path d="M4.427 7.427l3.396 3.396a.25.25 0 00.354 0l3.396-3.396A.25.25 0 0011.396 7H4.604a.25.25 0 00-.177.427z"/>
+                </svg>
+                <span class="group-name">{{ projectPath }}</span>
+                <span class="group-count">{{ mrs.length }}</span>
+              </div>
+
+              <div v-if="!isGroupCollapsed(projectPath)" class="group-items">
+                <div
+                  v-for="mr in mrs"
+                  :key="mr.id"
+                  class="item-row mr-row"
+                  :class="{ 'row-selected': store.selectedItem?.type === 'mr' && store.selectedItem?.iid === mr.iid }"
+                  @click="selectMR(mr)"
+                >
+                  <span class="item-iid">!{{ mr.iid }}</span>
+                  <span class="item-title">
+                    <span v-if="mr.draft" class="draft-badge">Draft</span>
+                    {{ mr.title }}
+                  </span>
+                  <span class="mr-branches">
+                    <code>{{ mr.source_branch }}</code>
+                    <svg viewBox="0 0 16 16" fill="currentColor" width="10" height="10">
+                      <path d="M8.22 2.97a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06l2.97-2.97H3.75a.75.75 0 010-1.5h7.44L8.22 4.03a.75.75 0 010-1.06z"/>
+                    </svg>
+                    <code>{{ mr.target_branch }}</code>
+                  </span>
+                  <span class="ci-dot" :class="ciStatusClass(mr.pipeline)" :title="ciStatusText(mr.pipeline)"></span>
+                  <span class="item-labels">
+                    <span
+                      v-for="label in (mr.labels || []).slice(0, 2)"
+                      :key="label"
+                      class="label-badge"
+                      :style="labelStyle(label)"
+                    >{{ label }}</span>
+                  </span>
+                  <span class="item-time">{{ formatTimeAgo(mr.updated_at) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- MY REVIEWS TAB -->
+        <template v-if="store.activeMainTab === 'reviews'">
+          <div class="sub-tabs">
+            <button
+              class="sub-tab"
+              :class="{ active: store.reviewMRsState === 'opened' }"
+              @click="store.setReviewMRsState('opened')"
+            >Active</button>
+            <button
+              class="sub-tab"
+              :class="{ active: store.reviewMRsState === 'merged' }"
+              @click="store.setReviewMRsState('merged')"
+            >Merged</button>
+            <button
+              class="sub-tab"
+              :class="{ active: store.reviewMRsState === 'closed' }"
+              @click="store.setReviewMRsState('closed')"
+            >Closed</button>
+          </div>
+
+          <!-- Filter bar -->
+          <div class="filter-bar">
+            <input
+              v-model="store.searchQuery"
+              class="filter-search"
+              type="text"
+              placeholder="Search review requests..."
+            />
+            <button
+              v-if="store.searchQuery || store.filterLabels.length"
+              class="filter-clear"
+              @click="store.clearFilters()"
+            >Clear</button>
+          </div>
+
+          <div v-if="store.reviewMRsLoading && !store.reviewMRs.length" class="empty">
+            Loading review requests...
+          </div>
+
+          <div v-else-if="Object.keys(store.groupedReviewMRs).length === 0" class="empty">
+            No review requests found
+          </div>
+
+          <div v-else class="grouped-list">
+            <div
+              v-for="(mrs, projectPath) in store.groupedReviewMRs"
               :key="projectPath"
               class="group"
             >

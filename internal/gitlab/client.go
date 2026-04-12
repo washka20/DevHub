@@ -21,6 +21,10 @@ type Client struct {
 
 	mu      sync.RWMutex
 	idCache map[string]int
+
+	currentUserOnce sync.Once
+	currentUserID   int
+	currentUserErr  error
 }
 
 // NewClient creates a new GitLab API client.
@@ -575,6 +579,36 @@ func (c *Client) MyIssues(state string) ([]Issue, error) {
 // MyMergeRequests fetches merge requests created by the current user across all projects.
 func (c *Client) MyMergeRequests(state string) ([]MergeRequest, error) {
 	endpoint := fmt.Sprintf("/merge_requests?scope=created_by_me&state=%s&per_page=100&with_labels_details=true", url.QueryEscape(state))
+	var mrs []MergeRequest
+	if err := c.do(endpoint, &mrs); err != nil {
+		return nil, err
+	}
+	if mrs == nil {
+		mrs = []MergeRequest{}
+	}
+	return mrs, nil
+}
+
+// ensureCurrentUser fetches and caches the current user's ID (lazy, once).
+func (c *Client) ensureCurrentUser() error {
+	c.currentUserOnce.Do(func() {
+		var user Author
+		if err := c.do("/user", &user); err != nil {
+			c.currentUserErr = err
+			return
+		}
+		c.currentUserID = user.ID
+	})
+	return c.currentUserErr
+}
+
+// MyMergeRequestsToReview fetches merge requests where the current user is a reviewer.
+func (c *Client) MyMergeRequestsToReview(state string) ([]MergeRequest, error) {
+	if err := c.ensureCurrentUser(); err != nil {
+		return nil, fmt.Errorf("failed to get current user: %w", err)
+	}
+	endpoint := fmt.Sprintf("/merge_requests?reviewer_id=%d&state=%s&per_page=100&with_labels_details=true",
+		c.currentUserID, url.QueryEscape(state))
 	var mrs []MergeRequest
 	if err := c.do(endpoint, &mrs); err != nil {
 		return nil, err

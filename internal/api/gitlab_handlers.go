@@ -329,6 +329,21 @@ func (gh *GitLabHandlers) GitLabMyMRs(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, mrs)
 }
 
+// GitLabMyReviewMRs handles GET /api/gitlab/my/review-merge-requests?state=opened
+func (gh *GitLabHandlers) GitLabMyReviewMRs(w http.ResponseWriter, r *http.Request) {
+	state := r.URL.Query().Get("state")
+	if state == "" {
+		state = "opened"
+	}
+
+	mrs, err := gh.Client.MyMergeRequestsToReview(state)
+	if err != nil {
+		jsonError(w, "failed to fetch review MRs: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, mrs)
+}
+
 // GitLabCurrentUser handles GET /api/gitlab/user
 func (gh *GitLabHandlers) GitLabCurrentUser(w http.ResponseWriter, _ *http.Request) {
 	user, err := gh.Client.CurrentUser()

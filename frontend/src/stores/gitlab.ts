@@ -26,7 +26,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
   }
 
   // Tab state
-  const activeMainTab = ref<'tasks' | 'mrs' | 'project' | 'pipelines'>('tasks')
+  const activeMainTab = ref<'tasks' | 'mrs' | 'reviews' | 'project' | 'pipelines'>('tasks')
 
   // Cross-project: My Issues
   const myIssues = ref<GitLabIssue[]>([])
@@ -37,6 +37,11 @@ export const useGitLabStore = defineStore('gitlab', () => {
   const myMRs = ref<GitLabMR[]>([])
   const myMRsState = ref<'opened' | 'merged' | 'closed'>('opened')
   const myMRsLoading = ref(false)
+
+  // Cross-project: Review MRs
+  const reviewMRs = ref<GitLabMR[]>([])
+  const reviewMRsState = ref<'opened' | 'merged' | 'closed'>('opened')
+  const reviewMRsLoading = ref(false)
 
   // Detail panel
   const selectedItem = ref<{ type: 'issue' | 'mr'; projectPath: string; iid: number; projectId: number } | null>(null)
@@ -136,6 +141,33 @@ export const useGitLabStore = defineStore('gitlab', () => {
     return result
   })
 
+  const filteredReviewMRs = computed(() => {
+    let result = reviewMRs.value
+    if (searchQuery.value) {
+      const q = searchQuery.value.toLowerCase()
+      result = result.filter(m =>
+        m.title.toLowerCase().includes(q) || `!${m.iid}`.includes(q)
+      )
+    }
+    if (filterLabels.value.length > 0) {
+      result = result.filter(m =>
+        filterLabels.value.every(l => m.labels.includes(l))
+      )
+    }
+    return result
+  })
+
+  const groupedReviewMRs = computed(() => {
+    const groups: Record<string, GitLabMR[]> = {}
+    const filtered = filteredReviewMRs.value
+    for (const mr of filtered) {
+      const key = mr.project_path || 'unknown'
+      if (!groups[key]) groups[key] = []
+      groups[key].push(mr)
+    }
+    return groups
+  })
+
   // Cross-project fetches
   async function fetchMyIssues(state?: string) {
     myIssuesLoading.value = true
@@ -162,6 +194,20 @@ export const useGitLabStore = defineStore('gitlab', () => {
       myMRs.value = []
     } finally {
       myMRsLoading.value = false
+    }
+  }
+
+  async function fetchReviewMRs(state?: string) {
+    reviewMRsLoading.value = true
+    try {
+      const s = state || reviewMRsState.value
+      const data = await gitlabApi.myReviewMRs(s)
+      reviewMRs.value = enrichProjectPath(data ?? [])
+    } catch (e) {
+      toast.show('error', `Failed to fetch review MRs: ${getErrorMessage(e)}`)
+      reviewMRs.value = []
+    } finally {
+      reviewMRsLoading.value = false
     }
   }
 
@@ -242,6 +288,11 @@ export const useGitLabStore = defineStore('gitlab', () => {
         map.set(mr.project_id, mr.project_path)
       }
     }
+    for (const mr of reviewMRs.value) {
+      if (mr.project_id && mr.project_path) {
+        map.set(mr.project_id, mr.project_path)
+      }
+    }
     return Array.from(map, ([id, path]) => ({ id, path }))
   })
 
@@ -250,6 +301,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
       return myIssues.value.find(i => i.iid === iid && i.project_path === projectPath)?.project_id
     }
     return myMRs.value.find(m => m.iid === iid && m.project_path === projectPath)?.project_id
+      ?? reviewMRs.value.find(m => m.iid === iid && m.project_path === projectPath)?.project_id
   }
 
   async function selectItem(type: 'issue' | 'mr', projectPath: string, iid: number, projectId?: number) {
@@ -268,6 +320,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
       ])
     } else {
       const mr = myMRs.value.find(m => m.iid === iid && m.project_path === projectPath)
+        ?? reviewMRs.value.find(m => m.iid === iid && m.project_path === projectPath)
       if (mr) detailMR.value = mr
       await fetchMRNotes(pid, iid)
     }
@@ -391,6 +444,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
     refreshInterval = setInterval(() => {
       if (activeMainTab.value === 'tasks') fetchMyIssues()
       else if (activeMainTab.value === 'mrs') fetchMyMRs()
+      else if (activeMainTab.value === 'reviews') fetchReviewMRs()
       else if (activeMainTab.value === 'pipelines') fetchProjectPipelines()
     }, 60_000)
   }
@@ -409,6 +463,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
     await Promise.all([
       fetchMyIssues(),
       fetchMyMRs(),
+      fetchReviewMRs(),
       fetchLabels(),
       fetchMilestones(),
       fetchCurrentUser(),
@@ -446,9 +501,15 @@ export const useGitLabStore = defineStore('gitlab', () => {
     fetchMyMRs(state)
   }
 
+  function setReviewMRsState(state: 'opened' | 'merged' | 'closed') {
+    reviewMRsState.value = state
+    fetchReviewMRs(state)
+  }
+
   function reset() {
     myIssues.value = []
     myMRs.value = []
+    reviewMRs.value = []
     selectedItem.value = null
     detailIssue.value = null
     detailNotes.value = []
@@ -479,6 +540,11 @@ export const useGitLabStore = defineStore('gitlab', () => {
     myMRs,
     myMRsState,
     myMRsLoading,
+
+    // Review MRs
+    reviewMRs,
+    reviewMRsState,
+    reviewMRsLoading,
 
     // Detail
     selectedItem,
@@ -512,13 +578,16 @@ export const useGitLabStore = defineStore('gitlab', () => {
     openIssuesCount,
     groupedMyIssues,
     groupedMyMRs,
+    groupedReviewMRs,
     filteredMyIssues,
     filteredMyMRs,
+    filteredReviewMRs,
     availableProjects,
 
     // Cross-project fetches
     fetchMyIssues,
     fetchMyMRs,
+    fetchReviewMRs,
     fetchLabels,
     fetchMilestones,
     fetchCurrentUser,
@@ -554,6 +623,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
     // Helpers
     setMyIssuesState,
     setMyMRsState,
+    setReviewMRsState,
     clearFilters,
     reset,
     checkEnabled,

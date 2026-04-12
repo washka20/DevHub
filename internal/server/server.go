@@ -168,6 +168,7 @@ func New(cfg *config.Config) *Server {
 		// Cross-project (no {id} in path)
 		apiRouter.HandleFunc("/gitlab/my/issues", glh.GitLabMyIssues).Methods("GET")
 		apiRouter.HandleFunc("/gitlab/my/merge-requests", glh.GitLabMyMRs).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/my/review-merge-requests", glh.GitLabMyReviewMRs).Methods("GET")
 		apiRouter.HandleFunc("/gitlab/user", glh.GitLabCurrentUser).Methods("GET")
 		apiRouter.HandleFunc("/gitlab/labels", glh.GitLabLabels).Methods("GET")
 		apiRouter.HandleFunc("/gitlab/milestones", glh.GitLabMilestones).Methods("GET")

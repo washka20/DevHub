@@ -29,6 +29,9 @@ export const gitlabApi = {
   myMergeRequests: (state: string) =>
     api<GitLabMR[]>(`/api/gitlab/my/merge-requests?state=${state}`),
 
+  myReviewMRs: (state: string) =>
+    api<GitLabMR[]>(`/api/gitlab/my/review-merge-requests?state=${state}`),
+
   // By GitLab project ID
   issueDetail: (pid: number, iid: number) =>
     api<GitLabIssue>(`/api/gitlab/projects/${pid}/issues/${iid}`),
