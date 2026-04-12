@@ -25,6 +25,7 @@ const gitlabStore = useGitLabStore()
 
 const commentText = ref('')
 const submitting = ref(false)
+const approvingMR = ref(false)
 
 const isMR = computed(() => props.itemType === 'mr')
 const itemAsMR = computed(() => props.item as GitLabMR | null)
@@ -131,6 +132,42 @@ function getInitials(name: string): string {
   return name.substring(0, 2).toUpperCase()
 }
 
+const approvals = computed(() => gitlabStore.mrApprovals)
+
+const approvalStatusText = computed(() => {
+  const a = approvals.value
+  if (!a) return ''
+  if (a.approved) return 'Approved'
+  const approved = a.approvals_required - a.approvals_left
+  return `${approved}/${a.approvals_required} Approved`
+})
+
+async function toggleApproval() {
+  const sel = gitlabStore.selectedItem
+  if (!sel || sel.type !== 'mr') return
+  approvingMR.value = true
+  try {
+    const a = approvals.value
+    const isApprovedByMe = a?.approved_by?.some(
+      ab => gitlabStore.members[0] && ab.user.id === gitlabStore.members[0].id
+    )
+    if (isApprovedByMe) {
+      await gitlabStore.unapproveMR(sel.projectId, sel.iid)
+    } else {
+      await gitlabStore.approveMR(sel.projectId, sel.iid)
+    }
+  } finally {
+    approvingMR.value = false
+  }
+}
+
+const isApprovedByCurrentUser = computed(() => {
+  const a = approvals.value
+  const currentUser = gitlabStore.members[0]
+  if (!a || !currentUser) return false
+  return a.approved_by.some(ab => ab.user.id === currentUser.id)
+})
+
 const formatTimeAgo = formatRelativeTime
 
 async function submitComment() {
@@ -206,6 +243,15 @@ onUnmounted(() => {
               rel="noopener"
               class="action-btn"
             >Open in GitLab &#x2197;</a>
+            <button
+              v-if="isMR && approvals && item?.state === 'opened'"
+              class="action-btn"
+              :class="isApprovedByCurrentUser ? 'btn-unapprove' : 'btn-approve'"
+              :disabled="approvingMR"
+              @click="toggleApproval"
+            >
+              {{ isApprovedByCurrentUser ? 'Unapprove' : 'Approve' }}
+            </button>
             <button
               v-if="canToggleState"
               class="action-btn"
@@ -399,6 +445,27 @@ onUnmounted(() => {
                   >
                     <span class="avatar-sm">{{ getInitials(reviewer.name) }}</span>
                     <span>{{ reviewer.username }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Approvals -->
+              <div v-if="approvals" class="sidebar-field">
+                <div class="sidebar-label">Approvals</div>
+                <div class="sidebar-value">
+                  <span
+                    class="approval-badge"
+                    :class="approvals.approved ? 'approval-approved' : 'approval-pending'"
+                  >{{ approvalStatusText }}</span>
+                </div>
+                <div v-if="approvals.approved_by.length" class="approval-list">
+                  <div
+                    v-for="ab in approvals.approved_by"
+                    :key="ab.user.id"
+                    class="assignee-row"
+                  >
+                    <span class="avatar-sm approval-avatar">{{ getInitials(ab.user.name) }}</span>
+                    <span>{{ ab.user.username }}</span>
                   </div>
                 </div>
               </div>
@@ -1105,5 +1172,50 @@ onUnmounted(() => {
 .pipeline-skipped {
   background: rgba(139, 148, 158, 0.15);
   color: var(--text-secondary);
+}
+
+/* === Approvals === */
+.approval-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.approval-approved {
+  background: rgba(63, 185, 80, 0.15);
+  color: var(--accent-green);
+}
+
+.approval-pending {
+  background: rgba(210, 153, 34, 0.15);
+  color: var(--accent-orange);
+}
+
+.approval-list {
+  margin-top: 6px;
+}
+
+.approval-avatar {
+  background: rgba(63, 185, 80, 0.2);
+  color: var(--accent-green);
+}
+
+.btn-approve {
+  color: var(--accent-green);
+  border-color: rgba(63, 185, 80, 0.25);
+}
+
+.btn-approve:hover:not(:disabled) {
+  background: rgba(63, 185, 80, 0.1);
+}
+
+.btn-unapprove {
+  color: var(--accent-orange);
+  border-color: rgba(210, 153, 34, 0.25);
+}
+
+.btn-unapprove:hover:not(:disabled) {
+  background: rgba(210, 153, 34, 0.1);
 }
 </style>
