@@ -1,14 +1,17 @@
-import { api, postJson, putJson } from './client'
+import { api, apiText, postJson, putJson } from './client'
 import type {
   GitLabIssue,
   GitLabMR,
   GitLabMRApproval,
   GitLabNote,
+  GitLabDiscussion,
+  GitLabDiscussionNote,
   GitLabLabel,
   GitLabMilestone,
   GitLabMember,
   GitLabProject,
   GitLabPipeline,
+  GitLabJob,
   GitLabTodo,
 } from '../types'
 
@@ -90,4 +93,25 @@ export const gitlabApi = {
 
   projectPipelines: (projectBase: string) =>
     api<GitLabPipeline[]>(`${projectBase}/gitlab/pipelines`),
+
+  pipelineJobs: (pid: number, pipelineId: number) =>
+    api<GitLabJob[]>(`/api/gitlab/projects/${pid}/pipelines/${pipelineId}/jobs`),
+
+  jobTrace: (pid: number, jobId: number) =>
+    apiText(`/api/gitlab/projects/${pid}/jobs/${jobId}/trace`),
+
+  retryJob: (pid: number, jobId: number) =>
+    api<GitLabJob>(`/api/gitlab/projects/${pid}/jobs/${jobId}/retry`, postJson({})),
+
+  cancelJob: (pid: number, jobId: number) =>
+    api<GitLabJob>(`/api/gitlab/projects/${pid}/jobs/${jobId}/cancel`, postJson({})),
+
+  mrDiscussions: (pid: number, iid: number) =>
+    api<GitLabDiscussion[]>(`/api/gitlab/projects/${pid}/merge-requests/${iid}/discussions`),
+
+  resolveDiscussion: (pid: number, iid: number, discussionId: string, resolved: boolean) =>
+    api<{ ok: boolean }>(`/api/gitlab/projects/${pid}/merge-requests/${iid}/discussions/${discussionId}`, putJson({ resolved })),
+
+  replyToDiscussion: (pid: number, iid: number, discussionId: string, body: string) =>
+    api<GitLabDiscussionNote>(`/api/gitlab/projects/${pid}/merge-requests/${iid}/discussions/${discussionId}/notes`, postJson({ body })),
 }

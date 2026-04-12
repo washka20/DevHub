@@ -551,6 +551,92 @@ func (gh *GitLabHandlers) DirectUnapproveMR(w http.ResponseWriter, r *http.Reque
 	})
 }
 
+// --- MR Discussion handlers ---
+
+func (gh *GitLabHandlers) mrDiscussions(w http.ResponseWriter, pid, iid int) {
+	discussions, err := gh.Client.MRDiscussions(pid, iid)
+	if err != nil {
+		jsonError(w, "failed to fetch discussions: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, discussions)
+}
+
+func (gh *GitLabHandlers) resolveMRDiscussion(w http.ResponseWriter, r *http.Request, pid, iid int) {
+	discussionID := mux.Vars(r)["discussionId"]
+	var body struct {
+		Resolved bool `json:"resolved"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := gh.Client.ResolveMRDiscussion(pid, iid, discussionID, body.Resolved); err != nil {
+		jsonError(w, "failed to resolve discussion: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, map[string]bool{"ok": true})
+}
+
+func (gh *GitLabHandlers) replyToDiscussion(w http.ResponseWriter, r *http.Request, pid, iid int) {
+	discussionID := mux.Vars(r)["discussionId"]
+	var body struct {
+		Body string `json:"body"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Body == "" {
+		jsonError(w, "body is required", http.StatusBadRequest)
+		return
+	}
+	note, err := gh.Client.ReplyToDiscussion(pid, iid, discussionID, body.Body)
+	if err != nil {
+		jsonError(w, "failed to reply to discussion: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(note)
+}
+
+// Per-project discussion handlers
+
+func (gh *GitLabHandlers) GitLabMRDiscussions(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, false, func(w http.ResponseWriter, _ *http.Request, pid, iid int) {
+		gh.mrDiscussions(w, pid, iid)
+	})
+}
+
+func (gh *GitLabHandlers) GitLabResolveMRDiscussion(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, false, func(w http.ResponseWriter, r *http.Request, pid, iid int) {
+		gh.resolveMRDiscussion(w, r, pid, iid)
+	})
+}
+
+func (gh *GitLabHandlers) GitLabReplyToDiscussion(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, false, func(w http.ResponseWriter, r *http.Request, pid, iid int) {
+		gh.replyToDiscussion(w, r, pid, iid)
+	})
+}
+
+// Direct discussion handlers (by GitLab project ID)
+
+func (gh *GitLabHandlers) DirectMRDiscussions(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, true, func(w http.ResponseWriter, _ *http.Request, pid, iid int) {
+		gh.mrDiscussions(w, pid, iid)
+	})
+}
+
+func (gh *GitLabHandlers) DirectResolveMRDiscussion(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, true, func(w http.ResponseWriter, r *http.Request, pid, iid int) {
+		gh.resolveMRDiscussion(w, r, pid, iid)
+	})
+}
+
+func (gh *GitLabHandlers) DirectReplyToDiscussion(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, true, func(w http.ResponseWriter, r *http.Request, pid, iid int) {
+		gh.replyToDiscussion(w, r, pid, iid)
+	})
+}
+
 // GitLabMyTodos handles GET /api/gitlab/my/todos
 func (gh *GitLabHandlers) GitLabMyTodos(w http.ResponseWriter, r *http.Request) {
 	todos, err := gh.Client.MyTodos()
@@ -582,6 +668,126 @@ func (gh *GitLabHandlers) GitLabMarkAllTodosDone(w http.ResponseWriter, r *http.
 		return
 	}
 	jsonResponse(w, map[string]bool{"ok": true})
+}
+
+// --- Pipeline Jobs handlers ---
+
+func (gh *GitLabHandlers) pipelineJobs(w http.ResponseWriter, pid, pipelineID int) {
+	jobs, err := gh.Client.PipelineJobs(pid, pipelineID)
+	if err != nil {
+		jsonError(w, "failed to fetch pipeline jobs: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, jobs)
+}
+
+func (gh *GitLabHandlers) jobTrace(w http.ResponseWriter, pid, jobID int) {
+	trace, err := gh.Client.JobTrace(pid, jobID)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/plain")
+		http.Error(w, "failed to fetch job trace: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write([]byte(trace))
+}
+
+func (gh *GitLabHandlers) retryJob(w http.ResponseWriter, pid, jobID int) {
+	job, err := gh.Client.RetryJob(pid, jobID)
+	if err != nil {
+		jsonError(w, "failed to retry job: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, job)
+}
+
+func (gh *GitLabHandlers) cancelJob(w http.ResponseWriter, pid, jobID int) {
+	job, err := gh.Client.CancelJob(pid, jobID)
+	if err != nil {
+		jsonError(w, "failed to cancel job: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, job)
+}
+
+func (gh *GitLabHandlers) handleWithProjectAndPipelineID(w http.ResponseWriter, r *http.Request, direct bool, fn func(http.ResponseWriter, int, int)) {
+	pid, err := gh.resolveProjectID(r, direct)
+	if err != nil {
+		gh.projectIDError(w, err, direct)
+		return
+	}
+	pipelineID, err := strconv.Atoi(mux.Vars(r)["pipelineId"])
+	if err != nil {
+		jsonError(w, "invalid pipeline ID", http.StatusBadRequest)
+		return
+	}
+	fn(w, pid, pipelineID)
+}
+
+func (gh *GitLabHandlers) handleWithProjectAndJobID(w http.ResponseWriter, r *http.Request, direct bool, fn func(http.ResponseWriter, int, int)) {
+	pid, err := gh.resolveProjectID(r, direct)
+	if err != nil {
+		gh.projectIDError(w, err, direct)
+		return
+	}
+	jobID, err := strconv.Atoi(mux.Vars(r)["jobId"])
+	if err != nil {
+		jsonError(w, "invalid job ID", http.StatusBadRequest)
+		return
+	}
+	fn(w, pid, jobID)
+}
+
+// Per-project pipeline jobs handlers
+
+func (gh *GitLabHandlers) GitLabPipelineJobs(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndPipelineID(w, r, false, func(w http.ResponseWriter, pid, pipelineID int) {
+		gh.pipelineJobs(w, pid, pipelineID)
+	})
+}
+
+func (gh *GitLabHandlers) GitLabJobTrace(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndJobID(w, r, false, func(w http.ResponseWriter, pid, jobID int) {
+		gh.jobTrace(w, pid, jobID)
+	})
+}
+
+func (gh *GitLabHandlers) GitLabRetryJob(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndJobID(w, r, false, func(w http.ResponseWriter, pid, jobID int) {
+		gh.retryJob(w, pid, jobID)
+	})
+}
+
+func (gh *GitLabHandlers) GitLabCancelJob(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndJobID(w, r, false, func(w http.ResponseWriter, pid, jobID int) {
+		gh.cancelJob(w, pid, jobID)
+	})
+}
+
+// Direct pipeline jobs handlers (by GitLab project ID)
+
+func (gh *GitLabHandlers) DirectPipelineJobs(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndPipelineID(w, r, true, func(w http.ResponseWriter, pid, pipelineID int) {
+		gh.pipelineJobs(w, pid, pipelineID)
+	})
+}
+
+func (gh *GitLabHandlers) DirectJobTrace(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndJobID(w, r, true, func(w http.ResponseWriter, pid, jobID int) {
+		gh.jobTrace(w, pid, jobID)
+	})
+}
+
+func (gh *GitLabHandlers) DirectRetryJob(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndJobID(w, r, true, func(w http.ResponseWriter, pid, jobID int) {
+		gh.retryJob(w, pid, jobID)
+	})
+}
+
+func (gh *GitLabHandlers) DirectCancelJob(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndJobID(w, r, true, func(w http.ResponseWriter, pid, jobID int) {
+		gh.cancelJob(w, pid, jobID)
+	})
 }
 
 // GitLabProxy handles GET /api/gitlab/proxy?url=<encoded-url>

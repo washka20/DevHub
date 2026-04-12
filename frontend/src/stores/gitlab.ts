@@ -10,11 +10,13 @@ import type {
   GitLabPipeline,
   GitLabProject,
   GitLabNote,
+  GitLabDiscussion,
   GitLabLabel,
   GitLabMilestone,
   GitLabMember,
   GitLabTodo,
   GitLabMRApproval,
+  GitLabJob,
 } from '../types'
 
 export const useGitLabStore = defineStore('gitlab', () => {
@@ -57,6 +59,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
   const detailNotes = ref<GitLabNote[]>([])
   const detailLoading = ref(false)
   const mrApprovals = ref<GitLabMRApproval | null>(null)
+  const detailDiscussions = ref<GitLabDiscussion[]>([])
 
   // Filters
   const labels = ref<GitLabLabel[]>([])
@@ -78,6 +81,12 @@ export const useGitLabStore = defineStore('gitlab', () => {
   const mergeRequests = ref<GitLabMR[]>([])
   const pipelines = ref<GitLabPipeline[]>([])
   const projectLoading = ref(false)
+
+  // Pipeline jobs
+  const pipelineJobs = ref<Record<number, GitLabJob[]>>({})
+  const selectedJobTrace = ref<string | null>(null)
+  const selectedJobId = ref<number | null>(null)
+  const expandedPipelineId = ref<number | null>(null)
 
   // Auto-refresh
   let refreshInterval: ReturnType<typeof setInterval> | null = null
@@ -341,6 +350,46 @@ export const useGitLabStore = defineStore('gitlab', () => {
     }
   }
 
+  // Discussions
+  const resolvedThreadsCount = computed(() =>
+    detailDiscussions.value.filter(d =>
+      !d.individual_note && d.notes.some(n => n.resolvable) && d.notes.every(n => !n.resolvable || n.resolved)
+    ).length
+  )
+
+  const totalThreadsCount = computed(() =>
+    detailDiscussions.value.filter(d =>
+      !d.individual_note && d.notes.some(n => n.resolvable)
+    ).length
+  )
+
+  async function fetchMRDiscussions(pid: number, iid: number) {
+    try {
+      detailDiscussions.value = await gitlabApi.mrDiscussions(pid, iid) ?? []
+    } catch (e) {
+      toast.show('error', `Failed to fetch discussions: ${getErrorMessage(e)}`)
+      detailDiscussions.value = []
+    }
+  }
+
+  async function resolveDiscussion(pid: number, iid: number, discussionId: string, resolved: boolean) {
+    try {
+      await gitlabApi.resolveDiscussion(pid, iid, discussionId, resolved)
+      await fetchMRDiscussions(pid, iid)
+    } catch (e) {
+      toast.show('error', `Failed to resolve discussion: ${getErrorMessage(e)}`)
+    }
+  }
+
+  async function replyToDiscussion(pid: number, iid: number, discussionId: string, body: string) {
+    try {
+      await gitlabApi.replyToDiscussion(pid, iid, discussionId, body)
+      await fetchMRDiscussions(pid, iid)
+    } catch (e) {
+      toast.show('error', `Failed to reply to discussion: ${getErrorMessage(e)}`)
+    }
+  }
+
   // Unique GitLab projects derived from user's issues and MRs.
   const availableProjects = computed(() => {
     const map = new Map<number, string>()
@@ -378,6 +427,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
     detailIssue.value = null
     detailMR.value = null
     detailNotes.value = []
+    detailDiscussions.value = []
     mrApprovals.value = null
 
     if (type === 'issue') {
@@ -390,7 +440,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
         ?? reviewMRs.value.find(m => m.iid === iid && m.project_path === projectPath)
       if (mr) detailMR.value = mr
       await Promise.all([
-        fetchMRNotes(pid, iid),
+        fetchMRDiscussions(pid, iid),
         fetchMRApprovals(pid, iid),
       ])
     }
@@ -401,6 +451,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
     detailIssue.value = null
     detailMR.value = null
     detailNotes.value = []
+    detailDiscussions.value = []
     mrApprovals.value = null
   }
 
@@ -509,6 +560,71 @@ export const useGitLabStore = defineStore('gitlab', () => {
     } catch { /* ignore */ }
   }
 
+  // Pipeline jobs
+  async function fetchPipelineJobs(pipelineId: number) {
+    if (!project.value) return
+    try {
+      const jobs = await gitlabApi.pipelineJobs(project.value.id, pipelineId)
+      pipelineJobs.value = { ...pipelineJobs.value, [pipelineId]: jobs ?? [] }
+    } catch (e) {
+      toast.show('error', `Failed to fetch jobs: ${getErrorMessage(e)}`)
+    }
+  }
+
+  async function fetchJobTrace(jobId: number) {
+    if (!project.value) return
+    selectedJobId.value = jobId
+    selectedJobTrace.value = null
+    try {
+      selectedJobTrace.value = await gitlabApi.jobTrace(project.value.id, jobId)
+    } catch (e) {
+      toast.show('error', `Failed to fetch job trace: ${getErrorMessage(e)}`)
+      selectedJobTrace.value = null
+    }
+  }
+
+  async function retryJob(jobId: number, pipelineId: number) {
+    if (!project.value) return
+    try {
+      await gitlabApi.retryJob(project.value.id, jobId)
+      toast.show('success', 'Job retry started')
+      await fetchPipelineJobs(pipelineId)
+    } catch (e) {
+      toast.show('error', `Failed to retry job: ${getErrorMessage(e)}`)
+    }
+  }
+
+  async function cancelJob(jobId: number, pipelineId: number) {
+    if (!project.value) return
+    try {
+      await gitlabApi.cancelJob(project.value.id, jobId)
+      toast.show('success', 'Job canceled')
+      await fetchPipelineJobs(pipelineId)
+    } catch (e) {
+      toast.show('error', `Failed to cancel job: ${getErrorMessage(e)}`)
+    }
+  }
+
+  function togglePipeline(pipelineId: number) {
+    if (expandedPipelineId.value === pipelineId) {
+      expandedPipelineId.value = null
+      selectedJobId.value = null
+      selectedJobTrace.value = null
+    } else {
+      expandedPipelineId.value = pipelineId
+      selectedJobId.value = null
+      selectedJobTrace.value = null
+      if (!pipelineJobs.value[pipelineId]) {
+        fetchPipelineJobs(pipelineId)
+      }
+    }
+  }
+
+  function closeJobTrace() {
+    selectedJobId.value = null
+    selectedJobTrace.value = null
+  }
+
   // Lifecycle
   function startAutoRefresh() {
     stopAutoRefresh()
@@ -587,10 +703,15 @@ export const useGitLabStore = defineStore('gitlab', () => {
     selectedItem.value = null
     detailIssue.value = null
     detailNotes.value = []
+    detailDiscussions.value = []
     project.value = null
     issues.value = []
     mergeRequests.value = []
     pipelines.value = []
+    pipelineJobs.value = {}
+    selectedJobTrace.value = null
+    selectedJobId.value = null
+    expandedPipelineId.value = null
     clearFilters()
   }
 
@@ -630,7 +751,15 @@ export const useGitLabStore = defineStore('gitlab', () => {
     detailIssue,
     detailMR,
     detailNotes,
+    detailDiscussions,
     detailLoading,
+
+    // Discussions
+    resolvedThreadsCount,
+    totalThreadsCount,
+    fetchMRDiscussions,
+    resolveDiscussion,
+    replyToDiscussion,
 
     // Filters
     labels,
@@ -704,6 +833,18 @@ export const useGitLabStore = defineStore('gitlab', () => {
     fetchProjectIssues,
     fetchProjectMRs,
     fetchProjectPipelines,
+
+    // Pipeline jobs
+    pipelineJobs,
+    selectedJobTrace,
+    selectedJobId,
+    expandedPipelineId,
+    fetchPipelineJobs,
+    fetchJobTrace,
+    retryJob,
+    cancelJob,
+    togglePipeline,
+    closeJobTrace,
 
     // Lifecycle
     startAutoRefresh,

@@ -9,7 +9,7 @@ import { getErrorMessage } from '../utils/error'
 import GitLabDetailModal from '../components/GitLabDetailModal.vue'
 import GitLabCreateIssue from '../components/GitLabCreateIssue.vue'
 import GitLabCreateMR from '../components/GitLabCreateMR.vue'
-import type { GitLabIssue, GitLabMR } from '../types'
+import type { GitLabIssue, GitLabMR, GitLabJob } from '../types'
 
 const store = useGitLabStore()
 const gitStore = useGitStore()
@@ -233,6 +233,38 @@ async function handleCreateMR(data: {
   } catch (e) {
     toast.show('error', `Failed to create MR: ${getErrorMessage(e)}`)
   }
+}
+
+function jobStatusClass(status: string): string {
+  switch (status) {
+    case 'success': return 'job-success'
+    case 'failed': return 'job-failed'
+    case 'running': return 'job-running'
+    case 'pending':
+    case 'created':
+      return 'job-pending'
+    case 'canceled': return 'job-canceled'
+    case 'skipped': return 'job-skipped'
+    case 'manual': return 'job-manual'
+    default: return 'job-unknown'
+  }
+}
+
+function formatDuration(seconds: number | null): string {
+  if (!seconds) return '-'
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  const m = Math.floor(seconds / 60)
+  const s = Math.round(seconds % 60)
+  return s > 0 ? `${m}m ${s}s` : `${m}m`
+}
+
+function groupJobsByStage(jobs: GitLabJob[]): Record<string, GitLabJob[]> {
+  const groups: Record<string, GitLabJob[]> = {}
+  for (const job of jobs) {
+    if (!groups[job.stage]) groups[job.stage] = []
+    groups[job.stage].push(job)
+  }
+  return groups
 }
 
 onMounted(() => {
@@ -768,32 +800,67 @@ onUnmounted(() => {
         <!-- PIPELINES TAB -->
         <template v-if="store.activeMainTab === 'pipelines'">
           <div v-if="!store.pipelines.length" class="empty">No pipelines found</div>
-          <table v-else class="pipelines-table">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Pipeline</th>
-                <th>Ref</th>
-                <th>SHA</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="p in store.pipelines" :key="p.id">
-                <td>
+          <div v-else class="pipelines-list">
+            <div v-for="p in store.pipelines" :key="p.id" class="pipeline-item">
+              <div class="pipeline-row" @click="store.togglePipeline(p.id)">
+                <div class="pipeline-row-left">
+                  <span class="pipeline-expand-icon" :class="{ expanded: store.expandedPipelineId === p.id }">
+                    <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+                  </span>
                   <span class="ci-dot-large" :class="ciStatusClass(p)"></span>
                   <span class="ci-status-text">{{ p.status }}</span>
-                </td>
-                <td>
-                  <a v-if="p.web_url" :href="p.web_url" target="_blank" class="pipeline-link">#{{ p.id }}</a>
-                  <span v-else>#{{ p.id }}</span>
-                </td>
-                <td><code class="ref-badge">{{ p.ref }}</code></td>
-                <td><code class="sha-text">{{ p.sha?.slice(0, 8) }}</code></td>
-                <td class="time-cell">{{ formatTimeAgo(p.created_at) }}</td>
-              </tr>
-            </tbody>
-          </table>
+                  <a v-if="p.web_url" :href="p.web_url" target="_blank" class="pipeline-link" @click.stop>#{{ p.id }}</a>
+                  <span v-else class="pipeline-link">#{{ p.id }}</span>
+                </div>
+                <div class="pipeline-row-right">
+                  <code class="ref-badge">{{ p.ref }}</code>
+                  <code class="sha-text">{{ p.sha?.slice(0, 8) }}</code>
+                  <span class="time-cell">{{ formatTimeAgo(p.created_at) }}</span>
+                </div>
+              </div>
+
+              <!-- Expanded: jobs grouped by stage -->
+              <div v-if="store.expandedPipelineId === p.id" class="pipeline-jobs">
+                <div v-if="!store.pipelineJobs[p.id]" class="jobs-loading">Loading jobs...</div>
+                <div v-else-if="store.pipelineJobs[p.id].length === 0" class="jobs-empty">No jobs</div>
+                <template v-else>
+                  <div v-for="(jobs, stage) in groupJobsByStage(store.pipelineJobs[p.id])" :key="stage" class="stage-group">
+                    <div class="stage-header">{{ stage }}</div>
+                    <div v-for="job in jobs" :key="job.id" class="job-row">
+                      <div class="job-row-left">
+                        <span class="job-status-dot" :class="jobStatusClass(job.status)" :title="job.status"></span>
+                        <span class="job-name" :class="{ 'job-name-active': store.selectedJobId === job.id }" @click="store.fetchJobTrace(job.id)">{{ job.name }}</span>
+                        <span v-if="job.allow_failure" class="job-allow-failure" title="Allowed to fail">!</span>
+                      </div>
+                      <div class="job-row-right">
+                        <span class="job-duration">{{ formatDuration(job.duration) }}</span>
+                        <button v-if="job.status === 'failed' || job.status === 'canceled'" class="job-action-btn job-retry-btn" title="Retry" @click.stop="store.retryJob(job.id, p.id)">
+                          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M3.38 8A5 5 0 0113 5.05V3.5a.75.75 0 011.5 0v3.25a.75.75 0 01-.75.75h-3.25a.75.75 0 010-1.5h1.37A3.5 3.5 0 004.88 8a.75.75 0 01-1.5 0zM12.62 8a5 5 0 01-9.62 2.95V12.5a.75.75 0 01-1.5 0V9.25a.75.75 0 01.75-.75h3.25a.75.75 0 010 1.5H4.13A3.5 3.5 0 0011.12 8a.75.75 0 011.5 0z"/></svg>
+                        </button>
+                        <button v-if="job.status === 'running' || job.status === 'pending'" class="job-action-btn job-cancel-btn" title="Cancel" @click.stop="store.cancelJob(job.id, p.id)">
+                          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+                        </button>
+                        <a v-if="job.web_url" :href="job.web_url" target="_blank" class="job-action-btn" title="Open in GitLab" @click.stop>
+                          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M3.75 2a.75.75 0 000 1.5h6.69L2.22 11.72a.75.75 0 101.06 1.06L11.5 4.56v6.69a.75.75 0 001.5 0V2.75a.75.75 0 00-.75-.75H3.75z"/></svg>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Job trace panel -->
+                  <div v-if="store.selectedJobTrace !== null" class="job-trace-panel">
+                    <div class="job-trace-header">
+                      <span class="job-trace-title">Job Log #{{ store.selectedJobId }}</span>
+                      <button class="job-trace-close" @click="store.closeJobTrace()">
+                        <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+                      </button>
+                    </div>
+                    <pre class="job-trace-content">{{ store.selectedJobTrace }}</pre>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
         </template>
       </div>
 
@@ -1467,41 +1534,257 @@ onUnmounted(() => {
   padding-left: 12px;
 }
 
-/* Pipelines table */
-.pipelines-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
+/* Pipelines list */
+.pipelines-list {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
-.pipelines-table th {
-  text-align: left;
-  padding: 10px 12px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+.pipeline-item {
   border-bottom: 1px solid var(--border);
 }
 
-.pipelines-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  vertical-align: middle;
+.pipeline-item:last-child {
+  border-bottom: none;
 }
 
-.pipelines-table tbody tr {
+.pipeline-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  cursor: pointer;
   transition: background 0.1s;
+  gap: 12px;
 }
 
-.pipelines-table tbody tr:hover {
+.pipeline-row:hover {
   background: var(--bg-secondary);
+}
+
+.pipeline-row-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pipeline-row-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.pipeline-expand-icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  transition: transform 0.15s;
+}
+
+.pipeline-expand-icon.expanded {
+  transform: rotate(90deg);
 }
 
 .pipeline-link {
   color: var(--accent-blue);
   font-family: var(--font-mono);
   font-size: 13px;
+}
+
+/* Pipeline jobs */
+.pipeline-jobs {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  padding: 8px 0;
+}
+
+.jobs-loading,
+.jobs-empty {
+  padding: 12px 24px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.stage-group {
+  margin-bottom: 4px;
+}
+
+.stage-group:last-child {
+  margin-bottom: 0;
+}
+
+.stage-header {
+  padding: 4px 24px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.job-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 24px;
+  gap: 12px;
+  transition: background 0.1s;
+}
+
+.job-row:hover {
+  background: rgba(88, 166, 255, 0.04);
+}
+
+.job-row-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.job-row-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.job-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.job-success { background: var(--accent-green); }
+.job-failed { background: var(--accent-red); }
+.job-running { background: var(--accent-blue); animation: pulse-dot 1.5s ease-in-out infinite; }
+.job-pending { background: var(--accent-orange); }
+.job-canceled { background: var(--text-secondary); }
+.job-skipped { background: var(--text-secondary); opacity: 0.5; }
+.job-manual { background: var(--accent-purple, #a371f7); }
+.job-unknown { background: var(--text-secondary); opacity: 0.3; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.job-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job-name:hover,
+.job-name-active {
+  color: var(--accent-blue);
+  text-decoration: underline;
+}
+
+.job-allow-failure {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-orange);
+  background: rgba(210, 153, 34, 0.15);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.job-duration {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.job-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-decoration: none;
+}
+
+.job-action-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.job-retry-btn:hover {
+  border-color: rgba(63, 185, 80, 0.4);
+  color: var(--accent-green);
+}
+
+.job-cancel-btn:hover {
+  border-color: rgba(248, 81, 73, 0.4);
+  color: var(--accent-red);
+}
+
+/* Job trace */
+.job-trace-panel {
+  margin: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.job-trace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+}
+
+.job-trace-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.job-trace-close {
+  display: flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.job-trace-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.job-trace-content {
+  padding: 12px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  max-height: 400px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .ref-badge {

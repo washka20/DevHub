@@ -279,6 +279,23 @@ type Pipeline struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
+// Job represents a GitLab CI/CD job.
+type Job struct {
+	ID           int     `json:"id"`
+	Name         string  `json:"name"`
+	Stage        string  `json:"stage"`
+	Status       string  `json:"status"`
+	WebURL       string  `json:"web_url"`
+	Duration     float64 `json:"duration"`
+	CreatedAt    string  `json:"created_at"`
+	StartedAt    string  `json:"started_at"`
+	FinishedAt   string  `json:"finished_at"`
+	Pipeline     struct {
+		ID int `json:"id"`
+	} `json:"pipeline"`
+	AllowFailure bool `json:"allow_failure"`
+}
+
 // Project represents a GitLab project (minimal fields for detection).
 type Project struct {
 	ID            int    `json:"id"`
@@ -296,6 +313,24 @@ type Note struct {
 	Author    Author `json:"author"`
 	CreatedAt string `json:"created_at"`
 	System    bool   `json:"system"`
+}
+
+// DiscussionNote represents a note within a discussion thread.
+type DiscussionNote struct {
+	ID         int    `json:"id"`
+	Body       string `json:"body"`
+	Author     Author `json:"author"`
+	CreatedAt  string `json:"created_at"`
+	System     bool   `json:"system"`
+	Resolvable bool   `json:"resolvable"`
+	Resolved   bool   `json:"resolved"`
+}
+
+// Discussion represents a threaded discussion on a merge request.
+type Discussion struct {
+	ID             string           `json:"id"`
+	IndividualNote bool             `json:"individual_note"`
+	Notes          []DiscussionNote `json:"notes"`
 }
 
 // Label represents a GitLab label.
@@ -512,6 +547,66 @@ func (c *Client) Pipelines(projectID int) ([]Pipeline, error) {
 	return pipelines, nil
 }
 
+// PipelineJobs fetches jobs for a pipeline.
+func (c *Client) PipelineJobs(projectID, pipelineID int) ([]Job, error) {
+	endpoint := fmt.Sprintf("/projects/%d/pipelines/%d/jobs?per_page=100", projectID, pipelineID)
+	var jobs []Job
+	if err := c.do(endpoint, &jobs); err != nil {
+		return nil, err
+	}
+	if jobs == nil {
+		jobs = []Job{}
+	}
+	return jobs, nil
+}
+
+// JobTrace fetches the log output of a job as plain text.
+func (c *Client) JobTrace(projectID, jobID int) (string, error) {
+	reqURL := c.baseURL + fmt.Sprintf("/api/v4/projects/%d/jobs/%d/trace", projectID, jobID)
+	req, err := http.NewRequest("GET", reqURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("gitlab request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("trace returned %d: %s", resp.StatusCode, body)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read trace body: %w", err)
+	}
+	return string(body), nil
+}
+
+// RetryJob retries a failed or canceled job.
+func (c *Client) RetryJob(projectID, jobID int) (*Job, error) {
+	endpoint := fmt.Sprintf("/projects/%d/jobs/%d/retry", projectID, jobID)
+	var job Job
+	if err := c.doPost(endpoint, map[string]string{}, &job); err != nil {
+		return nil, err
+	}
+	return &job, nil
+}
+
+// CancelJob cancels a running job.
+func (c *Client) CancelJob(projectID, jobID int) (*Job, error) {
+	endpoint := fmt.Sprintf("/projects/%d/jobs/%d/cancel", projectID, jobID)
+	var job Job
+	if err := c.doPost(endpoint, map[string]string{}, &job); err != nil {
+		return nil, err
+	}
+	return &job, nil
+}
+
 // IssueDetail fetches a single issue by IID.
 func (c *Client) IssueDetail(projectID, iid int) (*Issue, error) {
 	endpoint := fmt.Sprintf("/projects/%d/issues/%d?with_labels_details=true", projectID, iid)
@@ -546,6 +641,35 @@ func (c *Client) MRNotes(projectID, iid int) ([]Note, error) {
 		notes = []Note{}
 	}
 	return notes, nil
+}
+
+// MRDiscussions fetches threaded discussions on a merge request.
+func (c *Client) MRDiscussions(projectID, iid int) ([]Discussion, error) {
+	endpoint := fmt.Sprintf("/projects/%d/merge_requests/%d/discussions?per_page=100", projectID, iid)
+	var discussions []Discussion
+	if err := c.do(endpoint, &discussions); err != nil {
+		return nil, err
+	}
+	if discussions == nil {
+		discussions = []Discussion{}
+	}
+	return discussions, nil
+}
+
+// ResolveMRDiscussion resolves or unresolves a discussion thread.
+func (c *Client) ResolveMRDiscussion(projectID, iid int, discussionID string, resolved bool) error {
+	endpoint := fmt.Sprintf("/projects/%d/merge_requests/%d/discussions/%s", projectID, iid, url.PathEscape(discussionID))
+	return c.doPut(endpoint, map[string]bool{"resolved": resolved}, nil)
+}
+
+// ReplyToDiscussion adds a note to an existing discussion thread.
+func (c *Client) ReplyToDiscussion(projectID, iid int, discussionID, body string) (*DiscussionNote, error) {
+	endpoint := fmt.Sprintf("/projects/%d/merge_requests/%d/discussions/%s/notes", projectID, iid, url.PathEscape(discussionID))
+	var note DiscussionNote
+	if err := c.doPost(endpoint, map[string]string{"body": body}, &note); err != nil {
+		return nil, err
+	}
+	return &note, nil
 }
 
 // ProjectMembers fetches all members of a project (including inherited).
