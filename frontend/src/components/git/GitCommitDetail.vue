@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useGitStore } from '../../stores/git'
 import type { CommitDetail } from '../../types'
 
@@ -15,6 +15,23 @@ const emit = defineEmits<{
 const gitStore = useGitStore()
 
 const hashCopied = ref(false)
+const showCherryPickConfirm = ref(false)
+const cherryPicking = ref(false)
+
+const isHeadCommit = computed(() => {
+  const first = gitStore.graphNodes[0]
+  return first && first.id === props.commit.hash
+})
+
+async function doCherryPick() {
+  cherryPicking.value = true
+  try {
+    await gitStore.cherryPick(props.commit.hash)
+    showCherryPickConfirm.value = false
+  } finally {
+    cherryPicking.value = false
+  }
+}
 
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text)
@@ -112,6 +129,30 @@ function getFileStatusBg(statusChar: string): string {
         <div class="detail-author-row">
           <span class="detail-author-name">{{ commit.author }}</span>
           <span class="detail-author-email">{{ commit.email }}</span>
+        </div>
+        <button
+          v-if="!isHeadCommit"
+          class="cherry-pick-btn"
+          :disabled="cherryPicking"
+          @click="showCherryPickConfirm = true"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 1a2.5 2.5 0 0 0-1 4.8V7H5.5a.5.5 0 0 0 0 1H7v2.2a2.5 2.5 0 1 0 2 0V8h1.5a.5.5 0 0 0 0-1H9V5.8A2.5 2.5 0 0 0 8 1zm0 1.5a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm0 8a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
+          </svg>
+          Cherry-pick
+        </button>
+      </div>
+
+      <!-- Cherry-pick confirmation -->
+      <div v-if="showCherryPickConfirm" class="cherry-pick-confirm">
+        <div class="cherry-pick-confirm-text">
+          Cherry-pick commit <code>{{ commit.hash.slice(0, 7) }}</code>?
+        </div>
+        <div class="cherry-pick-confirm-actions">
+          <button class="cherry-pick-cancel" @click="showCherryPickConfirm = false">Cancel</button>
+          <button class="cherry-pick-ok" :disabled="cherryPicking" @click="doCherryPick">
+            {{ cherryPicking ? 'Picking...' : 'Confirm' }}
+          </button>
         </div>
       </div>
 
@@ -399,5 +440,97 @@ function getFileStatusBg(statusChar: string): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cherry-pick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cherry-pick-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border-color: var(--text-secondary);
+}
+
+.cherry-pick-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cherry-pick-confirm {
+  padding: 10px 12px;
+  margin-top: 4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.cherry-pick-confirm-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.cherry-pick-confirm-text code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-blue);
+  background: rgba(88,166,255,0.1);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.cherry-pick-confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.cherry-pick-cancel,
+.cherry-pick-ok {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cherry-pick-cancel {
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.cherry-pick-cancel:hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.cherry-pick-ok {
+  color: #fff;
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.cherry-pick-ok:hover {
+  filter: brightness(1.1);
+}
+
+.cherry-pick-ok:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

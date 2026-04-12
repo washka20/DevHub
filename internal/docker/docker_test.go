@@ -150,6 +150,53 @@ func TestAction_Invalid(t *testing.T) {
 	}
 }
 
+func TestStats(t *testing.T) {
+	psOutput := "abc123\ndef456\n"
+	statsOutput := `{"name":"myapp-web-1","cpu_perc":"0.50%","mem_usage":"128MiB / 512MiB","mem_perc":"25.00%","net_io":"1.2kB / 3.4kB","block_io":"5.6MB / 7.8MB"}
+{"name":"myapp-db-1","cpu_perc":"85.20%","mem_usage":"256MiB / 1GiB","mem_perc":"25.00%","net_io":"10kB / 20kB","block_io":"100MB / 200MB"}`
+
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
+		{Output: psOutput},
+		{Output: statsOutput},
+	}}
+
+	svc := NewDockerService(mock)
+	stats, err := svc.Stats("/project/docker-compose.yml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(stats) != 2 {
+		t.Fatalf("expected 2 stats, got %d", len(stats))
+	}
+	if stats[0].Name != "myapp-web-1" {
+		t.Errorf("expected name myapp-web-1, got %s", stats[0].Name)
+	}
+	if stats[0].CPUPerc != "0.50%" {
+		t.Errorf("expected cpu_perc 0.50%%, got %s", stats[0].CPUPerc)
+	}
+	if stats[0].MemUsage != "128MiB / 512MiB" {
+		t.Errorf("expected mem_usage 128MiB / 512MiB, got %s", stats[0].MemUsage)
+	}
+	if stats[1].CPUPerc != "85.20%" {
+		t.Errorf("expected cpu_perc 85.20%%, got %s", stats[1].CPUPerc)
+	}
+}
+
+func TestStats_NoRunningContainers(t *testing.T) {
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
+		{Output: ""},
+	}}
+
+	svc := NewDockerService(mock)
+	stats, err := svc.Stats("/project/docker-compose.yml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stats != nil {
+		t.Errorf("expected nil stats, got %v", stats)
+	}
+}
+
 func TestLogs(t *testing.T) {
 	logOutput := "2024-01-15 10:00:00 Starting server...\n2024-01-15 10:00:01 Server ready\n"
 

@@ -108,6 +108,7 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}", gitH.GitStashDrop).Methods("DELETE")
 	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}/diff", gitH.GitStashDiff).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/git/blame", gitH.GitBlame).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/cherry-pick", gitH.GitCherryPick).Methods("POST")
 
 	// Files
 	apiRouter.HandleFunc("/projects/{id}/readme", mdH.GetReadme).Methods("GET")
@@ -137,6 +138,7 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/notes/{slug}", notesH.DeleteNote).Methods("DELETE")
 
 	// Docker
+	apiRouter.HandleFunc("/projects/{id}/docker/stats", dockerH.DockerStats).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/docker/containers", dockerH.DockerContainers).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/docker/compose/up", dockerH.DockerComposeUp).Methods("POST")
 	apiRouter.HandleFunc("/projects/{id}/docker/compose/up-build", dockerH.DockerComposeUpBuild).Methods("POST")
@@ -201,7 +203,14 @@ func New(cfg *config.Config) *Server {
 		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/approvals", glh.GitLabMRApprovals).Methods("GET")
 		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/approve", glh.GitLabApproveMR).Methods("POST")
 		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/unapprove", glh.GitLabUnapproveMR).Methods("POST")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/pipelines/{pipelineId:[0-9]+}/jobs", glh.GitLabPipelineJobs).Methods("GET")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/jobs/{jobId:[0-9]+}/trace", glh.GitLabJobTrace).Methods("GET")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/jobs/{jobId:[0-9]+}/retry", glh.GitLabRetryJob).Methods("POST")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/jobs/{jobId:[0-9]+}/cancel", glh.GitLabCancelJob).Methods("POST")
 		apiRouter.HandleFunc("/projects/{id}/gitlab/members", glh.GitLabProjectMembers).Methods("GET")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/discussions", glh.GitLabMRDiscussions).Methods("GET")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/discussions/{discussionId}", glh.GitLabResolveMRDiscussion).Methods("PUT")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/discussions/{discussionId}/notes", glh.GitLabReplyToDiscussion).Methods("POST")
 
 		// Direct by GitLab project ID (no DevHub project binding)
 		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/issues/{iid:[0-9]+}", glh.DirectIssueDetail).Methods("GET")
@@ -215,7 +224,14 @@ func New(cfg *config.Config) *Server {
 		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/approvals", glh.DirectMRApprovals).Methods("GET")
 		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/approve", glh.DirectApproveMR).Methods("POST")
 		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/unapprove", glh.DirectUnapproveMR).Methods("POST")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/pipelines/{pipelineId:[0-9]+}/jobs", glh.DirectPipelineJobs).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/jobs/{jobId:[0-9]+}/trace", glh.DirectJobTrace).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/jobs/{jobId:[0-9]+}/retry", glh.DirectRetryJob).Methods("POST")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/jobs/{jobId:[0-9]+}/cancel", glh.DirectCancelJob).Methods("POST")
 		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/members", glh.DirectProjectMembers).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/discussions", glh.DirectMRDiscussions).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/discussions/{discussionId}", glh.DirectResolveMRDiscussion).Methods("PUT")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/discussions/{discussionId}/notes", glh.DirectReplyToDiscussion).Methods("POST")
 
 		log.Printf("GitLab integration enabled for %s", cfg.Services.GitLab.URL)
 	}

@@ -774,6 +774,12 @@ func parseBlameOutput(out string) ([]BlameEntry, error) {
 	return entries, nil
 }
 
+// CherryPick applies the given commit onto the current branch.
+func (g *GitService) CherryPick(dir, hash string) error {
+	_, err := g.runner.Run(dir, "git", "cherry-pick", hash)
+	return err
+}
+
 // CommitDiff returns the diff of a specific commit, optionally filtered to a single file.
 func (g *GitService) CommitDiff(dir string, hash string, file string) (string, error) {
 	// Validate hash

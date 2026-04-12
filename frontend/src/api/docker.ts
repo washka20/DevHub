@@ -1,9 +1,12 @@
 import { api, apiVoid, projectUrl, POST } from './client'
-import type { Container } from '../types'
+import type { Container, ContainerStats } from '../types'
 
 export const dockerApi = {
   containers: (project: string) =>
     api<Container[]>(`${projectUrl(project)}/docker/containers`),
+
+  stats: (project: string) =>
+    api<ContainerStats[]>(`${projectUrl(project)}/docker/stats`),
 
   composeUp: (project: string) =>
     apiVoid(`${projectUrl(project)}/docker/compose/up`, POST),

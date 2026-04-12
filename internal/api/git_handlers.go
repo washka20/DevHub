@@ -434,6 +434,36 @@ func (gh *GitHandlers) GitBlame(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, entries)
 }
 
+// GitCherryPick handles POST /api/projects/{id}/git/cherry-pick
+func (gh *GitHandlers) GitCherryPick(w http.ResponseWriter, r *http.Request) {
+	path, err := gh.Base.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	var body struct {
+		Hash string `json:"hash"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Hash == "" {
+		jsonError(w, "hash is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := gh.Git.CherryPick(path, body.Hash); err != nil {
+		jsonError(w, "cherry-pick failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	gh.Base.Hub.Broadcast(Event{
+		Type:    "git_changed",
+		Project: mux.Vars(r)["id"],
+		Data:    "cherry-pick",
+	})
+
+	jsonResponse(w, map[string]bool{"ok": true})
+}
+
 // --- Git Stash endpoints ---
 
 // GitStashList handles GET /api/projects/{id}/git/stash

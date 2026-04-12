@@ -103,6 +103,7 @@ export function useGitStore() {
     commit: commitStore.commit,
     pull: commitStore.pull,
     push: commitStore.push,
+    cherryPick: commitStore.cherryPick,
 
     // gitStash
     get stashEntries() { return stashStore.stashEntries },

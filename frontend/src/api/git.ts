@@ -92,4 +92,7 @@ export const gitApi = {
 
   blame: (base: string, filePath: string) =>
     api<BlameEntry[]>(`${base}/git/blame?file=${encodeURIComponent(filePath)}`),
+
+  cherryPick: (base: string, hash: string) =>
+    api<{ ok: boolean }>(`${base}/git/cherry-pick`, postJson({ hash })),
 }

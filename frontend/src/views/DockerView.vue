@@ -203,14 +203,24 @@ function stateClass(state: string): string {
 
 const hasDocker = computed(() => projectsStore.currentProject?.has_docker ?? false)
 
+function cpuClass(cpuPerc: string): string {
+  const val = parseFloat(cpuPerc)
+  if (isNaN(val)) return ''
+  if (val >= 80) return 'cpu-high'
+  if (val >= 50) return 'cpu-medium'
+  return 'cpu-low'
+}
+
 // Refetch when project changes (component survives route transitions)
 watch(
   () => projectsStore.currentProject?.name,
   () => {
     closeLogs()
     closeTerminal()
+    dockerStore.stopStatsPolling()
     if (hasDocker.value) {
       dockerStore.fetchContainers()
+      dockerStore.startStatsPolling()
     }
   },
   { immediate: true },
@@ -219,6 +229,7 @@ watch(
 onUnmounted(() => {
   disconnectLogs()
   closeTerminal()
+  dockerStore.stopStatsPolling()
 })
 </script>
 
@@ -326,6 +337,8 @@ onUnmounted(() => {
             <th class="col-status">Status</th>
             <th class="col-name">Name</th>
             <th class="col-image">Image</th>
+            <th class="col-cpu">CPU%</th>
+            <th class="col-mem">MEM</th>
             <th class="col-ports">Ports</th>
             <th class="col-state">State</th>
             <th class="col-actions">Actions</th>
@@ -343,6 +356,20 @@ onUnmounted(() => {
             </td>
             <td class="cell-name">{{ c.name }}</td>
             <td class="cell-image">{{ c.image }}</td>
+            <td class="cell-cpu">
+              <span
+                v-if="c.state === 'running' && dockerStore.statsForContainer(c.name)"
+                class="cpu-value"
+                :class="cpuClass(dockerStore.statsForContainer(c.name)!.cpu_perc)"
+              >{{ dockerStore.statsForContainer(c.name)!.cpu_perc }}</span>
+              <span v-else class="stat-na">-</span>
+            </td>
+            <td class="cell-mem">
+              <span v-if="c.state === 'running' && dockerStore.statsForContainer(c.name)" class="mem-value">
+                {{ dockerStore.statsForContainer(c.name)!.mem_usage }}
+              </span>
+              <span v-else class="stat-na">-</span>
+            </td>
             <td class="cell-ports">{{ c.ports || '-' }}</td>
             <td class="cell-state">
               <span class="state-badge" :class="'state-' + c.state">{{ c.state }}</span>
@@ -743,6 +770,14 @@ onUnmounted(() => {
   width: 50px;
 }
 
+.col-cpu {
+  width: 80px;
+}
+
+.col-mem {
+  width: 160px;
+}
+
 .col-actions {
   width: 280px;
 }
@@ -797,6 +832,38 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cell-cpu,
+.cell-mem {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.cpu-value {
+  font-weight: 600;
+}
+
+.cpu-low {
+  color: var(--accent-green);
+}
+
+.cpu-medium {
+  color: var(--accent-orange);
+}
+
+.cpu-high {
+  color: var(--accent-red);
+}
+
+.mem-value {
+  color: var(--text-secondary);
+}
+
+.stat-na {
+  color: var(--text-secondary);
+  opacity: 0.5;
 }
 
 .cell-ports {

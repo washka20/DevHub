@@ -14,6 +14,16 @@ import (
 	"devhub/internal/runner"
 )
 
+// ContainerStats represents resource usage statistics for a container.
+type ContainerStats struct {
+	Name     string `json:"name"`
+	CPUPerc  string `json:"cpu_perc"`
+	MemUsage string `json:"mem_usage"`
+	MemPerc  string `json:"mem_perc"`
+	NetIO    string `json:"net_io"`
+	BlockIO  string `json:"block_io"`
+}
+
 // Container represents a running docker compose service.
 type Container struct {
 	Name   string `json:"name"`
@@ -235,4 +245,56 @@ func (d *DockerService) StreamLogs(ctx context.Context, composeFile, containerNa
 	}()
 
 	return out, errCh
+}
+
+// Stats returns resource usage statistics for running containers in the compose project.
+func (d *DockerService) Stats(composeFile string) ([]ContainerStats, error) {
+	dir := filepath.Dir(composeFile)
+	file := filepath.Base(composeFile)
+
+	// Get running container names via compose ps -q
+	out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "ps", "-q")
+	if err != nil {
+		return nil, fmt.Errorf("docker compose ps -q: %w: %s", err, out)
+	}
+
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return nil, nil
+	}
+
+	ids := strings.Split(out, "\n")
+	for i := range ids {
+		ids[i] = strings.TrimSpace(ids[i])
+	}
+
+	// docker stats --no-stream --format json <ids>
+	args := []string{"stats", "--no-stream", "--format",
+		`{"name":"{{.Name}}","cpu_perc":"{{.CPUPerc}}","mem_usage":"{{.MemUsage}}","mem_perc":"{{.MemPerc}}","net_io":"{{.NetIO}}","block_io":"{{.BlockIO}}"}`}
+	args = append(args, ids...)
+
+	statsOut, err := d.runner.Run("", "docker", args...)
+	if err != nil {
+		return nil, fmt.Errorf("docker stats: %w: %s", err, statsOut)
+	}
+
+	statsOut = strings.TrimSpace(statsOut)
+	if statsOut == "" {
+		return nil, nil
+	}
+
+	var stats []ContainerStats
+	for _, line := range strings.Split(statsOut, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var s ContainerStats
+		if err := json.Unmarshal([]byte(line), &s); err != nil {
+			continue
+		}
+		stats = append(stats, s)
+	}
+
+	return stats, nil
 }

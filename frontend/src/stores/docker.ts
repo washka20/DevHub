@@ -4,14 +4,16 @@ import { useProjectsStore } from './projects'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/error'
 import { dockerApi } from '../api/docker'
-import type { Container } from '../types'
+import type { Container, ContainerStats } from '../types'
 
 export const useDockerStore = defineStore('docker', () => {
   const containers = ref<Container[]>([])
+  const stats = ref<ContainerStats[]>([])
   const selectedContainer = ref<string | null>(null)
   const loading = ref(false)
   const actionLoading = ref<string | null>(null)
   const composeLoading = ref<'up' | 'rebuild' | 'down' | null>(null)
+  let statsInterval: ReturnType<typeof setInterval> | null = null
 
   const projectsStore = useProjectsStore()
   const toast = useToast()
@@ -36,6 +38,32 @@ export const useDockerStore = defineStore('docker', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  async function fetchStats() {
+    try {
+      stats.value = await dockerApi.stats(projectName()) ?? []
+    } catch {
+      stats.value = []
+    }
+  }
+
+  function startStatsPolling() {
+    stopStatsPolling()
+    fetchStats()
+    statsInterval = setInterval(fetchStats, 5000)
+  }
+
+  function stopStatsPolling() {
+    if (statsInterval) {
+      clearInterval(statsInterval)
+      statsInterval = null
+    }
+    stats.value = []
+  }
+
+  function statsForContainer(name: string): ContainerStats | undefined {
+    return stats.value.find((s) => s.name.includes(name))
   }
 
   async function containerAction(name: string, action: string) {
@@ -100,6 +128,7 @@ export const useDockerStore = defineStore('docker', () => {
 
   return {
     containers,
+    stats,
     selectedContainer,
     loading,
     actionLoading,
@@ -107,6 +136,10 @@ export const useDockerStore = defineStore('docker', () => {
     runningCount,
     totalCount,
     fetchContainers,
+    fetchStats,
+    startStatsPolling,
+    stopStatsPolling,
+    statsForContainer,
     containerAction,
     composeUp,
     composeUpBuild,

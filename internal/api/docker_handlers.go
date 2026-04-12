@@ -22,6 +22,29 @@ type DockerHandlers struct {
 	TermManager *terminal.Manager
 }
 
+// DockerStats handles GET /api/projects/{id}/docker/stats
+func (dh *DockerHandlers) DockerStats(w http.ResponseWriter, r *http.Request) {
+	path, err := dh.Base.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	composePath, err := composeFilePath(path)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	stats, err := dh.Docker.Stats(composePath)
+	if err != nil {
+		log.Printf("docker stats error: %v", err)
+		jsonError(w, "stats failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, stats)
+}
+
 // DockerContainers handles GET /api/projects/{id}/docker/containers
 func (dh *DockerHandlers) DockerContainers(w http.ResponseWriter, r *http.Request) {
 	path, err := dh.Base.projectPath(r)

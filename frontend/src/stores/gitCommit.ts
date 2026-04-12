@@ -75,6 +75,21 @@ export const useGitCommitStore = defineStore('gitCommit', () => {
     }
   }
 
+  async function cherryPick(hash: string) {
+    try {
+      await gitApi.cherryPick(projectApiUrl.value, hash)
+      toast.show('success', `Cherry-picked ${hash.slice(0, 7)}`)
+      const { useGitStatusStore } = await import('./gitStatus')
+      const { useGitLogStore } = await import('./gitLog')
+      await Promise.all([
+        useGitStatusStore().fetchStatus(),
+        useGitLogStore().fetchGraph(),
+      ])
+    } catch (e) {
+      toast.show('error', getErrorMessage(e))
+    }
+  }
+
   return {
     commitMessage,
     generatingMessage,
@@ -85,5 +100,6 @@ export const useGitCommitStore = defineStore('gitCommit', () => {
     commit,
     pull,
     push,
+    cherryPick,
   }
 })

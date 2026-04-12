@@ -15,6 +15,15 @@ export interface Container {
   state: string
 }
 
+export interface ContainerStats {
+  name: string
+  cpu_perc: string
+  mem_usage: string
+  mem_perc: string
+  net_io: string
+  block_io: string
+}
+
 export interface GitStatus {
   branch: string
   modified: string[]
@@ -353,6 +362,35 @@ export interface GitLabMRApproval {
   approvals_required: number
   approvals_left: number
   approved_by: Array<{ user: GitLabAuthor }>
+}
+
+export interface GitLabJob {
+  id: number
+  name: string
+  stage: string
+  status: 'created' | 'pending' | 'running' | 'success' | 'failed' | 'canceled' | 'skipped' | 'manual'
+  web_url: string
+  duration: number | null
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+  allow_failure: boolean
+}
+
+export interface GitLabDiscussionNote {
+  id: number
+  body: string
+  author: GitLabAuthor
+  created_at: string
+  system: boolean
+  resolvable: boolean
+  resolved: boolean
+}
+
+export interface GitLabDiscussion {
+  id: string
+  individual_note: boolean
+  notes: GitLabDiscussionNote[]
 }
 
 export interface GitLabPipeline {
