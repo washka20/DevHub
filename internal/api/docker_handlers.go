@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"devhub/internal/docker"
 	"devhub/internal/terminal"
 
 	"github.com/gorilla/mux"
@@ -18,7 +17,7 @@ import (
 // DockerHandlers manages REST endpoints for Docker operations.
 type DockerHandlers struct {
 	Base        *Handlers
-	Docker      *docker.DockerService
+	Docker      DockerService
 	TermManager *terminal.Manager
 }
 

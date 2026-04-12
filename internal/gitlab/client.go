@@ -401,7 +401,7 @@ func (c *Client) do(endpoint string, result interface{}) error {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return &APIError{Endpoint: endpoint, StatusCode: resp.StatusCode, Body: string(body)}
+		return &APIError{StatusCode: resp.StatusCode, Message: fmt.Sprintf("%s: %s", endpoint, string(body))}
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
@@ -444,7 +444,7 @@ func (c *Client) doWrite(method, endpoint string, body interface{}, result inter
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return &APIError{Endpoint: method + " " + endpoint, StatusCode: resp.StatusCode, Body: string(respBody)}
+		return &APIError{StatusCode: resp.StatusCode, Message: fmt.Sprintf("%s %s: %s", method, endpoint, string(respBody))}
 	}
 
 	if result != nil {

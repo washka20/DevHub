@@ -9,7 +9,7 @@ import (
 	"devhub/internal/gitlab"
 )
 
-// GitService defines git operations used by handlers.
+// GitService defines the interface for git operations used by handlers.
 type GitService interface {
 	Status(dir string) (*git.GitStatus, error)
 	BranchesDetailed(dir string) ([]git.BranchInfo, error)
@@ -18,9 +18,9 @@ type GitService interface {
 	LogMetadata(dir string, limit int, offset int, branch string) ([]git.CommitMeta, error)
 	Diff(dir string) (string, error)
 	DiffFile(dir string, file string) (string, error)
-	CommitChanges(dir string, message string, files []string) error
 	StageFiles(dir string, files []string) error
 	UnstageFiles(dir string, files []string) error
+	CommitChanges(dir string, message string, files []string) error
 	Checkout(dir string, branch string) error
 	Pull(dir string) (string, error)
 	Push(dir string) (string, error)
@@ -33,9 +33,12 @@ type GitService interface {
 	StashPop(dir string, index int) error
 	StashDrop(dir string, index int) error
 	StashDiff(dir string, index int) (string, error)
+	RemoteURL(dir string) (string, error)
+	Blame(dir, filePath string) ([]git.BlameEntry, error)
+	CherryPick(dir, hash string) error
 }
 
-// DockerService defines docker operations used by handlers.
+// DockerService defines the interface for docker operations used by handlers.
 type DockerService interface {
 	Containers(composeFile string) ([]docker.Container, error)
 	Action(composeFile string, containerName string, action string) error
@@ -43,9 +46,11 @@ type DockerService interface {
 	ComposeUp(composeFile string) (string, error)
 	ComposeUpBuild(composeFile string) (string, error)
 	ComposeDown(composeFile string) (string, error)
+	Stats(composeFile string) ([]docker.ContainerStats, error)
+	Inspect(composeFile, serviceName string) (*docker.ContainerInspect, error)
 }
 
-// GitLabClient defines gitlab operations used by handlers.
+// GitLabClient defines the interface for GitLab API operations used by handlers.
 type GitLabClient interface {
 	ProjectByRemote(remoteURL string) (*gitlab.Project, error)
 	Issues(projectID int, state string) ([]gitlab.Issue, error)
@@ -66,4 +71,19 @@ type GitLabClient interface {
 	AllLabels() ([]gitlab.Label, error)
 	AllMilestones() ([]gitlab.Milestone, error)
 	FetchRaw(targetURL string) (io.ReadCloser, string, int64, error)
+	MyMergeRequestsToReview(state string) ([]gitlab.MergeRequest, error)
+	MRApprovals(projectID, iid int) (*gitlab.MRApproval, error)
+	ApproveMR(projectID, iid int) error
+	UnapproveMR(projectID, iid int) error
+	PipelineJobs(projectID, pipelineID int) ([]gitlab.Job, error)
+	JobTrace(projectID, jobID int) (string, error)
+	RetryJob(projectID, jobID int) (*gitlab.Job, error)
+	CancelJob(projectID, jobID int) (*gitlab.Job, error)
+	MRDiscussions(projectID, iid int) ([]gitlab.Discussion, error)
+	ResolveMRDiscussion(projectID, iid int, discussionID string, resolved bool) error
+	ReplyToDiscussion(projectID, iid int, discussionID, body string) (*gitlab.DiscussionNote, error)
+	MyTodos() ([]gitlab.Todo, error)
+	MarkTodoDone(todoID int) error
+	MarkAllTodosDone() error
+	BaseURL() string
 }

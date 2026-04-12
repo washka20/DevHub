@@ -780,6 +780,15 @@ func (g *GitService) CherryPick(dir, hash string) error {
 	return err
 }
 
+// RemoteURL returns the remote "origin" URL for the repository at dir.
+func (g *GitService) RemoteURL(dir string) (string, error) {
+	out, err := g.runner.Run(dir, "git", "remote", "get-url", "origin")
+	if err != nil {
+		return "", fmt.Errorf("git remote get-url: %w", err)
+	}
+	return strings.TrimSpace(out), nil
+}
+
 // CommitDiff returns the diff of a specific commit, optionally filtered to a single file.
 func (g *GitService) CommitDiff(dir string, hash string, file string) (string, error) {
 	// Validate hash

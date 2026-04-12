@@ -2,11 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
-	"os/exec"
 	"strconv"
-	"strings"
 
 	"devhub/internal/gitlab"
 
@@ -15,24 +14,14 @@ import (
 
 // GitLabHandlers manages REST endpoints for GitLab integration.
 type GitLabHandlers struct {
-	Client   *gitlab.Client
+	Client   GitLabClient
 	Handlers *Handlers
+	Git      GitService
 }
 
 // GitLabEnabled handles GET /api/gitlab/enabled
 func (gh *GitLabHandlers) GitLabEnabled(w http.ResponseWriter, _ *http.Request) {
 	jsonResponse(w, map[string]bool{"enabled": true})
-}
-
-// getRemoteURL runs `git remote get-url origin` in the project directory.
-func getRemoteURL(projectPath string) (string, error) {
-	cmd := exec.Command("git", "remote", "get-url", "origin")
-	cmd.Dir = projectPath
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
 }
 
 // resolveGitLabProject resolves the DevHub project {id} to a GitLab project ID.
@@ -42,7 +31,7 @@ func (gh *GitLabHandlers) resolveGitLabProject(r *http.Request) (*gitlab.Project
 		return nil, err
 	}
 
-	remoteURL, err := getRemoteURL(projectPath)
+	remoteURL, err := gh.Git.RemoteURL(projectPath)
 	if err != nil {
 		return nil, err
 	}
@@ -69,9 +58,22 @@ func (gh *GitLabHandlers) resolveProjectID(r *http.Request, direct bool) (int, e
 func (gh *GitLabHandlers) projectIDError(w http.ResponseWriter, err error, direct bool) {
 	if direct {
 		jsonError(w, "invalid project ID", http.StatusBadRequest)
-	} else {
-		jsonError(w, "gitlab project not found: "+err.Error(), http.StatusNotFound)
+		return
 	}
+
+	var apiErr *gitlab.APIError
+	if errors.As(err, &apiErr) && apiErr.StatusCode == 401 {
+		jsonError(w, "gitlab authentication failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	var projectNotFound *gitlab.ProjectNotFoundError
+	if errors.As(err, &projectNotFound) {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	jsonError(w, "gitlab project not found: "+err.Error(), http.StatusNotFound)
 }
 
 // --- Shared private methods ---

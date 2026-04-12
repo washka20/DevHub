@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -14,7 +15,7 @@ import (
 // GitHandlers manages REST endpoints for Git operations.
 type GitHandlers struct {
 	Base *Handlers
-	Git  *git.GitService
+	Git  GitService
 }
 
 // GitStatus handles GET /api/projects/{id}/git/status
@@ -375,6 +376,11 @@ func (gh *GitHandlers) GitCommitDetail(w http.ResponseWriter, r *http.Request) {
 
 	detail, err := gh.Git.CommitDetail(path, hash)
 	if err != nil {
+		var invalidHash *git.InvalidHashError
+		if errors.As(err, &invalidHash) {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -399,6 +405,11 @@ func (gh *GitHandlers) GitCommitDiff(w http.ResponseWriter, r *http.Request) {
 
 	diff, err := gh.Git.CommitDiff(path, hash, file)
 	if err != nil {
+		var invalidHash *git.InvalidHashError
+		if errors.As(err, &invalidHash) {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -167,7 +167,7 @@ func New(cfg *config.Config) *Server {
 	// GitLab (only if enabled in config)
 	if cfg.Services.GitLab.Enabled && cfg.Services.GitLab.Token != "" {
 		glClient := gitlab.NewClient(cfg.Services.GitLab.URL, cfg.Services.GitLab.Token)
-		glh := &api.GitLabHandlers{Client: glClient, Handlers: h}
+		glh := &api.GitLabHandlers{Client: glClient, Handlers: h, Git: gitSvc}
 
 		// Enabled check
 		apiRouter.HandleFunc("/gitlab/enabled", glh.GitLabEnabled).Methods("GET")
