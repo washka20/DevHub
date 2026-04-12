@@ -56,6 +56,22 @@ function shortAuthor(author: string): string {
   return author.length > 12 ? author.slice(0, 11) + '\u2026' : author
 }
 
+function handleLineEnter(line: number, event: MouseEvent) {
+  const info = lineMap.value[line]
+  hoveredHash.value = info?.entry.hash ?? null
+  if (info) showTooltip(info.entry, event)
+}
+
+function handleLineMove(line: number, event: MouseEvent) {
+  const info = lineMap.value[line]
+  if (info) showTooltip(info.entry, event)
+}
+
+function handleLineLeave() {
+  hoveredHash.value = null
+  hideTooltip()
+}
+
 watch(() => props.editorScrollDom, (dom, oldDom) => {
   if (oldDom) oldDom.removeEventListener('scroll', onScroll)
   if (dom) {
@@ -90,9 +106,9 @@ onBeforeUnmount(() => {
           'blame-hovered': lineMap[line]?.entry.hash === hoveredHash,
         }"
         :style="{ height: lineHeight + 'px' }"
-        @mouseenter="hoveredHash = lineMap[line]?.entry.hash ?? null; if (lineMap[line]) showTooltip(lineMap[line].entry, $event)"
-        @mousemove="if (lineMap[line]) showTooltip(lineMap[line].entry, $event)"
-        @mouseleave="hoveredHash = null; hideTooltip()"
+        @mouseenter="handleLineEnter(line, $event)"
+        @mousemove="handleLineMove(line, $event)"
+        @mouseleave="handleLineLeave()"
       >
         <template v-if="lineMap[line]?.isFirst">
           <span class="blame-author">{{ shortAuthor(lineMap[line].entry.author) }}</span>
