@@ -63,6 +63,8 @@ onMounted(() => {
     scrollBeyondLastLine: false,
     renderLineHighlight: 'line',
     matchBrackets: 'always',
+    bracketPairColorization: { enabled: true },
+    guides: { bracketPairs: true },
     overviewRulerBorder: false,
     readOnly: props.readonly || false,
   })
