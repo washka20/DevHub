@@ -29,6 +29,7 @@
     "@codemirror/language": "^6.12.3",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.41.0",
+    "@replit/codemirror-vim": "^6.3.0",
     "@tiptap/extension-task-item": "^3.22.0",
     "@tiptap/extension-task-list": "^3.22.0",
     "@tiptap/pm": "^3.22.0",

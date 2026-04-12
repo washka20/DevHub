@@ -45,6 +45,7 @@ const isDirty = computed(() => {
     localUI.cursorBlink !== u.cursorBlink ||
     localUI.themeName !== u.themeName ||
     localUI.editorEngine !== u.editorEngine ||
+    localUI.editorKeymap !== u.editorKeymap ||
     localUI.editorMinimap !== u.editorMinimap ||
     localUI.editorFontSize !== u.editorFontSize
   )
@@ -72,6 +73,7 @@ async function save() {
       cursorBlink: localUI.cursorBlink,
       themeName: localUI.themeName,
       editorEngine: localUI.editorEngine,
+      editorKeymap: localUI.editorKeymap,
       editorMinimap: localUI.editorMinimap,
       editorFontSize: localUI.editorFontSize,
     })
@@ -164,6 +166,19 @@ function selectTheme(key: string) {
           <select v-model="localUI.editorEngine">
             <option value="codemirror">CodeMirror 6</option>
             <option value="monaco">Monaco Editor</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Editor Keymap</div>
+          <div class="setting-desc">Keyboard shortcut scheme for code editor</div>
+        </div>
+        <div class="setting-control">
+          <select v-model="localUI.editorKeymap">
+            <option value="default">Default</option>
+            <option value="vim">Vim</option>
           </select>
         </div>
       </div>

@@ -17,6 +17,7 @@ const defaultUI: UISettings = {
   themeName: 'github-dark',
   siteThemeName: 'github-dark',
   editorEngine: 'codemirror',
+  editorKeymap: 'default',
   editorMinimap: true,
   editorFontSize: 13,
 }

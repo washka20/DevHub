@@ -198,6 +198,7 @@ export interface UISettings {
   themeName: string
   siteThemeName: string
   editorEngine: 'codemirror' | 'monaco'
+  editorKeymap: 'default' | 'vim'
   editorMinimap: boolean
   editorFontSize: number
 }

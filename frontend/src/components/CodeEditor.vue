@@ -5,6 +5,7 @@ import { EditorState, Compartment } from '@codemirror/state'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { syntaxHighlighting, HighlightStyle, bracketMatching, indentOnInput } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
+import { vim } from '@replit/codemirror-vim'
 import { useSettingsStore } from '../stores/settings'
 
 import { javascript } from '@codemirror/lang-javascript'
@@ -38,6 +39,7 @@ const settingsStore = useSettingsStore()
 const themeCompartment = new Compartment()
 const highlightCompartment = new Compartment()
 const fontSizeCompartment = new Compartment()
+const keymapCompartment = new Compartment()
 
 // Read CSS variable values from document root
 function getCssVar(name: string): string {
@@ -192,6 +194,7 @@ function createState(doc: string) {
       fontSizeCompartment.of(EditorView.theme({
         '.cm-scroller': { fontSize: settingsStore.ui.editorFontSize + 'px' },
       })),
+      keymapCompartment.of(settingsStore.ui.editorKeymap === 'vim' ? vim() : []),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       ...(Array.isArray(langExt) ? langExt : [langExt]),
       EditorView.updateListener.of((update) => {
@@ -244,6 +247,13 @@ watch(() => settingsStore.ui.siteThemeName, () => {
         highlightCompartment.reconfigure(syntaxHighlighting(buildHighlightStyle())),
       ],
     })
+  })
+})
+
+watch(() => settingsStore.ui.editorKeymap, (keymap) => {
+  if (!view.value) return
+  view.value.dispatch({
+    effects: keymapCompartment.reconfigure(keymap === 'vim' ? vim() : []),
   })
 })
 
