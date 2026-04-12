@@ -425,7 +425,7 @@ func (g *GitService) CommitDetail(dir string, hash string) (*CommitDetailInfo, e
 	// Validate hash: only hex characters allowed
 	for _, c := range hash {
 		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-			return nil, fmt.Errorf("invalid commit hash")
+			return nil, &InvalidHashError{Hash: hash}
 		}
 	}
 
@@ -785,7 +785,7 @@ func (g *GitService) CommitDiff(dir string, hash string, file string) (string, e
 	// Validate hash
 	for _, c := range hash {
 		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-			return "", fmt.Errorf("invalid commit hash")
+			return "", &InvalidHashError{Hash: hash}
 		}
 	}
 

@@ -401,7 +401,7 @@ func (c *Client) do(endpoint string, result interface{}) error {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("gitlab API %s returned %d: %s", endpoint, resp.StatusCode, string(body))
+		return &APIError{Endpoint: endpoint, StatusCode: resp.StatusCode, Body: string(body)}
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
@@ -444,7 +444,7 @@ func (c *Client) doWrite(method, endpoint string, body interface{}, result inter
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("gitlab API %s %s returned %d: %s", method, endpoint, resp.StatusCode, string(respBody))
+		return &APIError{Endpoint: method + " " + endpoint, StatusCode: resp.StatusCode, Body: string(respBody)}
 	}
 
 	if result != nil {
@@ -496,7 +496,7 @@ func (c *Client) ProjectByRemote(remoteURL string) (*Project, error) {
 
 	var project Project
 	if err := c.do("/projects/"+encoded, &project); err != nil {
-		return nil, fmt.Errorf("project not found for path %q: %w", projectPath, err)
+		return nil, &ProjectNotFoundError{Path: projectPath}
 	}
 
 	c.mu.Lock()
