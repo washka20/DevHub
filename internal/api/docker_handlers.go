@@ -70,8 +70,18 @@ func (dh *DockerHandlers) DockerContainers(w http.ResponseWriter, r *http.Reques
 
 // DockerInspect handles GET /api/projects/{id}/docker/{name}/inspect
 func (dh *DockerHandlers) DockerInspect(w http.ResponseWriter, r *http.Request) {
+	path, err := dh.Base.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	composePath, err2 := composeFilePath(path)
+	if err2 != nil {
+		jsonError(w, err2.Error(), http.StatusNotFound)
+		return
+	}
 	name := mux.Vars(r)["name"]
-	inspect, err := dh.Docker.Inspect(name)
+	inspect, err := dh.Docker.Inspect(composePath, name)
 	if err != nil {
 		jsonError(w, "inspect failed: "+err.Error(), http.StatusInternalServerError)
 		return

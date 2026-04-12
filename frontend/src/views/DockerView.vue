@@ -927,7 +927,7 @@ onUnmounted(() => {
 }
 
 .col-actions {
-  width: 280px;
+  min-width: 380px;
 }
 
 .cell-status {
@@ -1049,7 +1049,7 @@ onUnmounted(() => {
 .cell-actions {
   display: flex;
   gap: 5px;
-  flex-wrap: wrap;
+  white-space: nowrap;
 }
 
 /* Action buttons */

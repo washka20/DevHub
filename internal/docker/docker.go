@@ -143,15 +143,25 @@ func (d *DockerService) Containers(composeFile string) ([]Container, error) {
 }
 
 // Inspect returns detailed information about a container using docker inspect.
-func (d *DockerService) Inspect(containerName string) (*ContainerInspect, error) {
-	out, err := d.runner.Run("", "docker", "inspect", "--format", "json", containerName)
+// serviceName is the compose service name; composeFile resolves it to the actual container.
+func (d *DockerService) Inspect(composeFile, serviceName string) (*ContainerInspect, error) {
+	// Resolve compose service name to container ID
+	dir := filepath.Dir(composeFile)
+	file := filepath.Base(composeFile)
+	containerID, err := d.runner.Run(dir, "docker", "compose", "-f", file, "ps", "-q", serviceName)
+	if err != nil || strings.TrimSpace(containerID) == "" {
+		return nil, fmt.Errorf("cannot resolve container for service %s: %w", serviceName, err)
+	}
+	containerID = strings.TrimSpace(strings.Split(containerID, "\n")[0])
+
+	out, err := d.runner.Run("", "docker", "inspect", "--format", "json", containerID)
 	if err != nil {
-		return nil, fmt.Errorf("docker inspect %s: %w: %s", containerName, err, out)
+		return nil, fmt.Errorf("docker inspect %s: %w: %s", serviceName, err, out)
 	}
 
 	out = strings.TrimSpace(out)
 	if out == "" {
-		return nil, fmt.Errorf("docker inspect %s: empty output", containerName)
+		return nil, fmt.Errorf("docker inspect %s: empty output", serviceName)
 	}
 
 	var raw []dockerInspectRaw
@@ -159,7 +169,7 @@ func (d *DockerService) Inspect(containerName string) (*ContainerInspect, error)
 		return nil, fmt.Errorf("parse docker inspect: %w", err)
 	}
 	if len(raw) == 0 {
-		return nil, fmt.Errorf("docker inspect %s: no results", containerName)
+		return nil, fmt.Errorf("docker inspect %s: no results", serviceName)
 	}
 
 	r := raw[0]
@@ -281,27 +291,27 @@ type portBinding struct {
 }
 
 // Action performs start/stop/restart on a container.
-func (d *DockerService) Action(composeFile string, containerName string, action string) error {
+func (d *DockerService) Action(composeFile string, serviceName string, action string) error {
 	dir := filepath.Dir(composeFile)
 	file := filepath.Base(composeFile)
 
 	switch action {
 	case "start", "stop", "restart":
-		out, err := d.runner.Run(dir, "docker", "compose", "-f", file, action, containerName)
+		out, err := d.runner.Run(dir, "docker", "compose", "-f", file, action, serviceName)
 		if err != nil {
-			return fmt.Errorf("docker compose %s %s: %w: %s", action, containerName, err, out)
+			return fmt.Errorf("docker compose %s %s: %w: %s", action, serviceName, err, out)
 		}
 		return nil
 	case "up":
-		out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "up", "-d", containerName)
+		out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "up", "-d", serviceName)
 		if err != nil {
-			return fmt.Errorf("docker compose up %s: %w: %s", containerName, err, out)
+			return fmt.Errorf("docker compose up %s: %w: %s", serviceName, err, out)
 		}
 		return nil
 	case "down":
-		out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "stop", containerName)
+		out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "stop", serviceName)
 		if err != nil {
-			return fmt.Errorf("docker compose stop %s: %w: %s", containerName, err, out)
+			return fmt.Errorf("docker compose stop %s: %w: %s", serviceName, err, out)
 		}
 		return nil
 	case "start-all":
@@ -355,11 +365,11 @@ func (d *DockerService) ComposeDown(composeFile string) (string, error) {
 }
 
 // Logs returns the last N lines of logs for a container.
-func (d *DockerService) Logs(composeFile string, containerName string, lines int) (string, error) {
+func (d *DockerService) Logs(composeFile string, serviceName string, lines int) (string, error) {
 	dir := filepath.Dir(composeFile)
 	file := filepath.Base(composeFile)
 
-	out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "logs", "--tail="+strconv.Itoa(lines), containerName)
+	out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "logs", "--tail="+strconv.Itoa(lines), serviceName)
 	if err != nil {
 		return "", fmt.Errorf("docker compose logs: %w: %s", err, out)
 	}
@@ -369,7 +379,7 @@ func (d *DockerService) Logs(composeFile string, containerName string, lines int
 // StreamLogs starts `docker compose logs -f --tail=N` and streams output line
 // by line through the returned channel. When ctx is cancelled the underlying
 // process is killed and the channel is closed.
-func (d *DockerService) StreamLogs(ctx context.Context, composeFile, containerName string, tail int) (<-chan string, <-chan error) {
+func (d *DockerService) StreamLogs(ctx context.Context, composeFile, serviceName string, tail int) (<-chan string, <-chan error) {
 	dir := filepath.Dir(composeFile)
 	file := filepath.Base(composeFile)
 
@@ -384,7 +394,7 @@ func (d *DockerService) StreamLogs(ctx context.Context, composeFile, containerNa
 			"compose", "-f", file,
 			"logs", "-f", "--no-log-prefix",
 			"--tail=" + strconv.Itoa(tail),
-			containerName,
+			serviceName,
 		}
 		cmd := exec.CommandContext(ctx, "docker", cmdArgs...)
 		cmd.Dir = dir
