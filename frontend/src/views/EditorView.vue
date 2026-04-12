@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { defineAsyncComponent, computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { defineAsyncComponent, computed, ref, onMounted, onBeforeUnmount, watch, nextTick, type ComponentPublicInstance } from 'vue'
 import { Splitpanes, Pane } from 'splitpanes'
 import 'splitpanes/dist/splitpanes.css'
 import FileTree from '../components/FileTree.vue'
 import CodeEditor from '../components/CodeEditor.vue'
+import BlameGutter from '../components/BlameGutter.vue'
 import ImagePreview from '../components/ImagePreview.vue'
 import { getFileIcon } from '../components/FileIcons'
 import { useFilesStore } from '../stores/files'
@@ -62,6 +63,28 @@ function handleSave() {
 // Listen for Ctrl+S event from keyboard shortcuts composable
 function onEditorSave() { handleSave() }
 
+// Blame integration
+const editorRef = ref<ComponentPublicInstance & { getScrollDom: () => HTMLElement | null; getLineHeight: () => number } | null>(null)
+const blameScrollDom = ref<HTMLElement | null>(null)
+const blameLineHeight = ref(20.8)
+
+function updateBlameSync() {
+  if (!editorRef.value) return
+  blameScrollDom.value = editorRef.value.getScrollDom()
+  blameLineHeight.value = editorRef.value.getLineHeight()
+}
+
+watch(() => filesStore.blameVisible, async (visible) => {
+  if (visible) {
+    await nextTick()
+    updateBlameSync()
+  }
+})
+
+watch(() => filesStore.activeFilePath, () => {
+  filesStore.hideBlame()
+})
+
 onMounted(() => {
   filesStore.fetchTree()
   window.addEventListener('editor:save', onEditorSave)
@@ -91,23 +114,37 @@ function handleContentUpdate(value: string) {
         <div class="editor-pane">
           <!-- Tab bar -->
           <div class="editor-tabs">
-            <div
-              v-for="file in filesStore.openFiles"
-              :key="file.path"
-              class="editor-tab"
-              :class="{ active: filesStore.activeFilePath === file.path }"
-              @click="filesStore.activeFilePath = file.path"
-              @mousedown.middle="filesStore.closeFile(file.path)"
-            >
-              <!-- File icon (small, inline) -->
-              <span class="tab-icon" v-html="getFileIcon(file.name, false, false)"></span>
-              <span class="tab-name">{{ file.name }}</span>
-              <span v-if="file.dirty" class="tab-unsaved"></span>
+            <div class="editor-tabs-list">
+              <div
+                v-for="file in filesStore.openFiles"
+                :key="file.path"
+                class="editor-tab"
+                :class="{ active: filesStore.activeFilePath === file.path }"
+                @click="filesStore.activeFilePath = file.path"
+                @mousedown.middle="filesStore.closeFile(file.path)"
+              >
+                <!-- File icon (small, inline) -->
+                <span class="tab-icon" v-html="getFileIcon(file.name, false, false)"></span>
+                <span class="tab-name">{{ file.name }}</span>
+                <span v-if="file.dirty" class="tab-unsaved"></span>
+                <button
+                  class="tab-close"
+                  @click.stop="filesStore.closeFile(file.path)"
+                  title="Close"
+                >×</button>
+              </div>
+            </div>
+            <div v-if="filesStore.activeFile && !isImageFile" class="editor-tabs-actions">
               <button
-                class="tab-close"
-                @click.stop="filesStore.closeFile(file.path)"
-                title="Close"
-              >×</button>
+                class="blame-toggle"
+                :class="{ active: filesStore.blameVisible }"
+                :disabled="filesStore.blameLoading"
+                title="Git Blame"
+                @click="filesStore.toggleBlame()"
+              >
+                <span v-if="filesStore.blameLoading" class="blame-spinner"></span>
+                <span v-else>Blame</span>
+              </button>
             </div>
           </div>
 
@@ -144,12 +181,20 @@ function handleContentUpdate(value: string) {
           </div>
 
           <!-- Normal code editor -->
-          <div v-else-if="filesStore.activeFile" class="editor-content">
+          <div v-else-if="filesStore.activeFile" class="editor-content editor-with-blame">
+            <BlameGutter
+              v-if="filesStore.blameVisible && filesStore.blameData"
+              :entries="filesStore.blameData"
+              :editor-scroll-dom="blameScrollDom"
+              :line-height="blameLineHeight"
+            />
             <component
               :is="EditorComponent"
+              ref="editorRef"
               :model-value="filesStore.activeFile.content"
               :language="filesStore.activeFile.language"
               @update:model-value="handleContentUpdate"
+              @vue:mounted="updateBlameSync"
             />
           </div>
 
@@ -196,11 +241,70 @@ function handleContentUpdate(value: string) {
 .editor-tabs {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
   height: 36px;
   flex-shrink: 0;
+}
+
+.editor-tabs-list {
+  display: flex;
+  align-items: center;
+  height: 100%;
   overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.editor-tabs-actions {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  flex-shrink: 0;
+}
+
+.blame-toggle {
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.blame-toggle:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.blame-toggle.active {
+  background: rgba(88, 166, 255, 0.1);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.blame-toggle:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.blame-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--text-secondary);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .editor-tab {
@@ -269,6 +373,7 @@ function handleContentUpdate(value: string) {
 
 /* Editor content */
 .editor-content { flex: 1; min-height: 0; overflow: hidden; }
+.editor-with-blame { display: flex; flex-direction: row; }
 
 /* Diff mode */
 .diff-mode-content {

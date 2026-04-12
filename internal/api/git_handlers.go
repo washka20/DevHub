@@ -411,6 +411,29 @@ func (gh *GitHandlers) GitCommitDiff(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, map[string]string{"diff": diff})
 }
 
+// GitBlame handles GET /api/projects/{id}/git/blame?file=path/to/file
+func (gh *GitHandlers) GitBlame(w http.ResponseWriter, r *http.Request) {
+	path, err := gh.Base.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	filePath := r.URL.Query().Get("file")
+	if filePath == "" {
+		jsonError(w, "file parameter required", http.StatusBadRequest)
+		return
+	}
+
+	entries, err := gh.Git.Blame(path, filePath)
+	if err != nil {
+		jsonError(w, "blame failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonResponse(w, entries)
+}
+
 // --- Git Stash endpoints ---
 
 // GitStashList handles GET /api/projects/{id}/git/stash

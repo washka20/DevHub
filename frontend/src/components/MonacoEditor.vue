@@ -117,6 +117,11 @@ watch(() => settingsStore.ui.editorFontSize, (fontSize) => {
   editor.value.updateOptions({ fontSize })
 })
 
+defineExpose({
+  getScrollDom: () => editor.value?.getDomNode()?.querySelector('.monaco-scrollable-element') as HTMLElement | null,
+  getLineHeight: () => editor.value?.getOption(monaco.editor.EditorOption.lineHeight) ?? 20,
+})
+
 onBeforeUnmount(() => {
   editor.value?.dispose()
   editor.value = null

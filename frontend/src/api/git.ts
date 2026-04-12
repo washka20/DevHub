@@ -1,5 +1,5 @@
 import { api, apiVoid, postJson, POST, DELETE } from './client'
-import type { GitStatus, CommitDetail, BranchInfo, CommitMeta, StashEntry } from '../types'
+import type { GitStatus, CommitDetail, BranchInfo, CommitMeta, StashEntry, BlameEntry } from '../types'
 
 interface TopoNode {
   id: string
@@ -89,4 +89,7 @@ export const gitApi = {
 
   stashDiff: (base: string, index: number) =>
     api<DiffResponse>(`${base}/git/stash/${index}/diff`),
+
+  blame: (base: string, filePath: string) =>
+    api<BlameEntry[]>(`${base}/git/blame?file=${encodeURIComponent(filePath)}`),
 }

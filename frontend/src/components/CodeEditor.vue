@@ -266,6 +266,11 @@ watch(() => settingsStore.ui.editorFontSize, (size) => {
   })
 })
 
+defineExpose({
+  getScrollDom: () => view.value?.scrollDOM ?? null,
+  getLineHeight: () => view.value?.defaultLineHeight ?? 20.8,
+})
+
 onBeforeUnmount(() => {
   view.value?.destroy()
   view.value = null

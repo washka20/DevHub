@@ -634,6 +634,146 @@ func (g *GitService) StashDiff(dir string, index int) (string, error) {
 	return out, nil
 }
 
+// BlameEntry represents a group of consecutive lines attributed to a single commit.
+type BlameEntry struct {
+	LineStart int    `json:"line_start"`
+	LineEnd   int    `json:"line_end"`
+	Hash      string `json:"hash"`
+	ShortHash string `json:"short_hash"`
+	Author    string `json:"author"`
+	Date      string `json:"date"`
+	Message   string `json:"message"`
+}
+
+// Blame returns blame information for a file in the repository at dir.
+func (g *GitService) Blame(dir, filePath string) ([]BlameEntry, error) {
+	out, err := g.runner.Run(dir, "git", "blame", "--porcelain", "--", filePath)
+	if err != nil {
+		return nil, fmt.Errorf("git blame failed: %w", err)
+	}
+	return parseBlameOutput(out)
+}
+
+// parseBlameOutput parses git blame --porcelain output into BlameEntry slices.
+func parseBlameOutput(out string) ([]BlameEntry, error) {
+	type commitInfo struct {
+		hash    string
+		author  string
+		date    string
+		message string
+	}
+
+	commits := make(map[string]*commitInfo)
+	lines := strings.Split(out, "\n")
+
+	// lineEntries: ordered (finalLine -> hash) so we can group consecutive lines
+	type lineEntry struct {
+		finalLine int
+		hash      string
+	}
+	var lineEntries []lineEntry
+
+	i := 0
+	for i < len(lines) {
+		line := lines[i]
+		if line == "" {
+			i++
+			continue
+		}
+
+		// Header line: <hash> <orig_line> <final_line> [<num_lines>]
+		parts := strings.Fields(line)
+		if len(parts) < 3 {
+			i++
+			continue
+		}
+
+		hash := parts[0]
+		if len(hash) != 40 {
+			i++
+			continue
+		}
+
+		finalLine, err := strconv.Atoi(parts[2])
+		if err != nil {
+			i++
+			continue
+		}
+
+		if _, ok := commits[hash]; !ok {
+			commits[hash] = &commitInfo{hash: hash}
+		}
+		ci := commits[hash]
+
+		lineEntries = append(lineEntries, lineEntry{finalLine: finalLine, hash: hash})
+
+		i++
+		// Read metadata lines until we hit the content line (starts with \t)
+		for i < len(lines) {
+			if len(lines[i]) > 0 && lines[i][0] == '\t' {
+				i++ // skip content line
+				break
+			}
+			metaLine := lines[i]
+			if strings.HasPrefix(metaLine, "author ") {
+				ci.author = strings.TrimPrefix(metaLine, "author ")
+			} else if strings.HasPrefix(metaLine, "author-time ") {
+				ts := strings.TrimPrefix(metaLine, "author-time ")
+				if sec, err := strconv.ParseInt(ts, 10, 64); err == nil {
+					ci.date = time.Unix(sec, 0).Format("2006-01-02")
+				}
+			} else if strings.HasPrefix(metaLine, "summary ") {
+				ci.message = strings.TrimPrefix(metaLine, "summary ")
+			}
+			i++
+		}
+	}
+
+	if len(lineEntries) == 0 {
+		return []BlameEntry{}, nil
+	}
+
+	// Group consecutive lines with the same hash
+	var entries []BlameEntry
+	cur := lineEntries[0]
+	start := cur.finalLine
+	end := cur.finalLine
+
+	for j := 1; j < len(lineEntries); j++ {
+		le := lineEntries[j]
+		if le.hash == cur.hash && le.finalLine == end+1 {
+			end = le.finalLine
+		} else {
+			ci := commits[cur.hash]
+			entries = append(entries, BlameEntry{
+				LineStart: start,
+				LineEnd:   end,
+				Hash:      ci.hash,
+				ShortHash: ci.hash[:7],
+				Author:    ci.author,
+				Date:      ci.date,
+				Message:   ci.message,
+			})
+			cur = le
+			start = le.finalLine
+			end = le.finalLine
+		}
+	}
+	// Last group
+	ci := commits[cur.hash]
+	entries = append(entries, BlameEntry{
+		LineStart: start,
+		LineEnd:   end,
+		Hash:      ci.hash,
+		ShortHash: ci.hash[:7],
+		Author:    ci.author,
+		Date:      ci.date,
+		Message:   ci.message,
+	})
+
+	return entries, nil
+}
+
 // CommitDiff returns the diff of a specific commit, optionally filtered to a single file.
 func (g *GitService) CommitDiff(dir string, hash string, file string) (string, error) {
 	// Validate hash

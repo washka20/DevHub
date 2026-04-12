@@ -4,7 +4,9 @@ import { useProjectsStore } from './projects'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/error'
 import { filesApi } from '../api/files'
-import type { FileNode, OpenFile } from '../types'
+import { gitApi } from '../api/git'
+import { projectUrl } from '../api/client'
+import type { FileNode, OpenFile, BlameEntry } from '../types'
 
 const MAX_TABS = 5
 
@@ -57,6 +59,10 @@ export const useFilesStore = defineStore('files', () => {
   const activeFilePath = ref<string | null>(null)
   const loading = ref(false)
   const changedOnDisk = ref<Set<string>>(new Set())
+
+  const blameData = ref<BlameEntry[] | null>(null)
+  const blameVisible = ref(false)
+  const blameLoading = ref(false)
 
   const activeFile = computed<OpenFile | undefined>(() =>
     openFiles.value.find((f) => f.path === activeFilePath.value)
@@ -226,12 +232,40 @@ export const useFilesStore = defineStore('files', () => {
     } catch { /* file not readable */ }
   }
 
+  async function toggleBlame() {
+    if (blameVisible.value) {
+      blameVisible.value = false
+      blameData.value = null
+      return
+    }
+    if (!activeFilePath.value) return
+    blameLoading.value = true
+    try {
+      const base = projectUrl(projectName())
+      blameData.value = await gitApi.blame(base, activeFilePath.value)
+      blameVisible.value = true
+    } catch (e) {
+      toast.show('error', `Blame failed: ${getErrorMessage(e)}`)
+      blameData.value = null
+    } finally {
+      blameLoading.value = false
+    }
+  }
+
+  function hideBlame() {
+    blameVisible.value = false
+    blameData.value = null
+  }
+
   return {
     tree,
     openFiles,
     activeFilePath,
     loading,
     changedOnDisk,
+    blameData,
+    blameVisible,
+    blameLoading,
     activeFile,
     hasUnsaved,
     fetchTree,
@@ -246,5 +280,7 @@ export const useFilesStore = defineStore('files', () => {
     checkOpenFiles,
     dismissDiskChange,
     reloadFromDisk,
+    toggleBlame,
+    hideBlame,
   }
 })

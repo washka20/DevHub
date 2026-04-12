@@ -320,6 +320,91 @@ func TestCommitDiff(t *testing.T) {
 	}
 }
 
+func TestBlame(t *testing.T) {
+	// Simulate git blame --porcelain output with two commits
+	hash1 := "abc1234567890abc1234567890abc1234567890a" // 40 chars
+	hash2 := "def5678901234def5678901234def5678901234d" // 40 chars
+	blameOutput := hash1 + " 1 1 2\n" +
+		"author John Doe\n" +
+		"author-mail <john@example.com>\n" +
+		"author-time 1700000000\n" +
+		"author-tz +0000\n" +
+		"committer John Doe\n" +
+		"committer-mail <john@example.com>\n" +
+		"committer-time 1700000000\n" +
+		"committer-tz +0000\n" +
+		"summary initial commit\n" +
+		"filename main.go\n" +
+		"\tpackage main\n" +
+		hash1 + " 2 2\n" +
+		"\timport \"fmt\"\n" +
+		hash2 + " 3 3 1\n" +
+		"author Jane Smith\n" +
+		"author-mail <jane@example.com>\n" +
+		"author-time 1700100000\n" +
+		"author-tz +0000\n" +
+		"committer Jane Smith\n" +
+		"committer-mail <jane@example.com>\n" +
+		"committer-time 1700100000\n" +
+		"committer-tz +0000\n" +
+		"summary added function\n" +
+		"filename main.go\n" +
+		"\tfunc main() {}\n"
+
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
+		{Output: blameOutput},
+	}}
+
+	svc := NewGitService(mock)
+	entries, err := svc.Blame("/test", "main.go")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 blame entries, got %d", len(entries))
+	}
+
+	// First entry: lines 1-2, John Doe
+	if entries[0].LineStart != 1 || entries[0].LineEnd != 2 {
+		t.Errorf("entry[0] lines: expected 1-2, got %d-%d", entries[0].LineStart, entries[0].LineEnd)
+	}
+	if entries[0].Author != "John Doe" {
+		t.Errorf("entry[0] author: expected 'John Doe', got %q", entries[0].Author)
+	}
+	if entries[0].ShortHash != hash1[:7] {
+		t.Errorf("entry[0] short_hash: expected %q, got %q", hash1[:7], entries[0].ShortHash)
+	}
+	if entries[0].Message != "initial commit" {
+		t.Errorf("entry[0] message: expected 'initial commit', got %q", entries[0].Message)
+	}
+
+	// Second entry: line 3, Jane Smith
+	if entries[1].LineStart != 3 || entries[1].LineEnd != 3 {
+		t.Errorf("entry[1] lines: expected 3-3, got %d-%d", entries[1].LineStart, entries[1].LineEnd)
+	}
+	if entries[1].Author != "Jane Smith" {
+		t.Errorf("entry[1] author: expected 'Jane Smith', got %q", entries[1].Author)
+	}
+	if entries[1].Message != "added function" {
+		t.Errorf("entry[1] message: expected 'added function', got %q", entries[1].Message)
+	}
+}
+
+func TestBlame_EmptyOutput(t *testing.T) {
+	mock := &testutil.MockRunner{Calls: []testutil.MockCall{
+		{Output: ""},
+	}}
+
+	svc := NewGitService(mock)
+	entries, err := svc.Blame("/test", "empty.go")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("expected 0 entries for empty output, got %d", len(entries))
+	}
+}
+
 func TestCommitDiff_WithFile(t *testing.T) {
 	diffOutput := "diff for specific file\n"
 
