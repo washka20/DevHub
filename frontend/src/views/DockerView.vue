@@ -120,12 +120,20 @@ function scrollToBottom() {
   })
 }
 
-// Extract first host port from ports string like "0.0.0.0:8000->8000/tcp, :::8000->8000/tcp"
+// Extract first HTTP-likely port from ports string
+// Formats: "0.0.0.0:8000->8000/tcp", "8000/tcp", "5432/tcp"
+// Skip known non-HTTP ports (databases, etc.)
+const nonHttpPorts = new Set(['5432', '3306', '27017', '6379', '5672', '15672', '2181', '9092', '8529'])
+
 function extractUrl(ports: string): string | null {
   if (!ports) return null
-  const match = ports.match(/(?:0\.0\.0\.0|localhost|127\.0\.0\.1):(\d+)->/)
-  if (match) return `http://localhost:${match[1]}`
-  // Also handle "80/tcp" format (no host mapping) — skip
+  // First try mapped ports: 0.0.0.0:8000->8000/tcp
+  const mapped = ports.match(/(?:0\.0\.0\.0|localhost|127\.0\.0\.1):(\d+)->/)
+  if (mapped && !nonHttpPorts.has(mapped[1])) return `http://localhost:${mapped[1]}`
+  if (mapped) return null
+  // Fallback: bare port like "80/tcp" or "8080/tcp" — only common HTTP ports
+  const bare = ports.match(/\b(80|443|3000|4000|5000|5173|8000|8080|8443|8888|9000)\b/)
+  if (bare) return `http://localhost:${bare[1]}`
   return null
 }
 
@@ -926,8 +934,20 @@ onUnmounted(() => {
   width: 160px;
 }
 
-.col-actions {
-  min-width: 380px;
+.col-name {
+  width: 140px;
+}
+
+.col-image {
+  min-width: 180px;
+}
+
+.col-ports {
+  width: 180px;
+}
+
+.col-state {
+  width: 80px;
 }
 
 .cell-status {
