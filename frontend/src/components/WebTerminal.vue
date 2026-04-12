@@ -22,6 +22,7 @@ const terminalEl = ref<HTMLDivElement>()
 let term: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let searchAddon: SearchAddon | null = null
+let serializeAddon: import('@xterm/addon-serialize').SerializeAddon | null = null
 let ws: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
 let resizeTimer: ReturnType<typeof setTimeout> | null = null
@@ -283,6 +284,13 @@ function initTerminal() {
     if (term && !disposed) term.loadAddon(new LigaturesAddon())
   }).catch(() => {})
 
+  import('@xterm/addon-serialize').then(({ SerializeAddon }) => {
+    if (term && !disposed) {
+      serializeAddon = new SerializeAddon()
+      term.loadAddon(serializeAddon)
+    }
+  }).catch(() => {})
+
   const encoder = new TextEncoder()
   term.onData((data: string) => {
     if (ws?.readyState === WebSocket.OPEN) {
@@ -438,6 +446,39 @@ async function handleConnect() {
 }
 
 // ---------------------------------------------------------------------------
+// Export HTML
+// ---------------------------------------------------------------------------
+
+function handleExportHTML() {
+  if (!isActiveTab()) return
+  if (!serializeAddon) return
+  const content = serializeAddon.serializeAsHTML()
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Terminal Export - ${stamp}</title>
+  <style>
+    body { margin: 0; padding: 16px; background: #1e1e1e; }
+  </style>
+</head>
+<body>
+  ${content}
+</body>
+</html>`
+  const blob = new Blob([html], { type: 'text/html' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `terminal-export-${stamp}.html`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ---------------------------------------------------------------------------
 // Broadcast
 // ---------------------------------------------------------------------------
 
@@ -455,6 +496,7 @@ function handleBroadcast(e: Event) {
 
 onMounted(async () => {
   window.addEventListener('terminal:broadcast', handleBroadcast)
+  window.addEventListener('terminal:export-html', handleExportHTML)
 
   // If the pane is already connected (e.g. freshly created via addTab), init immediately
   if (pane.value?.status === 'connected' && pane.value.sessionId) {
@@ -483,6 +525,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('terminal:broadcast', handleBroadcast)
+  window.removeEventListener('terminal:export-html', handleExportHTML)
   if (cwdPollTimer) { clearInterval(cwdPollTimer); cwdPollTimer = null }
   if (cwdStartTimer) { clearTimeout(cwdStartTimer); cwdStartTimer = null }
   disposed = true
@@ -501,6 +544,7 @@ onBeforeUnmount(() => {
   ws = null
   fitAddon = null
   searchAddon = null
+  serializeAddon = null
   resizeObserver = null
   resizeTimer = null
   reconnectTimer = null

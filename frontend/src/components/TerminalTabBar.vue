@@ -94,6 +94,10 @@ function handleDragEnd() {
   dragOverIndex.value = null
 }
 
+function handleExport() {
+  window.dispatchEvent(new CustomEvent('terminal:export-html'))
+}
+
 async function handleNewTab() {
   const cwd = projectsStore.currentProject?.path || ''
   try {
@@ -183,6 +187,17 @@ async function handleNewTab() {
         title="Broadcast input to all panes"
       >
         BC
+      </button>
+      <button
+        class="toolbar-btn"
+        @click="handleExport"
+        :disabled="!terminalStore.activeTab"
+        title="Export as HTML"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: -2px; margin-right: 3px;">
+          <path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14ZM7.25 7.689V2a.75.75 0 0 1 1.5 0v5.689l1.97-1.969a.749.749 0 1 1 1.06 1.06l-3.25 3.25a.749.749 0 0 1-1.06 0L4.22 6.78a.749.749 0 1 1 1.06-1.06Z"/>
+        </svg>
+        Export
       </button>
       <div class="toolbar-sep"></div>
       <button
