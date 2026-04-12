@@ -81,6 +81,16 @@ type DockerService struct {
 	runner runner.CommandRunner
 }
 
+// isHexString checks if a string contains only hex characters (container IDs).
+func isHexString(s string) bool {
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
 // NewDockerService creates a new DockerService with the given runner.
 func NewDockerService(r runner.CommandRunner) *DockerService {
 	return &DockerService{runner: r}
@@ -148,11 +158,22 @@ func (d *DockerService) Inspect(composeFile, serviceName string) (*ContainerInsp
 	// Resolve compose service name to container ID
 	dir := filepath.Dir(composeFile)
 	file := filepath.Base(composeFile)
-	containerID, err := d.runner.Run(dir, "docker", "compose", "-f", file, "ps", "-q", serviceName)
-	if err != nil || strings.TrimSpace(containerID) == "" {
+	rawOutput, err := d.runner.Run(dir, "docker", "compose", "-f", file, "ps", "-q", serviceName)
+	if err != nil {
 		return nil, fmt.Errorf("cannot resolve container for service %s: %w", serviceName, err)
 	}
-	containerID = strings.TrimSpace(strings.Split(containerID, "\n")[0])
+	// Extract container ID — filter out warnings/non-hex lines
+	var containerID string
+	for _, line := range strings.Split(rawOutput, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && isHexString(line) {
+			containerID = line
+			break
+		}
+	}
+	if containerID == "" {
+		return nil, fmt.Errorf("cannot resolve container for service %s: no container ID found", serviceName)
+	}
 
 	out, err := d.runner.Run("", "docker", "inspect", "--format", "json", containerID)
 	if err != nil {
@@ -444,9 +465,15 @@ func (d *DockerService) Stats(composeFile string) ([]ContainerStats, error) {
 		return nil, nil
 	}
 
-	ids := strings.Split(out, "\n")
-	for i := range ids {
-		ids[i] = strings.TrimSpace(ids[i])
+	var ids []string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && isHexString(line) {
+			ids = append(ids, line)
+		}
+	}
+	if len(ids) == 0 {
+		return nil, nil
 	}
 
 	// docker stats --no-stream --format json <ids>
