@@ -158,7 +158,7 @@ func (d *DockerService) Inspect(composeFile, serviceName string) (*ContainerInsp
 	// Resolve compose service name to container ID
 	dir := filepath.Dir(composeFile)
 	file := filepath.Base(composeFile)
-	rawOutput, err := d.runner.Run(dir, "docker", "compose", "-f", file, "ps", "-q", serviceName)
+	rawOutput, err := d.runner.Run(dir, "docker", "compose", "-f", file, "ps", "-a", "-q", serviceName)
 	if err != nil {
 		return nil, fmt.Errorf("cannot resolve container for service %s: %w", serviceName, err)
 	}
