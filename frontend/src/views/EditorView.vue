@@ -10,12 +10,14 @@ import { useFilesStore } from '../stores/files'
 import { useSettingsStore } from '../stores/settings'
 import { useProjectsStore } from '../stores/projects'
 import { filesApi } from '../api/files'
+import { detectLanguageFromFilename } from '../utils/diff'
 
 const filesStore = useFilesStore()
 const settingsStore = useSettingsStore()
 const projectsStore = useProjectsStore()
 
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
+const MonacoDiffViewer = defineAsyncComponent(() => import('../components/MonacoDiffViewer.vue'))
 
 const EditorComponent = computed(() =>
   settingsStore.ui.editorEngine === 'monaco' ? MonacoEditor : CodeEditor
@@ -45,8 +47,11 @@ function closeDiff() {
   diffMode.value = false
   diskContent.value = ''
 }
-// expose for future diff overlay: diffMode, diskContent, closeDiff
-void closeDiff
+
+const diffLanguage = computed(() => {
+  if (!filesStore.activeFile) return 'plaintext'
+  return detectLanguageFromFilename(filesStore.activeFile.name)
+})
 
 function handleSave() {
   if (filesStore.activeFile?.dirty) {
@@ -119,8 +124,22 @@ function handleContentUpdate(value: string) {
             </div>
           </div>
 
+          <!-- Diff mode -->
+          <div v-if="diffMode && filesStore.activeFile" class="editor-content diff-mode-content">
+            <div class="diff-mode-bar">
+              <span class="diff-mode-label">Comparing: editor vs disk</span>
+              <button class="diff-mode-close" @click="closeDiff">&times; Close diff</button>
+            </div>
+            <MonacoDiffViewer
+              :original="filesStore.activeFile.content"
+              :modified="diskContent"
+              :language="diffLanguage"
+              :filename="filesStore.activeFile.name"
+            />
+          </div>
+
           <!-- Image preview -->
-          <div v-if="isImageFile && filesStore.activeFile" class="editor-content">
+          <div v-else-if="isImageFile && filesStore.activeFile" class="editor-content">
             <ImagePreview :src="imageUrl" :filename="filesStore.activeFile.name" />
           </div>
 
@@ -250,6 +269,44 @@ function handleContentUpdate(value: string) {
 
 /* Editor content */
 .editor-content { flex: 1; min-height: 0; overflow: hidden; }
+
+/* Diff mode */
+.diff-mode-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.diff-mode-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  background: rgba(88, 166, 255, 0.08);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.diff-mode-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-blue);
+}
+
+.diff-mode-close {
+  padding: 2px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.diff-mode-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
 
 /* Empty state */
 .editor-empty {

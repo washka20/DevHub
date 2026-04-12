@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref, computed, watch } from 'vue'
+import { defineAsyncComponent, onMounted, ref, computed, watch } from 'vue'
 import { useGitStore } from '../stores/git'
 import { useProjectsStore } from '../stores/projects'
 import { useProject } from '../composables/useProject'
+import { useSettingsStore } from '../stores/settings'
 import { gitApi } from '../api/git'
 import GitChangesPanel from '../components/git/GitChangesPanel.vue'
 import GitLogPanel from '../components/git/GitLogPanel.vue'
@@ -10,9 +11,13 @@ import GitBranchesPanel from '../components/git/GitBranchesPanel.vue'
 import GitCommitDetail from '../components/git/GitCommitDetail.vue'
 import GitBranchFilterSidebar from '../components/git/GitBranchFilterSidebar.vue'
 import DiffViewer from '../components/git/DiffViewer.vue'
+import { parseDiffToOriginalModified, detectLanguageFromFilename } from '../utils/diff'
+
+const MonacoDiffViewer = defineAsyncComponent(() => import('../components/MonacoDiffViewer.vue'))
 
 const gitStore = useGitStore()
 const projectsStore = useProjectsStore()
+const settingsStore = useSettingsStore()
 const { switching } = useProject()
 
 const selectedFile = ref<string | null>(null)
@@ -25,6 +30,34 @@ const showCommitDiffModal = ref(false)
 const showCheckoutConfirm = ref<string | null>(null)
 const showStashDialog = ref(false)
 const stashMessage = ref('')
+const diffInline = ref(false)
+
+const useMonacoDiff = computed(() => settingsStore.ui.editorEngine === 'monaco')
+
+const fileDiffParsed = computed(() => {
+  if (!gitStore.diff) return { original: '', modified: '' }
+  return parseDiffToOriginalModified(gitStore.diff)
+})
+
+const fileDiffLanguage = computed(() => {
+  if (!selectedFile.value) return 'plaintext'
+  return detectLanguageFromFilename(selectedFile.value)
+})
+
+const stashDiffParsed = computed(() => {
+  if (!stashDiffContent.value) return { original: '', modified: '' }
+  return parseDiffToOriginalModified(stashDiffContent.value)
+})
+
+const commitDiffParsed = computed(() => {
+  if (!commitDiffContent.value) return { original: '', modified: '' }
+  return parseDiffToOriginalModified(commitDiffContent.value)
+})
+
+const commitDiffLanguage = computed(() => {
+  if (!commitDiffFile.value) return 'plaintext'
+  return detectLanguageFromFilename(commitDiffFile.value)
+})
 
 // Resizable files panel
 const filesPanelWidth = ref(320)
@@ -322,7 +355,23 @@ watch(() => gitStore.status.branch, () => {
         <div class="diff-panel">
           <!-- Stash diff -->
           <template v-if="selectedStashIndex !== null && stashDiffContent">
+            <div v-if="useMonacoDiff" class="diff-monaco-container">
+              <div class="diff-monaco-header">
+                <span class="diff-monaco-filename">stash@{{ '{' }}{{ selectedStashIndex }}{{ '}' }} diff</span>
+                <div class="diff-monaco-actions">
+                  <button class="diff-toggle-btn" :class="{ active: diffInline }" title="Inline diff" @click="diffInline = !diffInline">Inline</button>
+                  <button class="stash-diff-close" @click="selectedStashIndex = null; stashDiffContent = ''">&times;</button>
+                </div>
+              </div>
+              <MonacoDiffViewer
+                :original="stashDiffParsed.original"
+                :modified="stashDiffParsed.modified"
+                language="plaintext"
+                :inline="diffInline"
+              />
+            </div>
             <DiffViewer
+              v-else
               :diff="stashDiffContent"
               :filename="`stash@{${selectedStashIndex}} diff`"
             >
@@ -333,7 +382,20 @@ watch(() => gitStore.status.branch, () => {
           </template>
           <!-- File diff -->
           <template v-else-if="selectedFile && gitStore.diff">
+            <div v-if="useMonacoDiff" class="diff-monaco-container">
+              <div class="diff-monaco-header">
+                <span class="diff-monaco-filename">{{ selectedFile }}</span>
+                <button class="diff-toggle-btn" :class="{ active: diffInline }" title="Inline diff" @click="diffInline = !diffInline">Inline</button>
+              </div>
+              <MonacoDiffViewer
+                :original="fileDiffParsed.original"
+                :modified="fileDiffParsed.modified"
+                :language="fileDiffLanguage"
+                :inline="diffInline"
+              />
+            </div>
             <DiffViewer
+              v-else
               :diff="gitStore.diff"
               :filename="selectedFile"
               :loading="gitStore.loading.diff"
@@ -439,14 +501,24 @@ watch(() => gitStore.status.branch, () => {
       <div class="modal-content">
         <div class="modal-header">
           <span class="modal-title">{{ commitDiffFile }}</span>
-          <button class="modal-close" @click="closeCommitDiffModal">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z"/>
-            </svg>
-          </button>
+          <div class="modal-header-actions">
+            <button v-if="useMonacoDiff" class="diff-toggle-btn" :class="{ active: diffInline }" @click="diffInline = !diffInline">Inline</button>
+            <button class="modal-close" @click="closeCommitDiffModal">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z"/>
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="modal-body">
-          <DiffViewer :diff="commitDiffContent" />
+          <MonacoDiffViewer
+            v-if="useMonacoDiff"
+            :original="commitDiffParsed.original"
+            :modified="commitDiffParsed.modified"
+            :language="commitDiffLanguage"
+            :inline="diffInline"
+          />
+          <DiffViewer v-else :diff="commitDiffContent" />
         </div>
       </div>
     </div>
@@ -937,6 +1009,67 @@ watch(() => gitStore.status.branch, () => {
 
 .stash-diff-close:hover {
   color: var(--text-primary);
+}
+
+/* Monaco diff container */
+.diff-monaco-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.diff-monaco-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.diff-monaco-filename {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.diff-monaco-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diff-toggle-btn {
+  padding: 2px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.diff-toggle-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.diff-toggle-btn.active {
+  background: rgba(88, 166, 255, 0.15);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* ===== Checkout Confirm Dialog ===== */
