@@ -13,6 +13,8 @@ import type {
   GitLabLabel,
   GitLabMilestone,
   GitLabMember,
+  GitLabTodo,
+  GitLabMRApproval,
 } from '../types'
 
 export const useGitLabStore = defineStore('gitlab', () => {
@@ -26,7 +28,12 @@ export const useGitLabStore = defineStore('gitlab', () => {
   }
 
   // Tab state
-  const activeMainTab = ref<'tasks' | 'mrs' | 'reviews' | 'project' | 'pipelines'>('tasks')
+  const activeMainTab = ref<'inbox' | 'tasks' | 'mrs' | 'reviews' | 'project' | 'pipelines'>('inbox')
+
+  // Cross-project: Todos
+  const todos = ref<GitLabTodo[]>([])
+  const todosLoading = ref(false)
+  const todosCount = computed(() => todos.value.filter(t => t.state === 'pending').length)
 
   // Cross-project: My Issues
   const myIssues = ref<GitLabIssue[]>([])
@@ -49,6 +56,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
   const detailMR = ref<GitLabMR | null>(null)
   const detailNotes = ref<GitLabNote[]>([])
   const detailLoading = ref(false)
+  const mrApprovals = ref<GitLabMRApproval | null>(null)
 
   // Filters
   const labels = ref<GitLabLabel[]>([])
@@ -169,6 +177,38 @@ export const useGitLabStore = defineStore('gitlab', () => {
   })
 
   // Cross-project fetches
+  async function fetchTodos() {
+    todosLoading.value = true
+    try {
+      todos.value = await gitlabApi.myTodos() ?? []
+    } catch (e) {
+      toast.show('error', `Failed to fetch todos: ${getErrorMessage(e)}`)
+      todos.value = []
+    } finally {
+      todosLoading.value = false
+    }
+  }
+
+  async function markTodoDone(id: number) {
+    todos.value = todos.value.filter(t => t.id !== id)
+    try {
+      await gitlabApi.markTodoDone(id)
+    } catch (e) {
+      toast.show('error', `Failed to mark todo: ${getErrorMessage(e)}`)
+      await fetchTodos()
+    }
+  }
+
+  async function markAllTodosDone() {
+    todos.value = []
+    try {
+      await gitlabApi.markAllTodosDone()
+    } catch (e) {
+      toast.show('error', `Failed to mark all todos: ${getErrorMessage(e)}`)
+      await fetchTodos()
+    }
+  }
+
   async function fetchMyIssues(state?: string) {
     myIssuesLoading.value = true
     try {
@@ -275,6 +315,32 @@ export const useGitLabStore = defineStore('gitlab', () => {
     }
   }
 
+  async function fetchMRApprovals(pid: number, iid: number) {
+    try {
+      mrApprovals.value = await gitlabApi.mrApprovals(pid, iid)
+    } catch {
+      mrApprovals.value = null
+    }
+  }
+
+  async function approveMR(pid: number, iid: number) {
+    try {
+      await gitlabApi.approveMR(pid, iid)
+      await fetchMRApprovals(pid, iid)
+    } catch (e) {
+      toast.show('error', `Failed to approve MR: ${getErrorMessage(e)}`)
+    }
+  }
+
+  async function unapproveMR(pid: number, iid: number) {
+    try {
+      await gitlabApi.unapproveMR(pid, iid)
+      await fetchMRApprovals(pid, iid)
+    } catch (e) {
+      toast.show('error', `Failed to unapprove MR: ${getErrorMessage(e)}`)
+    }
+  }
+
   // Unique GitLab projects derived from user's issues and MRs.
   const availableProjects = computed(() => {
     const map = new Map<number, string>()
@@ -312,6 +378,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
     detailIssue.value = null
     detailMR.value = null
     detailNotes.value = []
+    mrApprovals.value = null
 
     if (type === 'issue') {
       await Promise.all([
@@ -322,7 +389,10 @@ export const useGitLabStore = defineStore('gitlab', () => {
       const mr = myMRs.value.find(m => m.iid === iid && m.project_path === projectPath)
         ?? reviewMRs.value.find(m => m.iid === iid && m.project_path === projectPath)
       if (mr) detailMR.value = mr
-      await fetchMRNotes(pid, iid)
+      await Promise.all([
+        fetchMRNotes(pid, iid),
+        fetchMRApprovals(pid, iid),
+      ])
     }
   }
 
@@ -331,6 +401,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
     detailIssue.value = null
     detailMR.value = null
     detailNotes.value = []
+    mrApprovals.value = null
   }
 
   // Write operations
@@ -442,7 +513,8 @@ export const useGitLabStore = defineStore('gitlab', () => {
   function startAutoRefresh() {
     stopAutoRefresh()
     refreshInterval = setInterval(() => {
-      if (activeMainTab.value === 'tasks') fetchMyIssues()
+      if (activeMainTab.value === 'inbox') fetchTodos()
+      else if (activeMainTab.value === 'tasks') fetchMyIssues()
       else if (activeMainTab.value === 'mrs') fetchMyMRs()
       else if (activeMainTab.value === 'reviews') fetchReviewMRs()
       else if (activeMainTab.value === 'pipelines') fetchProjectPipelines()
@@ -461,6 +533,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
     if (!enabled.value) return
 
     await Promise.all([
+      fetchTodos(),
       fetchMyIssues(),
       fetchMyMRs(),
       fetchReviewMRs(),
@@ -507,6 +580,7 @@ export const useGitLabStore = defineStore('gitlab', () => {
   }
 
   function reset() {
+    todos.value = []
     myIssues.value = []
     myMRs.value = []
     reviewMRs.value = []
@@ -530,6 +604,11 @@ export const useGitLabStore = defineStore('gitlab', () => {
   return {
     // Tab state
     activeMainTab,
+
+    // Todos
+    todos,
+    todosLoading,
+    todosCount,
 
     // My Issues
     myIssues,
@@ -584,6 +663,11 @@ export const useGitLabStore = defineStore('gitlab', () => {
     filteredReviewMRs,
     availableProjects,
 
+    // Todos
+    fetchTodos,
+    markTodoDone,
+    markAllTodosDone,
+
     // Cross-project fetches
     fetchMyIssues,
     fetchMyMRs,
@@ -591,6 +675,12 @@ export const useGitLabStore = defineStore('gitlab', () => {
     fetchLabels,
     fetchMilestones,
     fetchCurrentUser,
+
+    // MR Approvals
+    mrApprovals,
+    fetchMRApprovals,
+    approveMR,
+    unapproveMR,
 
     // Detail
     fetchIssueDetail,

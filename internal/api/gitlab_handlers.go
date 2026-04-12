@@ -202,6 +202,31 @@ func (gh *GitLabHandlers) projectMembers(w http.ResponseWriter, pid int) {
 	jsonResponse(w, members)
 }
 
+func (gh *GitLabHandlers) mrApprovals(w http.ResponseWriter, pid, iid int) {
+	approvals, err := gh.Client.MRApprovals(pid, iid)
+	if err != nil {
+		jsonError(w, "failed to fetch approvals: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, approvals)
+}
+
+func (gh *GitLabHandlers) approveMR(w http.ResponseWriter, pid, iid int) {
+	if err := gh.Client.ApproveMR(pid, iid); err != nil {
+		jsonError(w, "failed to approve: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, map[string]bool{"ok": true})
+}
+
+func (gh *GitLabHandlers) unapproveMR(w http.ResponseWriter, pid, iid int) {
+	if err := gh.Client.UnapproveMR(pid, iid); err != nil {
+		jsonError(w, "failed to unapprove: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, map[string]bool{"ok": true})
+}
+
 // --- Handler that resolves project ID and IID, then delegates ---
 
 func (gh *GitLabHandlers) handleWithProjectAndIID(w http.ResponseWriter, r *http.Request, direct bool, fn func(http.ResponseWriter, *http.Request, int, int)) {
@@ -484,6 +509,79 @@ func (gh *GitLabHandlers) DirectProjectMembers(w http.ResponseWriter, r *http.Re
 	gh.handleWithProject(w, r, true, func(w http.ResponseWriter, _ *http.Request, pid int) {
 		gh.projectMembers(w, pid)
 	})
+}
+
+// --- MR Approval handlers (per-project) ---
+
+func (gh *GitLabHandlers) GitLabMRApprovals(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, false, func(w http.ResponseWriter, _ *http.Request, pid, iid int) {
+		gh.mrApprovals(w, pid, iid)
+	})
+}
+
+func (gh *GitLabHandlers) GitLabApproveMR(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, false, func(w http.ResponseWriter, _ *http.Request, pid, iid int) {
+		gh.approveMR(w, pid, iid)
+	})
+}
+
+func (gh *GitLabHandlers) GitLabUnapproveMR(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, false, func(w http.ResponseWriter, _ *http.Request, pid, iid int) {
+		gh.unapproveMR(w, pid, iid)
+	})
+}
+
+// --- MR Approval handlers (direct by GitLab project ID) ---
+
+func (gh *GitLabHandlers) DirectMRApprovals(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, true, func(w http.ResponseWriter, _ *http.Request, pid, iid int) {
+		gh.mrApprovals(w, pid, iid)
+	})
+}
+
+func (gh *GitLabHandlers) DirectApproveMR(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, true, func(w http.ResponseWriter, _ *http.Request, pid, iid int) {
+		gh.approveMR(w, pid, iid)
+	})
+}
+
+func (gh *GitLabHandlers) DirectUnapproveMR(w http.ResponseWriter, r *http.Request) {
+	gh.handleWithProjectAndIID(w, r, true, func(w http.ResponseWriter, _ *http.Request, pid, iid int) {
+		gh.unapproveMR(w, pid, iid)
+	})
+}
+
+// GitLabMyTodos handles GET /api/gitlab/my/todos
+func (gh *GitLabHandlers) GitLabMyTodos(w http.ResponseWriter, r *http.Request) {
+	todos, err := gh.Client.MyTodos()
+	if err != nil {
+		jsonError(w, "failed to fetch todos: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, todos)
+}
+
+// GitLabMarkTodoDone handles POST /api/gitlab/my/todos/{todoId}/done
+func (gh *GitLabHandlers) GitLabMarkTodoDone(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(mux.Vars(r)["todoId"])
+	if err != nil {
+		jsonError(w, "invalid todo ID", http.StatusBadRequest)
+		return
+	}
+	if err := gh.Client.MarkTodoDone(id); err != nil {
+		jsonError(w, "failed to mark todo: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, map[string]bool{"ok": true})
+}
+
+// GitLabMarkAllTodosDone handles POST /api/gitlab/my/todos/mark-all-done
+func (gh *GitLabHandlers) GitLabMarkAllTodosDone(w http.ResponseWriter, r *http.Request) {
+	if err := gh.Client.MarkAllTodosDone(); err != nil {
+		jsonError(w, "failed to mark all todos: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, map[string]bool{"ok": true})
 }
 
 // GitLabProxy handles GET /api/gitlab/proxy?url=<encoded-url>

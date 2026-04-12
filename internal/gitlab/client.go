@@ -655,6 +655,50 @@ func (c *Client) AllMilestones() ([]Milestone, error) {
 	return milestones, nil
 }
 
+// Todo represents a GitLab todo item.
+type Todo struct {
+	ID         int        `json:"id"`
+	ProjectID  int        `json:"project_id"`
+	ActionName string     `json:"action_name"`
+	TargetType string     `json:"target_type"`
+	Target     TodoTarget `json:"target"`
+	Author     Author     `json:"author"`
+	Body       string     `json:"body"`
+	State      string     `json:"state"`
+	CreatedAt  string     `json:"created_at"`
+}
+
+// TodoTarget represents the target of a todo (issue, MR, commit).
+type TodoTarget struct {
+	ID     int    `json:"id"`
+	IID    int    `json:"iid"`
+	Title  string `json:"title"`
+	State  string `json:"state"`
+	WebURL string `json:"web_url"`
+}
+
+// MyTodos fetches pending todos for the current user.
+func (c *Client) MyTodos() ([]Todo, error) {
+	var todos []Todo
+	if err := c.do("/todos?state=pending&per_page=100", &todos); err != nil {
+		return nil, err
+	}
+	if todos == nil {
+		todos = []Todo{}
+	}
+	return todos, nil
+}
+
+// MarkTodoDone marks a single todo as done.
+func (c *Client) MarkTodoDone(todoID int) error {
+	return c.doPost(fmt.Sprintf("/todos/%d/mark_as_done", todoID), map[string]string{}, nil)
+}
+
+// MarkAllTodosDone marks all pending todos as done.
+func (c *Client) MarkAllTodosDone() error {
+	return c.doPost("/todos/mark_as_done", map[string]string{}, nil)
+}
+
 // --- Write methods ---
 
 // CreateIssue creates a new issue in a project.
@@ -697,6 +741,38 @@ func (c *Client) AddMRNote(projectID, iid int, body string) (*Note, error) {
 		return nil, fmt.Errorf("add merge request note: %w", err)
 	}
 	return &note, nil
+}
+
+// MRApproval represents the approval state of a merge request.
+type MRApproval struct {
+	Approved          bool `json:"approved"`
+	ApprovalsRequired int  `json:"approvals_required"`
+	ApprovalsLeft     int  `json:"approvals_left"`
+	ApprovedBy        []struct {
+		User Author `json:"user"`
+	} `json:"approved_by"`
+}
+
+// MRApprovals fetches approval status for a merge request.
+func (c *Client) MRApprovals(projectID, iid int) (*MRApproval, error) {
+	endpoint := fmt.Sprintf("/projects/%d/merge_requests/%d/approvals", projectID, iid)
+	var approval MRApproval
+	if err := c.do(endpoint, &approval); err != nil {
+		return nil, err
+	}
+	return &approval, nil
+}
+
+// ApproveMR approves a merge request.
+func (c *Client) ApproveMR(projectID, iid int) error {
+	endpoint := fmt.Sprintf("/projects/%d/merge_requests/%d/approve", projectID, iid)
+	return c.doPost(endpoint, map[string]string{}, nil)
+}
+
+// UnapproveMR removes approval from a merge request.
+func (c *Client) UnapproveMR(projectID, iid int) error {
+	endpoint := fmt.Sprintf("/projects/%d/merge_requests/%d/unapprove", projectID, iid)
+	return c.doPost(endpoint, map[string]string{}, nil)
 }
 
 // UpdateIssue updates an existing issue.

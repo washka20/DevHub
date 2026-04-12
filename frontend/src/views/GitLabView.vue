@@ -22,7 +22,7 @@ const gitlabProjects = computed(() => store.availableProjects)
 const currentBranch = computed(() => gitStore.status.branch || 'main')
 
 const isRefreshing = computed(() =>
-  store.myIssuesLoading || store.myMRsLoading || store.reviewMRsLoading
+  store.todosLoading || store.myIssuesLoading || store.myMRsLoading || store.reviewMRsLoading
 )
 
 const detailItem = computed(() => {
@@ -101,7 +101,9 @@ function ciStatusText(pipeline: GitLabMR['pipeline']): string {
 }
 
 async function handleRefresh() {
-  if (store.activeMainTab === 'tasks') {
+  if (store.activeMainTab === 'inbox') {
+    await store.fetchTodos()
+  } else if (store.activeMainTab === 'tasks') {
     await store.fetchMyIssues()
   } else if (store.activeMainTab === 'mrs') {
     await store.fetchMyMRs()
@@ -112,6 +114,27 @@ async function handleRefresh() {
   } else {
     await store.fetchProjectPipelines()
   }
+}
+
+function todoActionLabel(action: string): string {
+  const map: Record<string, string> = {
+    assigned: 'assigned',
+    mentioned: 'mentioned',
+    build_failed: 'build failed',
+    approval_required: 'approval required',
+    unmergeable: 'unmergeable',
+    directly_addressed: 'addressed',
+    merge_train_removed: 'removed from train',
+    marked: 'marked',
+    review_requested: 'review requested',
+  }
+  return map[action] || action.replace(/_/g, ' ')
+}
+
+function todoTargetIcon(type: string): string {
+  if (type === 'MergeRequest') return '!'
+  if (type === 'Issue') return '#'
+  return '@'
 }
 
 function selectIssue(issue: GitLabIssue) {
@@ -279,6 +302,14 @@ onUnmounted(() => {
     <nav class="main-tabs">
       <button
         class="tab-btn"
+        :class="{ active: store.activeMainTab === 'inbox' }"
+        @click="store.activeMainTab = 'inbox'"
+      >
+        Inbox
+        <span v-if="store.todosCount > 0" class="tab-badge">{{ store.todosCount }}</span>
+      </button>
+      <button
+        class="tab-btn"
         :class="{ active: store.activeMainTab === 'tasks' }"
         @click="store.activeMainTab = 'tasks'"
       >
@@ -320,6 +351,59 @@ onUnmounted(() => {
     <!-- Content area -->
     <div class="content-area">
       <div class="main-content">
+
+        <!-- INBOX TAB -->
+        <template v-if="store.activeMainTab === 'inbox'">
+          <div class="inbox-header">
+            <button
+              v-if="store.todos.length > 0"
+              class="btn btn-sm"
+              @click="store.markAllTodosDone()"
+            >Mark All Done</button>
+          </div>
+
+          <div v-if="store.todosLoading && !store.todos.length" class="empty">
+            Loading todos...
+          </div>
+
+          <div v-else-if="store.todos.length === 0" class="empty">
+            No pending todos
+          </div>
+
+          <div v-else class="todo-list">
+            <div
+              v-for="todo in store.todos"
+              :key="todo.id"
+              class="todo-row"
+            >
+              <div class="todo-left">
+                <span class="todo-target-icon" :class="'target-' + todo.target_type.toLowerCase()">{{ todoTargetIcon(todo.target_type) }}</span>
+                <div class="todo-info">
+                  <a
+                    class="todo-title"
+                    :href="todo.target.web_url"
+                    target="_blank"
+                    @click.stop
+                  >{{ todo.target.title || todo.body }}</a>
+                  <div class="todo-meta">
+                    <span class="todo-action">{{ todoActionLabel(todo.action_name) }}</span>
+                    <span class="todo-author">by {{ todo.author.name }}</span>
+                    <span class="todo-time">{{ formatTimeAgo(todo.created_at) }}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                class="todo-done-btn"
+                title="Mark as done"
+                @click="store.markTodoDone(todo.id)"
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14">
+                  <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </template>
 
         <!-- MY TASKS TAB -->
         <template v-if="store.activeMainTab === 'tasks'">
@@ -1440,5 +1524,136 @@ onUnmounted(() => {
   font-size: 13px;
 }
 
+/* Inbox / Todos */
+.inbox-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.todo-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.todo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+
+.todo-row:last-child {
+  border-bottom: none;
+}
+
+.todo-row:hover {
+  background: rgba(88, 166, 255, 0.04);
+}
+
+.todo-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.todo-target-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.target-issue {
+  background: rgba(63, 185, 80, 0.15);
+  color: var(--accent-green);
+}
+
+.target-mergerequest {
+  background: rgba(88, 166, 255, 0.15);
+  color: var(--accent-blue);
+}
+
+.target-commit {
+  background: rgba(210, 153, 34, 0.15);
+  color: var(--accent-orange);
+}
+
+.todo-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.todo-title {
+  font-size: 13px;
+  color: var(--text-primary);
+  text-decoration: none;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.todo-title:hover {
+  color: var(--accent-blue);
+  text-decoration: underline;
+}
+
+.todo-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.todo-action {
+  background: var(--bg-tertiary);
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.todo-done-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.todo-done-btn:hover {
+  background: rgba(63, 185, 80, 0.15);
+  border-color: rgba(63, 185, 80, 0.3);
+  color: var(--accent-green);
+}
 
 </style>

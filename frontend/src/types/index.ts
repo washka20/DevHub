@@ -209,6 +209,16 @@ export interface StashEntry {
   date: string
 }
 
+export interface BlameEntry {
+  line_start: number
+  line_end: number
+  hash: string
+  short_hash: string
+  author: string
+  date: string
+  message: string
+}
+
 export interface FileNode {
   name: string
   path: string
@@ -316,6 +326,33 @@ export interface GitLabMR {
   project_path: string
   references: { full: string }
   pipeline: GitLabPipeline | null
+}
+
+export interface GitLabTodoTarget {
+  id: number
+  iid: number
+  title: string
+  state: string
+  web_url: string
+}
+
+export interface GitLabTodo {
+  id: number
+  project_id: number
+  action_name: string
+  target_type: 'Issue' | 'MergeRequest' | 'Commit'
+  target: GitLabTodoTarget
+  author: GitLabAuthor
+  body: string
+  state: 'pending' | 'done'
+  created_at: string
+}
+
+export interface GitLabMRApproval {
+  approved: boolean
+  approvals_required: number
+  approvals_left: number
+  approved_by: Array<{ user: GitLabAuthor }>
 }
 
 export interface GitLabPipeline {

@@ -48,7 +48,7 @@ const dockerRunning = computed(() =>
 )
 
 const gitlabEnabled = computed(() => gitlabStore.enabled === true)
-const gitlabIssues = computed(() => gitlabStore.openIssuesCount)
+const gitlabTodos = computed(() => gitlabStore.todosCount)
 
 const devNavItems = ['/', '/git', '/commands', '/docker', '/gitlab', '/console']
 const filesNavItems = ['/readme', '/notes', '/editor']
@@ -107,7 +107,7 @@ const settingsActive = computed(() => route.path === '/settings')
           <router-link to="/gitlab" class="nav-item" active-class="active">
             <IconGitLab class="nav-icon" />
             GitLab
-            <span v-if="gitlabIssues > 0" class="badge badge-orange">{{ gitlabIssues }}</span>
+            <span v-if="gitlabTodos > 0" class="badge badge-orange">{{ gitlabTodos }}</span>
           </router-link>
           <router-link to="/console" class="nav-item" active-class="active">
             <IconTerminal class="nav-icon" />

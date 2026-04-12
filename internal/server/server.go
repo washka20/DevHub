@@ -14,6 +14,7 @@ import (
 	"devhub/internal/git"
 	"devhub/internal/gitlab"
 	"devhub/internal/runner"
+	"devhub/internal/search"
 	"devhub/internal/terminal"
 	"devhub/internal/watcher"
 
@@ -106,6 +107,7 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}/pop", gitH.GitStashPop).Methods("POST")
 	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}", gitH.GitStashDrop).Methods("DELETE")
 	apiRouter.HandleFunc("/projects/{id}/git/stash/{index}/diff", gitH.GitStashDiff).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/git/blame", gitH.GitBlame).Methods("GET")
 
 	// Files
 	apiRouter.HandleFunc("/projects/{id}/readme", mdH.GetReadme).Methods("GET")
@@ -121,6 +123,11 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/files/delete/{path:.*}", fileH.FileDelete).Methods("DELETE")
 	apiRouter.HandleFunc("/projects/{id}/files/rename/{path:.*}", fileH.FileRename).Methods("PATCH")
 	apiRouter.HandleFunc("/projects/{id}/open-in-fm", fileH.OpenInFileManager).Methods("POST")
+
+	// Search
+	searchSvc := search.NewSearchService(r)
+	searchH := &api.SearchHandlers{Base: h, Search: searchSvc}
+	apiRouter.HandleFunc("/projects/{id}/files/search", searchH.FileSearch).Methods("GET")
 
 	// Notes
 	apiRouter.HandleFunc("/projects/{id}/notes", notesH.ListNotes).Methods("GET")
@@ -169,6 +176,9 @@ func New(cfg *config.Config) *Server {
 		apiRouter.HandleFunc("/gitlab/my/issues", glh.GitLabMyIssues).Methods("GET")
 		apiRouter.HandleFunc("/gitlab/my/merge-requests", glh.GitLabMyMRs).Methods("GET")
 		apiRouter.HandleFunc("/gitlab/my/review-merge-requests", glh.GitLabMyReviewMRs).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/my/todos", glh.GitLabMyTodos).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/my/todos/{todoId:[0-9]+}/done", glh.GitLabMarkTodoDone).Methods("POST")
+		apiRouter.HandleFunc("/gitlab/my/todos/mark-all-done", glh.GitLabMarkAllTodosDone).Methods("POST")
 		apiRouter.HandleFunc("/gitlab/user", glh.GitLabCurrentUser).Methods("GET")
 		apiRouter.HandleFunc("/gitlab/labels", glh.GitLabLabels).Methods("GET")
 		apiRouter.HandleFunc("/gitlab/milestones", glh.GitLabMilestones).Methods("GET")
@@ -188,6 +198,9 @@ func New(cfg *config.Config) *Server {
 		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/notes", glh.GitLabMRNotes).Methods("GET")
 		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/notes", glh.GitLabAddMRNote).Methods("POST")
 		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests", glh.GitLabCreateMR).Methods("POST")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/approvals", glh.GitLabMRApprovals).Methods("GET")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/approve", glh.GitLabApproveMR).Methods("POST")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/unapprove", glh.GitLabUnapproveMR).Methods("POST")
 		apiRouter.HandleFunc("/projects/{id}/gitlab/members", glh.GitLabProjectMembers).Methods("GET")
 
 		// Direct by GitLab project ID (no DevHub project binding)
@@ -199,6 +212,9 @@ func New(cfg *config.Config) *Server {
 		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/notes", glh.DirectMRNotes).Methods("GET")
 		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/notes", glh.DirectAddMRNote).Methods("POST")
 		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests", glh.DirectCreateMR).Methods("POST")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/approvals", glh.DirectMRApprovals).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/approve", glh.DirectApproveMR).Methods("POST")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/unapprove", glh.DirectUnapproveMR).Methods("POST")
 		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/members", glh.DirectProjectMembers).Methods("GET")
 
 		log.Printf("GitLab integration enabled for %s", cfg.Services.GitLab.URL)

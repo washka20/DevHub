@@ -2,12 +2,14 @@ import { api, postJson, putJson } from './client'
 import type {
   GitLabIssue,
   GitLabMR,
+  GitLabMRApproval,
   GitLabNote,
   GitLabLabel,
   GitLabMilestone,
   GitLabMember,
   GitLabProject,
   GitLabPipeline,
+  GitLabTodo,
 } from '../types'
 
 export const gitlabApi = {
@@ -31,6 +33,13 @@ export const gitlabApi = {
 
   myReviewMRs: (state: string) =>
     api<GitLabMR[]>(`/api/gitlab/my/review-merge-requests?state=${state}`),
+
+  myTodos: () =>
+    api<GitLabTodo[]>('/api/gitlab/my/todos'),
+  markTodoDone: (todoId: number) =>
+    api<{ ok: boolean }>(`/api/gitlab/my/todos/${todoId}/done`, postJson({})),
+  markAllTodosDone: () =>
+    api<{ ok: boolean }>('/api/gitlab/my/todos/mark-all-done', postJson({})),
 
   // By GitLab project ID
   issueDetail: (pid: number, iid: number) =>
@@ -56,6 +65,15 @@ export const gitlabApi = {
 
   updateIssue: (pid: number, iid: number, data: Record<string, unknown>) =>
     api<GitLabIssue>(`/api/gitlab/projects/${pid}/issues/${iid}`, putJson(data)),
+
+  mrApprovals: (pid: number, iid: number) =>
+    api<GitLabMRApproval>(`/api/gitlab/projects/${pid}/merge-requests/${iid}/approvals`),
+
+  approveMR: (pid: number, iid: number) =>
+    api<{ ok: boolean }>(`/api/gitlab/projects/${pid}/merge-requests/${iid}/approve`, postJson({})),
+
+  unapproveMR: (pid: number, iid: number) =>
+    api<{ ok: boolean }>(`/api/gitlab/projects/${pid}/merge-requests/${iid}/unapprove`, postJson({})),
 
   projectMembers: (pid: number) =>
     api<GitLabMember[]>(`/api/gitlab/projects/${pid}/members`),
