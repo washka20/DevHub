@@ -183,6 +183,34 @@ async function handleUpdateState(stateEvent: 'close' | 'reopen') {
   }
 }
 
+async function handleResolveDiscussion(discussionId: string, resolved: boolean) {
+  if (!store.selectedItem || store.selectedItem.type !== 'mr') return
+  try {
+    await store.resolveDiscussion(
+      store.selectedItem.projectId,
+      store.selectedItem.iid,
+      discussionId,
+      resolved,
+    )
+  } catch (e) {
+    toast.show('error', `Failed to resolve discussion: ${getErrorMessage(e)}`)
+  }
+}
+
+async function handleReplyToDiscussion(discussionId: string, body: string) {
+  if (!store.selectedItem || store.selectedItem.type !== 'mr') return
+  try {
+    await store.replyToDiscussion(
+      store.selectedItem.projectId,
+      store.selectedItem.iid,
+      discussionId,
+      body,
+    )
+  } catch (e) {
+    toast.show('error', `Failed to reply: ${getErrorMessage(e)}`)
+  }
+}
+
 async function handleCreateIssue(data: {
   projectId: number
   title: string
@@ -870,11 +898,14 @@ onUnmounted(() => {
         :item="detailItem"
         :item-type="store.selectedItem.type"
         :notes="store.detailNotes"
+        :discussions="store.detailDiscussions"
         :loading="store.detailLoading"
         @close="store.closeDetail()"
         @add-comment="handleAddComment"
         @toggle-checkbox="handleToggleCheckbox"
         @update-state="handleUpdateState"
+        @resolve-discussion="handleResolveDiscussion"
+        @reply-to-discussion="handleReplyToDiscussion"
       />
     </div>
 

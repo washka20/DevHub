@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import type { GitLabIssue, GitLabMR, GitLabNote } from '../types'
+import type { GitLabIssue, GitLabMR, GitLabNote, GitLabDiscussion } from '../types'
 import { useMarkdown } from '../composables/useMarkdown'
 import { useGitLabStore } from '../stores/gitlab'
 import { formatRelativeTime, formatDate, isOverdue, formatDueDate } from '../utils/date'
@@ -10,6 +10,7 @@ const props = defineProps<{
   item: GitLabIssue | GitLabMR | null
   itemType: 'issue' | 'mr'
   notes: GitLabNote[]
+  discussions: GitLabDiscussion[]
   loading: boolean
 }>()
 
@@ -18,6 +19,8 @@ const emit = defineEmits<{
   'add-comment': [body: string]
   'toggle-checkbox': [index: number]
   'update-state': [stateEvent: 'close' | 'reopen']
+  'resolve-discussion': [discussionId: string, resolved: boolean]
+  'reply-to-discussion': [discussionId: string, body: string]
 }>()
 
 const { render } = useMarkdown()
@@ -97,6 +100,48 @@ const markdownOpts = computed(() =>
 )
 
 const userNotes = computed(() => props.notes.filter(n => !n.system))
+
+const userDiscussions = computed(() =>
+  props.discussions.filter(d => d.notes.some(n => !n.system))
+)
+
+const resolvableThreads = computed(() =>
+  userDiscussions.value.filter(d => !d.individual_note && d.notes.some(n => n.resolvable))
+)
+
+const resolvedCount = computed(() =>
+  resolvableThreads.value.filter(d => d.notes.every(n => !n.resolvable || n.resolved)).length
+)
+
+const replyingTo = ref<string | null>(null)
+const replyText = ref('')
+const replySubmitting = ref(false)
+
+function toggleReply(discussionId: string) {
+  if (replyingTo.value === discussionId) {
+    replyingTo.value = null
+    replyText.value = ''
+  } else {
+    replyingTo.value = discussionId
+    replyText.value = ''
+  }
+}
+
+async function submitReply(discussionId: string) {
+  if (!replyText.value.trim()) return
+  replySubmitting.value = true
+  try {
+    emit('reply-to-discussion', discussionId, replyText.value.trim())
+    replyText.value = ''
+    replyingTo.value = null
+  } finally {
+    replySubmitting.value = false
+  }
+}
+
+function isThreadResolved(d: GitLabDiscussion): boolean {
+  return d.notes.every(n => !n.resolvable || n.resolved)
+}
 
 const canToggleState = computed(() => {
   if (!props.item) return false
@@ -301,19 +346,105 @@ onUnmounted(() => {
               </div>
             </template>
 
-            <!-- Comments -->
-            <div class="section-title">Comments<template v-if="userNotes.length"> ({{ userNotes.length }})</template></div>
-
-            <div v-if="!userNotes.length" class="no-comments">No comments yet</div>
-
-            <div v-for="note in userNotes" :key="note.id" class="comment">
-              <div class="comment-head">
-                <span class="comment-avatar">{{ getInitials(note.author.name) }}</span>
-                <span class="comment-author">@{{ note.author.username }}</span>
-                <span class="comment-time">&middot; {{ formatTimeAgo(note.created_at) }}</span>
+            <!-- MR Discussions (threaded) -->
+            <template v-if="isMR">
+              <div class="section-title">
+                Discussions
+                <template v-if="resolvableThreads.length">
+                  <span class="threads-summary">({{ resolvedCount }}/{{ resolvableThreads.length }} threads resolved)</span>
+                </template>
               </div>
-              <div class="comment-body" v-html="render(note.body, markdownOpts)"></div>
-            </div>
+
+              <div v-if="!userDiscussions.length" class="no-comments">No discussions yet</div>
+
+              <div
+                v-for="discussion in userDiscussions"
+                :key="discussion.id"
+                class="discussion"
+                :class="{ 'discussion-thread': !discussion.individual_note && discussion.notes.some(n => n.resolvable) }"
+              >
+                <!-- Thread header with resolve badge -->
+                <div
+                  v-if="!discussion.individual_note && discussion.notes.some(n => n.resolvable)"
+                  class="thread-header"
+                >
+                  <span
+                    class="thread-badge"
+                    :class="isThreadResolved(discussion) ? 'thread-resolved' : 'thread-unresolved'"
+                  >{{ isThreadResolved(discussion) ? 'Resolved' : 'Unresolved' }}</span>
+                  <button
+                    class="thread-resolve-btn"
+                    @click="emit('resolve-discussion', discussion.id, !isThreadResolved(discussion))"
+                  >{{ isThreadResolved(discussion) ? 'Unresolve' : 'Resolve' }}</button>
+                </div>
+
+                <!-- Root note (first in thread, or only note for individual) -->
+                <div class="comment">
+                  <div class="comment-head">
+                    <span class="comment-avatar">{{ getInitials(discussion.notes[0].author.name) }}</span>
+                    <span class="comment-author">@{{ discussion.notes[0].author.username }}</span>
+                    <span class="comment-time">&middot; {{ formatTimeAgo(discussion.notes[0].created_at) }}</span>
+                  </div>
+                  <div class="comment-body" v-html="render(discussion.notes[0].body, markdownOpts)"></div>
+                </div>
+
+                <!-- Thread replies -->
+                <template v-if="!discussion.individual_note && discussion.notes.length > 1">
+                  <div
+                    v-for="note in discussion.notes.slice(1).filter(n => !n.system)"
+                    :key="note.id"
+                    class="comment thread-reply"
+                  >
+                    <div class="comment-head">
+                      <span class="comment-avatar">{{ getInitials(note.author.name) }}</span>
+                      <span class="comment-author">@{{ note.author.username }}</span>
+                      <span class="comment-time">&middot; {{ formatTimeAgo(note.created_at) }}</span>
+                    </div>
+                    <div class="comment-body" v-html="render(note.body, markdownOpts)"></div>
+                  </div>
+                </template>
+
+                <!-- Reply button & input for threads -->
+                <div v-if="!discussion.individual_note" class="thread-actions">
+                  <button class="thread-reply-btn" @click="toggleReply(discussion.id)">
+                    {{ replyingTo === discussion.id ? 'Cancel' : 'Reply' }}
+                  </button>
+                </div>
+                <div v-if="replyingTo === discussion.id" class="thread-reply-box">
+                  <textarea
+                    v-model="replyText"
+                    class="comment-input"
+                    placeholder="Reply to thread... (Markdown)"
+                    @keydown.ctrl.enter="submitReply(discussion.id)"
+                    @keydown.meta.enter="submitReply(discussion.id)"
+                  ></textarea>
+                  <div class="comment-footer">
+                    <span class="comment-hint">Ctrl+Enter to send</span>
+                    <button
+                      class="send-btn"
+                      :disabled="!replyText.trim() || replySubmitting"
+                      @click="submitReply(discussion.id)"
+                    >Reply</button>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- Issue Comments (flat) -->
+            <template v-else>
+              <div class="section-title">Comments<template v-if="userNotes.length"> ({{ userNotes.length }})</template></div>
+
+              <div v-if="!userNotes.length" class="no-comments">No comments yet</div>
+
+              <div v-for="note in userNotes" :key="note.id" class="comment">
+                <div class="comment-head">
+                  <span class="comment-avatar">{{ getInitials(note.author.name) }}</span>
+                  <span class="comment-author">@{{ note.author.username }}</span>
+                  <span class="comment-time">&middot; {{ formatTimeAgo(note.created_at) }}</span>
+                </div>
+                <div class="comment-body" v-html="render(note.body, markdownOpts)"></div>
+              </div>
+            </template>
 
             <!-- Comment input -->
             <div class="comment-input-box">
@@ -1217,5 +1348,104 @@ onUnmounted(() => {
 
 .btn-unapprove:hover:not(:disabled) {
   background: rgba(210, 153, 34, 0.1);
+}
+
+/* === Discussions === */
+.threads-summary {
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-left: 4px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.discussion {
+  margin-bottom: 4px;
+}
+
+.discussion-thread {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.thread-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.thread-badge {
+  font-size: 10px;
+  padding: 1px 8px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.thread-resolved {
+  background: rgba(63, 185, 80, 0.15);
+  color: var(--accent-green);
+}
+
+.thread-unresolved {
+  background: rgba(210, 153, 34, 0.15);
+  color: var(--accent-orange);
+}
+
+.thread-resolve-btn {
+  font-size: 10px;
+  padding: 1px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.thread-resolve-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-blue);
+}
+
+.thread-reply {
+  margin-left: 24px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+
+.thread-actions {
+  margin-top: 4px;
+  margin-left: 28px;
+}
+
+.thread-reply-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.thread-reply-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-blue);
+}
+
+.thread-reply-box {
+  margin-top: 6px;
+  margin-left: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.thread-reply-box .comment-input {
+  min-height: 48px;
 }
 </style>
