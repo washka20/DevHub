@@ -29,6 +29,7 @@ type ServicesConfig struct {
 
 // Config holds application configuration.
 type Config struct {
+	Host           string         `yaml:"host"`
 	Port           int            `yaml:"port"`
 	ProjectsDir    string         `yaml:"projects_dir"`
 	DefaultProject string         `yaml:"default_project"`
@@ -134,6 +135,9 @@ func (c *Config) Save() error {
 // applyEnvOverrides overrides config values from environment variables.
 // Env vars take precedence over YAML config.
 func applyEnvOverrides(cfg *Config) {
+	if v := os.Getenv("DEVHUB_HOST"); v != "" {
+		cfg.Host = v
+	}
 	if v := os.Getenv("DEVHUB_GITLAB_URL"); v != "" {
 		cfg.Services.GitLab.URL = v
 	}

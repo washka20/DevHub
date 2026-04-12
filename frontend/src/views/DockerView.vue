@@ -120,6 +120,15 @@ function scrollToBottom() {
   })
 }
 
+// Extract first host port from ports string like "0.0.0.0:8000->8000/tcp, :::8000->8000/tcp"
+function extractUrl(ports: string): string | null {
+  if (!ports) return null
+  const match = ports.match(/(?:0\.0\.0\.0|localhost|127\.0\.0\.1):(\d+)->/)
+  if (match) return `http://localhost:${match[1]}`
+  // Also handle "80/tcp" format (no host mapping) — skip
+  return null
+}
+
 // Connect SSE for selected container
 function connectLogs(name: string) {
   disconnectLogs()
@@ -450,6 +459,21 @@ onUnmounted(() => {
                 </svg>
                 Terminal
               </button>
+              <a
+                v-if="extractUrl(c.ports)"
+                class="action-btn action-btn-open"
+                :href="extractUrl(c.ports)!"
+                target="_blank"
+                rel="noopener"
+                @click.stop
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                  <polyline points="15 3 21 3 21 9"/>
+                  <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+                Open
+              </a>
               <button
                 class="action-btn action-btn-logs"
                 @click="selectRow(c.name)"
@@ -1088,6 +1112,16 @@ onUnmounted(() => {
 
 .action-btn-terminal:hover:not(:disabled) {
   background: rgba(210, 153, 34, 0.12);
+}
+
+.action-btn-open {
+  color: var(--accent-cyan, #56d4dd);
+  border-color: rgba(86, 212, 221, 0.3);
+  text-decoration: none;
+}
+
+.action-btn-open:hover {
+  background: rgba(86, 212, 221, 0.12);
 }
 
 .action-btn-logs {
