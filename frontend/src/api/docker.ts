@@ -1,5 +1,5 @@
 import { api, apiVoid, projectUrl, POST } from './client'
-import type { Container, ContainerStats } from '../types'
+import type { Container, ContainerStats, ContainerInspect } from '../types'
 
 export const dockerApi = {
   containers: (project: string) =>
@@ -19,6 +19,9 @@ export const dockerApi = {
 
   action: (project: string, name: string, action: string) =>
     apiVoid(`${projectUrl(project)}/docker/${name}/${action}`, POST),
+
+  inspect: (project: string, name: string) =>
+    api<ContainerInspect>(`${projectUrl(project)}/docker/${name}/inspect`),
 
   logsUrl: (project: string, name: string) =>
     `${projectUrl(project)}/docker/${name}/logs`,

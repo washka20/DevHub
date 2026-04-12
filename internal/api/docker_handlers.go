@@ -68,6 +68,17 @@ func (dh *DockerHandlers) DockerContainers(w http.ResponseWriter, r *http.Reques
 	jsonResponse(w, containers)
 }
 
+// DockerInspect handles GET /api/projects/{id}/docker/{name}/inspect
+func (dh *DockerHandlers) DockerInspect(w http.ResponseWriter, r *http.Request) {
+	name := mux.Vars(r)["name"]
+	inspect, err := dh.Docker.Inspect(name)
+	if err != nil {
+		jsonError(w, "inspect failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, inspect)
+}
+
 // DockerAction handles POST /api/projects/{id}/docker/{name}/{action}
 func (dh *DockerHandlers) DockerAction(w http.ResponseWriter, r *http.Request) {
 	path, err := dh.Base.projectPath(r)

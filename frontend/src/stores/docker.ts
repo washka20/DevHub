@@ -4,7 +4,7 @@ import { useProjectsStore } from './projects'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/error'
 import { dockerApi } from '../api/docker'
-import type { Container, ContainerStats } from '../types'
+import type { Container, ContainerStats, ContainerInspect } from '../types'
 
 export const useDockerStore = defineStore('docker', () => {
   const containers = ref<Container[]>([])
@@ -13,6 +13,9 @@ export const useDockerStore = defineStore('docker', () => {
   const loading = ref(false)
   const actionLoading = ref<string | null>(null)
   const composeLoading = ref<'up' | 'rebuild' | 'down' | null>(null)
+  const expandedContainer = ref<string | null>(null)
+  const inspectData = ref<ContainerInspect | null>(null)
+  const inspectLoading = ref(false)
   let statsInterval: ReturnType<typeof setInterval> | null = null
 
   const projectsStore = useProjectsStore()
@@ -126,6 +129,24 @@ export const useDockerStore = defineStore('docker', () => {
     return dockerApi.logsUrl(projectName(), name)
   }
 
+  async function toggleInspect(name: string) {
+    if (expandedContainer.value === name) {
+      expandedContainer.value = null
+      inspectData.value = null
+      return
+    }
+    expandedContainer.value = name
+    inspectLoading.value = true
+    try {
+      inspectData.value = await dockerApi.inspect(projectName(), name)
+    } catch (e) {
+      toast.show('error', getErrorMessage(e))
+      inspectData.value = null
+    } finally {
+      inspectLoading.value = false
+    }
+  }
+
   return {
     containers,
     stats,
@@ -133,6 +154,9 @@ export const useDockerStore = defineStore('docker', () => {
     loading,
     actionLoading,
     composeLoading,
+    expandedContainer,
+    inspectData,
+    inspectLoading,
     runningCount,
     totalCount,
     fetchContainers,
@@ -146,5 +170,6 @@ export const useDockerStore = defineStore('docker', () => {
     composeDown,
     selectContainer,
     logsUrl,
+    toggleInspect,
   }
 })

@@ -14,6 +14,39 @@ import (
 	"devhub/internal/runner"
 )
 
+// ContainerInspect represents detailed information about a container.
+type ContainerInspect struct {
+	Name         string           `json:"name"`
+	Image        string           `json:"image"`
+	State        string           `json:"state"`
+	Status       string           `json:"status"`
+	Created      string           `json:"created"`
+	StartedAt    string           `json:"started_at"`
+	Health       string           `json:"health"`
+	RestartCount int              `json:"restart_count"`
+	Env          []string         `json:"env"`
+	Mounts       []ContainerMount `json:"mounts"`
+	Ports        []ContainerPort  `json:"ports"`
+	Networks     []string         `json:"networks"`
+	Cmd          []string         `json:"cmd"`
+	IPAddress    string           `json:"ip_address"`
+}
+
+// ContainerMount represents a bind mount or volume in a container.
+type ContainerMount struct {
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
+	Mode        string `json:"mode"`
+	Type        string `json:"type"`
+}
+
+// ContainerPort represents a port mapping for a container.
+type ContainerPort struct {
+	HostPort      string `json:"host_port"`
+	ContainerPort string `json:"container_port"`
+	Protocol      string `json:"protocol"`
+}
+
 // ContainerStats represents resource usage statistics for a container.
 type ContainerStats struct {
 	Name     string `json:"name"`
@@ -107,6 +140,144 @@ func (d *DockerService) Containers(composeFile string) ([]Container, error) {
 	}
 
 	return containers, nil
+}
+
+// Inspect returns detailed information about a container using docker inspect.
+func (d *DockerService) Inspect(containerName string) (*ContainerInspect, error) {
+	out, err := d.runner.Run("", "docker", "inspect", "--format", "json", containerName)
+	if err != nil {
+		return nil, fmt.Errorf("docker inspect %s: %w: %s", containerName, err, out)
+	}
+
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return nil, fmt.Errorf("docker inspect %s: empty output", containerName)
+	}
+
+	var raw []dockerInspectRaw
+	if err := json.Unmarshal([]byte(out), &raw); err != nil {
+		return nil, fmt.Errorf("parse docker inspect: %w", err)
+	}
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("docker inspect %s: no results", containerName)
+	}
+
+	r := raw[0]
+	result := &ContainerInspect{
+		Name:      strings.TrimPrefix(r.Name, "/"),
+		Image:     r.Config.Image,
+		State:     r.State.Status,
+		Status:    r.State.Status,
+		Created:   r.Created,
+		StartedAt: r.State.StartedAt,
+		Health:    "none",
+		Env:       r.Config.Env,
+		Cmd:       r.Config.Cmd,
+	}
+
+	if r.State.Health != nil {
+		result.Health = r.State.Health.Status
+	}
+
+	if r.HostConfig.RestartPolicy.MaximumRetryCount > 0 {
+		result.RestartCount = r.HostConfig.RestartPolicy.MaximumRetryCount
+	}
+	if r.RestartCount > 0 {
+		result.RestartCount = r.RestartCount
+	}
+
+	for _, m := range r.Mounts {
+		result.Mounts = append(result.Mounts, ContainerMount{
+			Source:      m.Source,
+			Destination: m.Destination,
+			Mode:        m.Mode,
+			Type:        m.Type,
+		})
+	}
+
+	for port, bindings := range r.NetworkSettings.Ports {
+		parts := strings.SplitN(string(port), "/", 2)
+		containerPort := parts[0]
+		protocol := "tcp"
+		if len(parts) > 1 {
+			protocol = parts[1]
+		}
+		for _, b := range bindings {
+			result.Ports = append(result.Ports, ContainerPort{
+				HostPort:      b.HostPort,
+				ContainerPort: containerPort,
+				Protocol:      protocol,
+			})
+		}
+	}
+
+	for name, net := range r.NetworkSettings.Networks {
+		result.Networks = append(result.Networks, name)
+		if net.IPAddress != "" && result.IPAddress == "" {
+			result.IPAddress = net.IPAddress
+		}
+	}
+
+	if result.Env == nil {
+		result.Env = []string{}
+	}
+	if result.Mounts == nil {
+		result.Mounts = []ContainerMount{}
+	}
+	if result.Ports == nil {
+		result.Ports = []ContainerPort{}
+	}
+	if result.Networks == nil {
+		result.Networks = []string{}
+	}
+	if result.Cmd == nil {
+		result.Cmd = []string{}
+	}
+
+	return result, nil
+}
+
+// dockerInspectRaw maps the JSON output of docker inspect.
+type dockerInspectRaw struct {
+	Name         string `json:"Name"`
+	Created      string `json:"Created"`
+	RestartCount int    `json:"RestartCount"`
+	State        struct {
+		Status    string `json:"Status"`
+		StartedAt string `json:"StartedAt"`
+		Health    *struct {
+			Status string `json:"Status"`
+		} `json:"Health"`
+	} `json:"State"`
+	Config struct {
+		Image string   `json:"Image"`
+		Env   []string `json:"Env"`
+		Cmd   []string `json:"Cmd"`
+	} `json:"Config"`
+	HostConfig struct {
+		RestartPolicy struct {
+			MaximumRetryCount int `json:"MaximumRetryCount"`
+		} `json:"RestartPolicy"`
+	} `json:"HostConfig"`
+	Mounts []struct {
+		Source      string `json:"Source"`
+		Destination string `json:"Destination"`
+		Mode        string `json:"Mode"`
+		Type        string `json:"Type"`
+	} `json:"Mounts"`
+	NetworkSettings struct {
+		Ports    map[portKey][]portBinding `json:"Ports"`
+		Networks map[string]struct {
+			IPAddress string `json:"IPAddress"`
+		} `json:"Networks"`
+	} `json:"NetworkSettings"`
+}
+
+type portKey = string
+
+type portBinding struct {
+	HostIP   string `json:"HostIp"`
+	HostPort string `json:"HostPort"`
 }
 
 // Action performs start/stop/restart on a container.

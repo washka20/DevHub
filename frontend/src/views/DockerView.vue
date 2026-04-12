@@ -190,6 +190,25 @@ async function stopAll() {
   await dockerStore.containerAction('_', 'stop-all')
 }
 
+function maskEnvValue(env: string): string {
+  const eqIdx = env.indexOf('=')
+  if (eqIdx === -1) return env
+  const key = env.substring(0, eqIdx)
+  const val = env.substring(eqIdx + 1)
+  const secretPatterns = ['PASSWORD', 'SECRET', 'TOKEN', 'KEY', 'PRIVATE', 'CREDENTIAL']
+  const upper = key.toUpperCase()
+  if (secretPatterns.some((p) => upper.includes(p))) {
+    return `${key}=${'***'}`
+  }
+  return `${key}=${val}`
+}
+
+function formatDate(dateStr: string): string {
+  if (!dateStr || dateStr === '0001-01-01T00:00:00Z') return '-'
+  const d = new Date(dateStr)
+  return d.toLocaleString()
+}
+
 function stateClass(state: string): string {
   switch (state) {
     case 'running':
@@ -334,6 +353,7 @@ onUnmounted(() => {
       <table v-else class="containers-table">
         <thead>
           <tr>
+            <th class="col-expand"></th>
             <th class="col-status">Status</th>
             <th class="col-name">Name</th>
             <th class="col-image">Image</th>
@@ -345,12 +365,22 @@ onUnmounted(() => {
           </tr>
         </thead>
         <tbody>
+          <template v-for="c in dockerStore.containers" :key="c.name">
           <tr
-            v-for="c in dockerStore.containers"
-            :key="c.name"
             :class="{ 'row-active': dockerStore.selectedContainer === c.name }"
             @click="selectRow(c.name)"
           >
+            <td class="cell-expand" @click.stop>
+              <button
+                class="expand-btn"
+                :class="{ 'expand-btn-open': dockerStore.expandedContainer === c.name }"
+                @click="dockerStore.toggleInspect(c.name)"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                  <path d="M8 5l7 7-7 7z"/>
+                </svg>
+              </button>
+            </td>
             <td class="cell-status">
               <span class="status-dot" :class="stateClass(c.state)"></span>
             </td>
@@ -375,7 +405,6 @@ onUnmounted(() => {
               <span class="state-badge" :class="'state-' + c.state">{{ c.state }}</span>
             </td>
             <td class="cell-actions" @click.stop>
-              <!-- Start — for exited containers -->
               <button
                 v-if="c.state !== 'running'"
                 class="action-btn action-btn-start"
@@ -387,7 +416,6 @@ onUnmounted(() => {
                 </svg>
                 Start
               </button>
-              <!-- Stop — for running containers -->
               <button
                 v-if="c.state === 'running'"
                 class="action-btn action-btn-stop"
@@ -399,7 +427,6 @@ onUnmounted(() => {
                 </svg>
                 Stop
               </button>
-              <!-- Restart — for running containers -->
               <button
                 v-if="c.state === 'running'"
                 class="action-btn action-btn-restart"
@@ -412,7 +439,6 @@ onUnmounted(() => {
                 </svg>
                 Restart
               </button>
-              <!-- Terminal — for running containers -->
               <button
                 v-if="c.state === 'running'"
                 class="action-btn action-btn-terminal"
@@ -424,7 +450,6 @@ onUnmounted(() => {
                 </svg>
                 Terminal
               </button>
-              <!-- Logs — for all containers -->
               <button
                 class="action-btn action-btn-logs"
                 @click="selectRow(c.name)"
@@ -440,6 +465,101 @@ onUnmounted(() => {
               </button>
             </td>
           </tr>
+          <!-- Expandable inspect row -->
+          <tr v-if="dockerStore.expandedContainer === c.name" class="inspect-row">
+            <td :colspan="9">
+              <div class="inspect-panel">
+                <div v-if="dockerStore.inspectLoading" class="inspect-loading">Loading...</div>
+                <template v-else-if="dockerStore.inspectData">
+                  <div class="inspect-grid">
+                    <!-- Health & Status -->
+                    <div class="inspect-section">
+                      <h4 class="inspect-section-title">Health & Status</h4>
+                      <div class="inspect-kv">
+                        <span class="inspect-key">Health</span>
+                        <span class="inspect-value">
+                          <span class="health-badge" :class="'health-' + dockerStore.inspectData.health">
+                            {{ dockerStore.inspectData.health }}
+                          </span>
+                        </span>
+                      </div>
+                      <div class="inspect-kv">
+                        <span class="inspect-key">Restart Count</span>
+                        <span class="inspect-value">{{ dockerStore.inspectData.restart_count }}</span>
+                      </div>
+                      <div class="inspect-kv">
+                        <span class="inspect-key">Created</span>
+                        <span class="inspect-value">{{ formatDate(dockerStore.inspectData.created) }}</span>
+                      </div>
+                      <div class="inspect-kv">
+                        <span class="inspect-key">Started</span>
+                        <span class="inspect-value">{{ formatDate(dockerStore.inspectData.started_at) }}</span>
+                      </div>
+                    </div>
+
+                    <!-- Networks -->
+                    <div class="inspect-section">
+                      <h4 class="inspect-section-title">Networks</h4>
+                      <div v-if="dockerStore.inspectData.networks.length === 0" class="inspect-empty">No networks</div>
+                      <div v-else>
+                        <div v-for="net in dockerStore.inspectData.networks" :key="net" class="inspect-item">
+                          {{ net }}
+                        </div>
+                        <div v-if="dockerStore.inspectData.ip_address" class="inspect-kv">
+                          <span class="inspect-key">IP</span>
+                          <span class="inspect-value mono">{{ dockerStore.inspectData.ip_address }}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Command -->
+                    <div class="inspect-section">
+                      <h4 class="inspect-section-title">Command</h4>
+                      <div v-if="dockerStore.inspectData.cmd.length === 0" class="inspect-empty">No command</div>
+                      <code v-else class="inspect-cmd">{{ dockerStore.inspectData.cmd.join(' ') }}</code>
+                    </div>
+
+                    <!-- Ports -->
+                    <div class="inspect-section">
+                      <h4 class="inspect-section-title">Ports</h4>
+                      <div v-if="dockerStore.inspectData.ports.length === 0" class="inspect-empty">No ports</div>
+                      <div v-else class="inspect-list">
+                        <div v-for="(p, i) in dockerStore.inspectData.ports" :key="i" class="inspect-item">
+                          <span class="mono">{{ p.host_port || '*' }} &rarr; {{ p.container_port }}/{{ p.protocol }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Mounts -->
+                  <div v-if="dockerStore.inspectData.mounts.length > 0" class="inspect-section inspect-section-full">
+                    <h4 class="inspect-section-title">Mounts</h4>
+                    <div class="inspect-list">
+                      <div v-for="(m, i) in dockerStore.inspectData.mounts" :key="i" class="inspect-mount">
+                        <span class="mono">{{ m.source }}</span>
+                        <span class="inspect-arrow">&rarr;</span>
+                        <span class="mono">{{ m.destination }}</span>
+                        <span class="inspect-tag">{{ m.type }}</span>
+                        <span v-if="m.mode" class="inspect-tag">{{ m.mode }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Environment -->
+                  <div class="inspect-section inspect-section-full">
+                    <h4 class="inspect-section-title">Environment</h4>
+                    <div v-if="dockerStore.inspectData.env.length === 0" class="inspect-empty">No environment variables</div>
+                    <div v-else class="inspect-env-list">
+                      <div v-for="(e, i) in dockerStore.inspectData.env" :key="i" class="inspect-env-item mono">
+                        {{ maskEnvValue(e) }}
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </td>
+          </tr>
+          </template>
         </tbody>
       </table>
     </section>
@@ -764,6 +884,10 @@ onUnmounted(() => {
 .containers-table tbody tr.row-active td {
   background: rgba(88, 166, 255, 0.08);
   border-color: rgba(88, 166, 255, 0.2);
+}
+
+.col-expand {
+  width: 36px;
 }
 
 .col-status {
@@ -1115,5 +1239,192 @@ onUnmounted(() => {
 
 .log-line:hover {
   background: rgba(88, 166, 255, 0.04);
+}
+
+/* Expand button */
+.cell-expand {
+  text-align: center;
+  width: 36px;
+  padding: 0 4px !important;
+}
+
+.expand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.expand-btn svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+}
+
+.expand-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.expand-btn-open svg {
+  transform: rotate(90deg);
+}
+
+/* Inspect panel */
+.inspect-row td {
+  padding: 0 !important;
+  border-bottom: 1px solid var(--border);
+}
+
+.inspect-panel {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  padding: 16px 20px;
+}
+
+.inspect-loading {
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 12px 0;
+}
+
+.inspect-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.inspect-section {
+  min-width: 0;
+}
+
+.inspect-section-full {
+  margin-top: 4px;
+}
+
+.inspect-section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.inspect-kv {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.inspect-key {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.inspect-value {
+  color: var(--text-primary);
+}
+
+.inspect-empty {
+  color: var(--text-secondary);
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.inspect-item {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+}
+
+.inspect-cmd {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--bg-tertiary);
+  padding: 6px 10px;
+  border-radius: 4px;
+  display: block;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.inspect-mount {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.inspect-arrow {
+  color: var(--text-secondary);
+}
+
+.inspect-tag {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.inspect-env-list {
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+}
+
+.inspect-env-item {
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.7;
+  word-break: break-all;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.health-badge {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.health-healthy {
+  background: rgba(63, 185, 80, 0.15);
+  color: var(--accent-green);
+}
+
+.health-unhealthy {
+  background: rgba(248, 81, 73, 0.15);
+  color: var(--accent-red);
+}
+
+.health-starting {
+  background: rgba(210, 153, 34, 0.15);
+  color: var(--accent-orange);
+}
+
+.health-none {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 </style>

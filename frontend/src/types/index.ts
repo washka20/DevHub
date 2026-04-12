@@ -15,6 +15,36 @@ export interface Container {
   state: string
 }
 
+export interface ContainerMount {
+  source: string
+  destination: string
+  mode: string
+  type: string
+}
+
+export interface ContainerPort {
+  host_port: string
+  container_port: string
+  protocol: string
+}
+
+export interface ContainerInspect {
+  name: string
+  image: string
+  state: string
+  status: string
+  created: string
+  started_at: string
+  health: string
+  restart_count: number
+  env: string[]
+  mounts: ContainerMount[]
+  ports: ContainerPort[]
+  networks: string[]
+  cmd: string[]
+  ip_address: string
+}
+
 export interface ContainerStats {
   name: string
   cpu_perc: string
@@ -355,6 +385,13 @@ export interface GitLabTodo {
   body: string
   state: 'pending' | 'done'
   created_at: string
+}
+
+export interface GitLabTimeStats {
+  time_estimate: number
+  total_time_spent: number
+  human_time_estimate: string | null
+  human_total_time_spent: string | null
 }
 
 export interface GitLabMRApproval {

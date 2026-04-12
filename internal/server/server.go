@@ -143,6 +143,7 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/docker/compose/up", dockerH.DockerComposeUp).Methods("POST")
 	apiRouter.HandleFunc("/projects/{id}/docker/compose/up-build", dockerH.DockerComposeUpBuild).Methods("POST")
 	apiRouter.HandleFunc("/projects/{id}/docker/compose/down", dockerH.DockerComposeDown).Methods("POST")
+	apiRouter.HandleFunc("/projects/{id}/docker/{name}/inspect", dockerH.DockerInspect).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/logs", dockerH.DockerLogs).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/exec", dockerH.DockerExec).Methods("POST")
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/{action}", dockerH.DockerAction).Methods("POST")
@@ -190,6 +191,7 @@ func New(cfg *config.Config) *Server {
 		apiRouter.HandleFunc("/projects/{id}/gitlab/issues", glh.GitLabIssues).Methods("GET")
 		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests", glh.GitLabMergeRequests).Methods("GET")
 		apiRouter.HandleFunc("/projects/{id}/gitlab/pipelines", glh.GitLabPipelines).Methods("GET")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/environments", glh.GitLabEnvironments).Methods("GET")
 
 		// Per-project: detail + notes
 		apiRouter.HandleFunc("/projects/{id}/gitlab/issues/{iid:[0-9]+}", glh.GitLabIssueDetail).Methods("GET")
@@ -212,6 +214,14 @@ func New(cfg *config.Config) *Server {
 		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/discussions/{discussionId}", glh.GitLabResolveMRDiscussion).Methods("PUT")
 		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/discussions/{discussionId}/notes", glh.GitLabReplyToDiscussion).Methods("POST")
 
+		// Per-project: time tracking
+		apiRouter.HandleFunc("/projects/{id}/gitlab/issues/{iid:[0-9]+}/time-stats", glh.GitLabIssueTimeStats).Methods("GET")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/issues/{iid:[0-9]+}/add-spent-time", glh.GitLabIssueAddSpentTime).Methods("POST")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/issues/{iid:[0-9]+}/time-estimate", glh.GitLabIssueSetTimeEstimate).Methods("POST")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/time-stats", glh.GitLabMRTimeStats).Methods("GET")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/add-spent-time", glh.GitLabMRAddSpentTime).Methods("POST")
+		apiRouter.HandleFunc("/projects/{id}/gitlab/merge-requests/{iid:[0-9]+}/time-estimate", glh.GitLabMRSetTimeEstimate).Methods("POST")
+
 		// Direct by GitLab project ID (no DevHub project binding)
 		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/issues/{iid:[0-9]+}", glh.DirectIssueDetail).Methods("GET")
 		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/issues/{iid:[0-9]+}/notes", glh.DirectIssueNotes).Methods("GET")
@@ -232,6 +242,14 @@ func New(cfg *config.Config) *Server {
 		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/discussions", glh.DirectMRDiscussions).Methods("GET")
 		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/discussions/{discussionId}", glh.DirectResolveMRDiscussion).Methods("PUT")
 		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/discussions/{discussionId}/notes", glh.DirectReplyToDiscussion).Methods("POST")
+
+		// Direct: time tracking
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/issues/{iid:[0-9]+}/time-stats", glh.DirectIssueTimeStats).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/issues/{iid:[0-9]+}/add-spent-time", glh.DirectIssueAddSpentTime).Methods("POST")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/issues/{iid:[0-9]+}/time-estimate", glh.DirectIssueSetTimeEstimate).Methods("POST")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/time-stats", glh.DirectMRTimeStats).Methods("GET")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/add-spent-time", glh.DirectMRAddSpentTime).Methods("POST")
+		apiRouter.HandleFunc("/gitlab/projects/{pid:[0-9]+}/merge-requests/{iid:[0-9]+}/time-estimate", glh.DirectMRSetTimeEstimate).Methods("POST")
 
 		log.Printf("GitLab integration enabled for %s", cfg.Services.GitLab.URL)
 	}
