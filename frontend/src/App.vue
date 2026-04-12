@@ -7,18 +7,21 @@ import AppSidebar from './components/AppSidebar.vue'
 import BottomTerminal from './components/BottomTerminal.vue'
 import { useProject } from './composables/useProject'
 import { useWebSocket } from './composables/useWebSocket'
-import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
+import { useKeyboardShortcuts, onToggleFileSearch } from './composables/useKeyboardShortcuts'
 import { useDockerStore } from './stores/docker'
 import { useGitStore } from './stores/git'
 import { useFilesStore } from './stores/files'
 import { useSettingsStore } from './stores/settings'
 import { useTerminalStore } from './stores/terminal'
+import SearchModal from './components/SearchModal.vue'
 import ToastContainer from './components/ToastContainer.vue'
 
 const { initProject } = useProject()
 useSettingsStore()
 const { connect, onMessage } = useWebSocket()
 useKeyboardShortcuts()
+const showSearch = ref(false)
+onToggleFileSearch(() => { showSearch.value = !showSearch.value })
 const dockerStore = useDockerStore()
 const gitStore = useGitStore()
 const terminalStore = useTerminalStore()
@@ -183,6 +186,7 @@ onMounted(async () => {
       </div>
     </div>
   </div>
+  <SearchModal :visible="showSearch" @close="showSearch = false" />
   <ToastContainer />
 </template>
 

@@ -14,10 +14,16 @@ const ROUTE_MAP: Record<string, string> = {
 }
 
 const shortcutsListeners = new Set<() => void>()
+const fileSearchListeners = new Set<() => void>()
 
 export function onToggleShortcuts(cb: () => void) {
   shortcutsListeners.add(cb)
   return () => shortcutsListeners.delete(cb)
+}
+
+export function onToggleFileSearch(cb: () => void) {
+  fileSearchListeners.add(cb)
+  return () => fileSearchListeners.delete(cb)
 }
 
 export function useKeyboardShortcuts() {
@@ -99,6 +105,13 @@ export function useKeyboardShortcuts() {
         return
       }
 
+      return
+    }
+
+    // Ctrl+Shift+F — file search (outside terminal)
+    if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') {
+      e.preventDefault()
+      fileSearchListeners.forEach(cb => cb())
       return
     }
 

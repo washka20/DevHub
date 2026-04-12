@@ -27,7 +27,7 @@ const shortcuts = [
   { action: 'Next Tab', key: 'Ctrl+PgDn' },
   { action: 'Prev Tab', key: 'Ctrl+PgUp' },
   { action: 'Split / Unsplit', key: 'Ctrl+Shift+D' },
-  { action: 'Search Terminal', key: 'Ctrl+Shift+F' },
+  { action: 'File Search', key: 'Ctrl+Shift+F' },
 ]
 
 function handleKeydown(e: KeyboardEvent) {
