@@ -76,6 +76,50 @@ type composeContainer struct {
 	Ports   string `json:"Ports"`
 }
 
+// ComposeStack describes a set of compose files + profiles a command should target.
+// It replaces the single-file composeFile argument used previously, so callers can
+// stack overrides (docker-compose.yml + .dev.yml) or opt into profiles.
+type ComposeStack struct {
+	// Dir is the project root where the compose files live.
+	Dir string
+	// Files is the list of compose files relative to Dir, in the order that
+	// should be passed to `-f` (base first, overrides after).
+	Files []string
+	// Profiles is the list of --profile values to activate.
+	Profiles []string
+}
+
+// StackFromFile is a convenience helper for call sites that still have a single
+// absolute compose-file path.
+func StackFromFile(composeFile string) ComposeStack {
+	if composeFile == "" {
+		return ComposeStack{}
+	}
+	return ComposeStack{
+		Dir:   filepath.Dir(composeFile),
+		Files: []string{filepath.Base(composeFile)},
+	}
+}
+
+// Args returns the argument prefix for `docker compose`:
+// `["compose", "-f", file1, "-f", file2, "--profile", p1, ...]`.
+func (s ComposeStack) Args() []string {
+	args := []string{"compose"}
+	for _, f := range s.Files {
+		if f == "" {
+			continue
+		}
+		args = append(args, "-f", f)
+	}
+	for _, p := range s.Profiles {
+		if p == "" {
+			continue
+		}
+		args = append(args, "--profile", p)
+	}
+	return args
+}
+
 // DockerService provides docker compose operations using a CommandRunner.
 type DockerService struct {
 	runner runner.CommandRunner
@@ -96,12 +140,10 @@ func NewDockerService(r runner.CommandRunner) *DockerService {
 	return &DockerService{runner: r}
 }
 
-// Containers lists containers for the given docker-compose file.
-func (d *DockerService) Containers(composeFile string) ([]Container, error) {
-	dir := filepath.Dir(composeFile)
-	file := filepath.Base(composeFile)
-
-	out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "ps", "-a", "--format", "json")
+// Containers lists containers for the given compose stack.
+func (d *DockerService) Containers(stack ComposeStack) ([]Container, error) {
+	args := append(stack.Args(), "ps", "-a", "--format", "json")
+	out, err := d.runner.Run(stack.Dir, "docker", args...)
 	if err != nil {
 		return nil, fmt.Errorf("docker compose ps: %w: %s", err, out)
 	}
@@ -153,12 +195,10 @@ func (d *DockerService) Containers(composeFile string) ([]Container, error) {
 }
 
 // Inspect returns detailed information about a container using docker inspect.
-// serviceName is the compose service name; composeFile resolves it to the actual container.
-func (d *DockerService) Inspect(composeFile, serviceName string) (*ContainerInspect, error) {
-	// Resolve compose service name to container ID
-	dir := filepath.Dir(composeFile)
-	file := filepath.Base(composeFile)
-	rawOutput, err := d.runner.Run(dir, "docker", "compose", "-f", file, "ps", "-a", "-q", serviceName)
+// serviceName is the compose service name; stack resolves it to the actual container.
+func (d *DockerService) Inspect(stack ComposeStack, serviceName string) (*ContainerInspect, error) {
+	args := append(stack.Args(), "ps", "-a", "-q", serviceName)
+	rawOutput, err := d.runner.Run(stack.Dir, "docker", args...)
 	if err != nil {
 		return nil, fmt.Errorf("cannot resolve container for service %s: %w", serviceName, err)
 	}
@@ -312,37 +352,41 @@ type portBinding struct {
 }
 
 // Action performs start/stop/restart on a container.
-func (d *DockerService) Action(composeFile string, serviceName string, action string) error {
-	dir := filepath.Dir(composeFile)
-	file := filepath.Base(composeFile)
+func (d *DockerService) Action(stack ComposeStack, serviceName string, action string) error {
+	prefix := stack.Args()
 
 	switch action {
 	case "start", "stop", "restart":
-		out, err := d.runner.Run(dir, "docker", "compose", "-f", file, action, serviceName)
+		args := append(prefix, action, serviceName)
+		out, err := d.runner.Run(stack.Dir, "docker", args...)
 		if err != nil {
 			return fmt.Errorf("docker compose %s %s: %w: %s", action, serviceName, err, out)
 		}
 		return nil
 	case "up":
-		out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "up", "-d", serviceName)
+		args := append(prefix, "up", "-d", serviceName)
+		out, err := d.runner.Run(stack.Dir, "docker", args...)
 		if err != nil {
 			return fmt.Errorf("docker compose up %s: %w: %s", serviceName, err, out)
 		}
 		return nil
 	case "down":
-		out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "stop", serviceName)
+		args := append(prefix, "stop", serviceName)
+		out, err := d.runner.Run(stack.Dir, "docker", args...)
 		if err != nil {
 			return fmt.Errorf("docker compose stop %s: %w: %s", serviceName, err, out)
 		}
 		return nil
 	case "start-all":
-		out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "up", "-d")
+		args := append(prefix, "up", "-d")
+		out, err := d.runner.Run(stack.Dir, "docker", args...)
 		if err != nil {
 			return fmt.Errorf("docker compose up -d: %w: %s", err, out)
 		}
 		return nil
 	case "stop-all":
-		out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "stop")
+		args := append(prefix, "stop")
+		out, err := d.runner.Run(stack.Dir, "docker", args...)
 		if err != nil {
 			return fmt.Errorf("docker compose stop: %w: %s", err, out)
 		}
@@ -352,33 +396,30 @@ func (d *DockerService) Action(composeFile string, serviceName string, action st
 	}
 }
 
-// ComposeUp runs docker compose up -d for the given compose file.
-func (d *DockerService) ComposeUp(composeFile string) (string, error) {
-	dir := filepath.Dir(composeFile)
-	file := filepath.Base(composeFile)
-	out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "up", "-d")
+// ComposeUp runs docker compose up -d for the given stack.
+func (d *DockerService) ComposeUp(stack ComposeStack) (string, error) {
+	args := append(stack.Args(), "up", "-d")
+	out, err := d.runner.Run(stack.Dir, "docker", args...)
 	if err != nil {
 		return out, fmt.Errorf("compose up: %w: %s", err, out)
 	}
 	return out, nil
 }
 
-// ComposeUpBuild runs docker compose up -d --build for the given compose file.
-func (d *DockerService) ComposeUpBuild(composeFile string) (string, error) {
-	dir := filepath.Dir(composeFile)
-	file := filepath.Base(composeFile)
-	out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "up", "-d", "--build")
+// ComposeUpBuild runs docker compose up -d --build for the given stack.
+func (d *DockerService) ComposeUpBuild(stack ComposeStack) (string, error) {
+	args := append(stack.Args(), "up", "-d", "--build")
+	out, err := d.runner.Run(stack.Dir, "docker", args...)
 	if err != nil {
 		return out, fmt.Errorf("compose up --build: %w: %s", err, out)
 	}
 	return out, nil
 }
 
-// ComposeDown runs docker compose down for the given compose file.
-func (d *DockerService) ComposeDown(composeFile string) (string, error) {
-	dir := filepath.Dir(composeFile)
-	file := filepath.Base(composeFile)
-	out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "down")
+// ComposeDown runs docker compose down for the given stack.
+func (d *DockerService) ComposeDown(stack ComposeStack) (string, error) {
+	args := append(stack.Args(), "down")
+	out, err := d.runner.Run(stack.Dir, "docker", args...)
 	if err != nil {
 		return out, fmt.Errorf("compose down: %w: %s", err, out)
 	}
@@ -386,11 +427,9 @@ func (d *DockerService) ComposeDown(composeFile string) (string, error) {
 }
 
 // Logs returns the last N lines of logs for a container.
-func (d *DockerService) Logs(composeFile string, serviceName string, lines int) (string, error) {
-	dir := filepath.Dir(composeFile)
-	file := filepath.Base(composeFile)
-
-	out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "logs", "--tail="+strconv.Itoa(lines), serviceName)
+func (d *DockerService) Logs(stack ComposeStack, serviceName string, lines int) (string, error) {
+	args := append(stack.Args(), "logs", "--tail="+strconv.Itoa(lines), serviceName)
+	out, err := d.runner.Run(stack.Dir, "docker", args...)
 	if err != nil {
 		return "", fmt.Errorf("docker compose logs: %w: %s", err, out)
 	}
@@ -400,10 +439,7 @@ func (d *DockerService) Logs(composeFile string, serviceName string, lines int) 
 // StreamLogs starts `docker compose logs -f --tail=N` and streams output line
 // by line through the returned channel. When ctx is cancelled the underlying
 // process is killed and the channel is closed.
-func (d *DockerService) StreamLogs(ctx context.Context, composeFile, serviceName string, tail int) (<-chan string, <-chan error) {
-	dir := filepath.Dir(composeFile)
-	file := filepath.Base(composeFile)
-
+func (d *DockerService) StreamLogs(ctx context.Context, stack ComposeStack, serviceName string, tail int) (<-chan string, <-chan error) {
 	out := make(chan string, 64)
 	errCh := make(chan error, 1)
 
@@ -411,14 +447,13 @@ func (d *DockerService) StreamLogs(ctx context.Context, composeFile, serviceName
 		defer close(out)
 		defer close(errCh)
 
-		cmdArgs := []string{
-			"compose", "-f", file,
+		cmdArgs := append(stack.Args(),
 			"logs", "-f", "--no-log-prefix",
-			"--tail=" + strconv.Itoa(tail),
+			"--tail="+strconv.Itoa(tail),
 			serviceName,
-		}
+		)
 		cmd := exec.CommandContext(ctx, "docker", cmdArgs...)
-		cmd.Dir = dir
+		cmd.Dir = stack.Dir
 
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
@@ -450,12 +485,10 @@ func (d *DockerService) StreamLogs(ctx context.Context, composeFile, serviceName
 }
 
 // Stats returns resource usage statistics for running containers in the compose project.
-func (d *DockerService) Stats(composeFile string) ([]ContainerStats, error) {
-	dir := filepath.Dir(composeFile)
-	file := filepath.Base(composeFile)
-
+func (d *DockerService) Stats(stack ComposeStack) ([]ContainerStats, error) {
 	// Get running container names via compose ps -q
-	out, err := d.runner.Run(dir, "docker", "compose", "-f", file, "ps", "-q")
+	args := append(stack.Args(), "ps", "-q")
+	out, err := d.runner.Run(stack.Dir, "docker", args...)
 	if err != nil {
 		return nil, fmt.Errorf("docker compose ps -q: %w: %s", err, out)
 	}
@@ -477,11 +510,11 @@ func (d *DockerService) Stats(composeFile string) ([]ContainerStats, error) {
 	}
 
 	// docker stats --no-stream --format json <ids>
-	args := []string{"stats", "--no-stream", "--format",
+	statsArgs := []string{"stats", "--no-stream", "--format",
 		`{"name":"{{.Name}}","cpu_perc":"{{.CPUPerc}}","mem_usage":"{{.MemUsage}}","mem_perc":"{{.MemPerc}}","net_io":"{{.NetIO}}","block_io":"{{.BlockIO}}"}`}
-	args = append(args, ids...)
+	statsArgs = append(statsArgs, ids...)
 
-	statsOut, err := d.runner.Run("", "docker", args...)
+	statsOut, err := d.runner.Run("", "docker", statsArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("docker stats: %w: %s", err, statsOut)
 	}

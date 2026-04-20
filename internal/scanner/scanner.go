@@ -97,26 +97,31 @@ func hasDockerCompose(dir string) bool {
 	return len(matches) > 0
 }
 
-// FindComposeFile returns the best docker-compose file for a project.
+// FindComposeFile returns the absolute path of the best docker-compose file for
+// a project. Kept as a thin wrapper over FindComposeFiles for backward
+// compatibility with callers that only need a single file.
 func FindComposeFile(dir string) string {
-	// Prefer exact match first
-	for _, name := range []string{"docker-compose.yml", "docker-compose.yaml"} {
-		p := filepath.Join(dir, name)
-		if fileExists(p) {
-			return p
+	files := FindComposeFiles(dir)
+	if len(files) == 0 {
+		// Fallback to development-named files for projects that only ship them.
+		for _, name := range []string{"docker-compose.development.yml", "docker-compose.dev.yml"} {
+			p := filepath.Join(dir, name)
+			if fileExists(p) {
+				return p
+			}
 		}
+		return ""
 	}
-	// Then development
-	for _, name := range []string{"docker-compose.development.yml", "docker-compose.dev.yml"} {
-		p := filepath.Join(dir, name)
-		if fileExists(p) {
-			return p
-		}
+	return filepath.Join(dir, files[0].Path)
+}
+
+// DefaultComposeFiles returns the files that should be used by default when the
+// caller did not pass an explicit stack. Prefers `docker-compose.yml` alone; if
+// it's not there, falls back to the first detected compose file.
+func DefaultComposeFiles(dir string) []string {
+	files := FindComposeFiles(dir)
+	if len(files) == 0 {
+		return nil
 	}
-	// Any docker-compose*.yml
-	matches, _ := filepath.Glob(filepath.Join(dir, "docker-compose*.yml"))
-	if len(matches) > 0 {
-		return matches[0]
-	}
-	return ""
+	return []string{files[0].Path}
 }

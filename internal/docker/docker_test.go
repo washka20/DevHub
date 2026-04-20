@@ -14,7 +14,7 @@ func TestContainers_JSONArray(t *testing.T) {
 	}}
 
 	svc := NewDockerService(mock)
-	containers, err := svc.Containers("/project/docker-compose.yml")
+	containers, err := svc.Containers(StackFromFile("/project/docker-compose.yml"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestContainers_JSONLines(t *testing.T) {
 	}}
 
 	svc := NewDockerService(mock)
-	containers, err := svc.Containers("/project/docker-compose.yml")
+	containers, err := svc.Containers(StackFromFile("/project/docker-compose.yml"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestContainers_Empty(t *testing.T) {
 	}}
 
 	svc := NewDockerService(mock)
-	containers, err := svc.Containers("/project/docker-compose.yml")
+	containers, err := svc.Containers(StackFromFile("/project/docker-compose.yml"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestAction_Start(t *testing.T) {
 	}}
 
 	svc := NewDockerService(mock)
-	err := svc.Action("/project/docker-compose.yml", "web", "start")
+	err := svc.Action(StackFromFile("/project/docker-compose.yml"), "web", "start")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestAction_Stop(t *testing.T) {
 	}}
 
 	svc := NewDockerService(mock)
-	err := svc.Action("/project/docker-compose.yml", "web", "stop")
+	err := svc.Action(StackFromFile("/project/docker-compose.yml"), "web", "stop")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestAction_Restart(t *testing.T) {
 	}}
 
 	svc := NewDockerService(mock)
-	err := svc.Action("/project/docker-compose.yml", "web", "restart")
+	err := svc.Action(StackFromFile("/project/docker-compose.yml"), "web", "restart")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestAction_Up(t *testing.T) {
 	}}
 
 	svc := NewDockerService(mock)
-	err := svc.Action("/project/docker-compose.yml", "web", "up")
+	err := svc.Action(StackFromFile("/project/docker-compose.yml"), "web", "up")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestAction_StartAll(t *testing.T) {
 	}}
 
 	svc := NewDockerService(mock)
-	err := svc.Action("/project/docker-compose.yml", "", "start-all")
+	err := svc.Action(StackFromFile("/project/docker-compose.yml"), "", "start-all")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestAction_StopAll(t *testing.T) {
 	}}
 
 	svc := NewDockerService(mock)
-	err := svc.Action("/project/docker-compose.yml", "", "stop-all")
+	err := svc.Action(StackFromFile("/project/docker-compose.yml"), "", "stop-all")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestAction_Invalid(t *testing.T) {
 	mock := &testutil.MockRunner{Calls: []testutil.MockCall{}}
 
 	svc := NewDockerService(mock)
-	err := svc.Action("/project/docker-compose.yml", "web", "invalid-action")
+	err := svc.Action(StackFromFile("/project/docker-compose.yml"), "web", "invalid-action")
 	if err == nil {
 		t.Error("expected error for invalid action, got nil")
 	}
@@ -161,7 +161,7 @@ func TestStats(t *testing.T) {
 	}}
 
 	svc := NewDockerService(mock)
-	stats, err := svc.Stats("/project/docker-compose.yml")
+	stats, err := svc.Stats(StackFromFile("/project/docker-compose.yml"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestStats_NoRunningContainers(t *testing.T) {
 	}}
 
 	svc := NewDockerService(mock)
-	stats, err := svc.Stats("/project/docker-compose.yml")
+	stats, err := svc.Stats(StackFromFile("/project/docker-compose.yml"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestLogs(t *testing.T) {
 	}}
 
 	svc := NewDockerService(mock)
-	logs, err := svc.Logs("/project/docker-compose.yml", "web", 100)
+	logs, err := svc.Logs(StackFromFile("/project/docker-compose.yml"), "web", 100)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

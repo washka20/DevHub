@@ -40,14 +40,14 @@ type GitService interface {
 
 // DockerService defines the interface for docker operations used by handlers.
 type DockerService interface {
-	Containers(composeFile string) ([]docker.Container, error)
-	Action(composeFile string, containerName string, action string) error
-	StreamLogs(ctx context.Context, composeFile, containerName string, tail int) (<-chan string, <-chan error)
-	ComposeUp(composeFile string) (string, error)
-	ComposeUpBuild(composeFile string) (string, error)
-	ComposeDown(composeFile string) (string, error)
-	Stats(composeFile string) ([]docker.ContainerStats, error)
-	Inspect(composeFile, serviceName string) (*docker.ContainerInspect, error)
+	Containers(stack docker.ComposeStack) ([]docker.Container, error)
+	Action(stack docker.ComposeStack, containerName string, action string) error
+	StreamLogs(ctx context.Context, stack docker.ComposeStack, containerName string, tail int) (<-chan string, <-chan error)
+	ComposeUp(stack docker.ComposeStack) (string, error)
+	ComposeUpBuild(stack docker.ComposeStack) (string, error)
+	ComposeDown(stack docker.ComposeStack) (string, error)
+	Stats(stack docker.ComposeStack) ([]docker.ContainerStats, error)
+	Inspect(stack docker.ComposeStack, serviceName string) (*docker.ContainerInspect, error)
 }
 
 // GitLabClient defines the interface for GitLab API operations used by handlers.

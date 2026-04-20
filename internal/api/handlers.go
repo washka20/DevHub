@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"devhub/internal/docker"
 	"devhub/internal/makefile"
 	"devhub/internal/scanner"
 
@@ -74,6 +75,41 @@ func composeFilePath(projectPath string) (string, error) {
 		return "", fmt.Errorf("docker-compose file not found")
 	}
 	return p, nil
+}
+
+// composeStackFromRequest builds a docker.ComposeStack for the given project
+// based on the `files` and `profiles` query parameters. If `files` is omitted,
+// the canonical default (first compose file found) is used. Returns an error if
+// the project has no docker-compose file at all.
+func composeStackFromRequest(r *http.Request, projectPath string) (docker.ComposeStack, error) {
+	stack := docker.ComposeStack{Dir: projectPath}
+	q := r.URL.Query()
+
+	if files := q["files"]; len(files) > 0 {
+		for _, f := range files {
+			if f != "" {
+				stack.Files = append(stack.Files, f)
+			}
+		}
+	}
+
+	if profiles := q["profiles"]; len(profiles) > 0 {
+		for _, p := range profiles {
+			if p != "" {
+				stack.Profiles = append(stack.Profiles, p)
+			}
+		}
+	}
+
+	if len(stack.Files) == 0 {
+		defaults := scanner.DefaultComposeFiles(projectPath)
+		if len(defaults) == 0 {
+			return stack, fmt.Errorf("docker-compose file not found")
+		}
+		stack.Files = defaults
+	}
+
+	return stack, nil
 }
 
 // --- Project endpoints ---

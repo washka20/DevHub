@@ -48,6 +48,7 @@ func New(cfg *config.Config) *Server {
 	// Domain handler structs
 	gitH := &api.GitHandlers{Base: h, Git: gitSvc}
 	dockerH := &api.DockerHandlers{Base: h, Docker: dockerSvc, TermManager: termManager}
+	dockerGlobalH := &api.DockerGlobalHandlers{Base: h, Docker: dockerSvc}
 	fileH := &api.FileHandlers{Base: h}
 	mdH := &api.MarkdownHandlers{Base: h}
 	notesH := &api.NotesHandlers{Base: h}
@@ -140,6 +141,7 @@ func New(cfg *config.Config) *Server {
 	// Docker
 	apiRouter.HandleFunc("/projects/{id}/docker/stats", dockerH.DockerStats).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/docker/containers", dockerH.DockerContainers).Methods("GET")
+	apiRouter.HandleFunc("/projects/{id}/docker/compose", dockerH.DockerCompose).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/docker/compose/up", dockerH.DockerComposeUp).Methods("POST")
 	apiRouter.HandleFunc("/projects/{id}/docker/compose/up-build", dockerH.DockerComposeUpBuild).Methods("POST")
 	apiRouter.HandleFunc("/projects/{id}/docker/compose/down", dockerH.DockerComposeDown).Methods("POST")
@@ -147,6 +149,11 @@ func New(cfg *config.Config) *Server {
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/logs", dockerH.DockerLogs).Methods("GET")
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/exec", dockerH.DockerExec).Methods("POST")
 	apiRouter.HandleFunc("/projects/{id}/docker/{name}/{action}", dockerH.DockerAction).Methods("POST")
+
+	// Global Docker scope (not tied to a project)
+	apiRouter.HandleFunc("/docker/all", dockerGlobalH.DockerAll).Methods("GET")
+	apiRouter.HandleFunc("/docker/containers/{id}/logs", dockerGlobalH.ContainerLogs).Methods("GET")
+	apiRouter.HandleFunc("/docker/containers/{id}/{action}", dockerGlobalH.ContainerAction).Methods("POST")
 
 	// Terminal
 	th := &api.TerminalHandlers{Manager: termManager, Cfg: cfg}

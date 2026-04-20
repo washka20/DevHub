@@ -1,28 +1,63 @@
 import { api, apiVoid, projectUrl, POST } from './client'
-import type { Container, ContainerStats, ContainerInspect } from '../types'
+import type {
+  Container,
+  ContainerStats,
+  ContainerInspect,
+  ComposeInfo,
+  DockerAllResponse,
+} from '../types'
+
+/** Files + profiles the caller wants `docker compose -f ... --profile ...` to use. */
+export interface StackParams {
+  files?: string[]
+  profiles?: string[]
+}
+
+function stackQuery(s?: StackParams): string {
+  if (!s) return ''
+  const params = new URLSearchParams()
+  for (const f of s.files ?? []) if (f) params.append('files', f)
+  for (const p of s.profiles ?? []) if (p) params.append('profiles', p)
+  const q = params.toString()
+  return q ? `?${q}` : ''
+}
 
 export const dockerApi = {
-  containers: (project: string) =>
-    api<Container[]>(`${projectUrl(project)}/docker/containers`),
+  composeInfo: (project: string) =>
+    api<ComposeInfo>(`${projectUrl(project)}/docker/compose`),
 
-  stats: (project: string) =>
-    api<ContainerStats[]>(`${projectUrl(project)}/docker/stats`),
+  containers: (project: string, stack?: StackParams) =>
+    api<Container[]>(`${projectUrl(project)}/docker/containers${stackQuery(stack)}`),
 
-  composeUp: (project: string) =>
-    apiVoid(`${projectUrl(project)}/docker/compose/up`, POST),
+  stats: (project: string, stack?: StackParams) =>
+    api<ContainerStats[]>(`${projectUrl(project)}/docker/stats${stackQuery(stack)}`),
 
-  composeUpBuild: (project: string) =>
-    apiVoid(`${projectUrl(project)}/docker/compose/up-build`, POST),
+  composeUp: (project: string, stack?: StackParams) =>
+    apiVoid(`${projectUrl(project)}/docker/compose/up${stackQuery(stack)}`, POST),
 
-  composeDown: (project: string) =>
-    apiVoid(`${projectUrl(project)}/docker/compose/down`, POST),
+  composeUpBuild: (project: string, stack?: StackParams) =>
+    apiVoid(`${projectUrl(project)}/docker/compose/up-build${stackQuery(stack)}`, POST),
 
-  action: (project: string, name: string, action: string) =>
-    apiVoid(`${projectUrl(project)}/docker/${name}/${action}`, POST),
+  composeDown: (project: string, stack?: StackParams) =>
+    apiVoid(`${projectUrl(project)}/docker/compose/down${stackQuery(stack)}`, POST),
 
-  inspect: (project: string, name: string) =>
-    api<ContainerInspect>(`${projectUrl(project)}/docker/${name}/inspect`),
+  action: (project: string, name: string, action: string, stack?: StackParams) =>
+    apiVoid(`${projectUrl(project)}/docker/${name}/${action}${stackQuery(stack)}`, POST),
 
-  logsUrl: (project: string, name: string) =>
-    `${projectUrl(project)}/docker/${name}/logs`,
+  inspect: (project: string, name: string, stack?: StackParams) =>
+    api<ContainerInspect>(`${projectUrl(project)}/docker/${name}/inspect${stackQuery(stack)}`),
+
+  logsUrl: (project: string, name: string, stack?: StackParams) =>
+    `${projectUrl(project)}/docker/${name}/logs${stackQuery(stack)}`,
+
+  // --- Global scope (not tied to a project) ---
+
+  allContainers: () =>
+    api<DockerAllResponse>(`/api/docker/all`),
+
+  globalAction: (id: string, action: 'start' | 'stop' | 'restart' | 'kill' | 'remove') =>
+    apiVoid(`/api/docker/containers/${id}/${action}`, POST),
+
+  globalLogsUrl: (id: string) =>
+    `/api/docker/containers/${id}/logs`,
 }

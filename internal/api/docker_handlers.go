@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"path/filepath"
 	"strings"
 
+	"devhub/internal/scanner"
 	"devhub/internal/terminal"
 
 	"github.com/gorilla/mux"
@@ -21,6 +21,33 @@ type DockerHandlers struct {
 	TermManager *terminal.Manager
 }
 
+// DockerCompose handles GET /api/projects/{id}/docker/compose
+// Returns the list of compose files detected for the project along with the
+// services/profiles declared in each. Used by the frontend to render the
+// Compose Stack picker.
+func (dh *DockerHandlers) DockerCompose(w http.ResponseWriter, r *http.Request) {
+	path, err := dh.Base.projectPath(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	files := scanner.FindComposeFiles(path)
+	defaultFiles := scanner.DefaultComposeFiles(path)
+
+	if files == nil {
+		files = []scanner.ComposeFile{}
+	}
+	if defaultFiles == nil {
+		defaultFiles = []string{}
+	}
+
+	jsonResponse(w, map[string]any{
+		"files":         files,
+		"default_files": defaultFiles,
+	})
+}
+
 // DockerStats handles GET /api/projects/{id}/docker/stats
 func (dh *DockerHandlers) DockerStats(w http.ResponseWriter, r *http.Request) {
 	path, err := dh.Base.projectPath(r)
@@ -29,13 +56,13 @@ func (dh *DockerHandlers) DockerStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	composePath, err := composeFilePath(path)
+	stack, err := composeStackFromRequest(r, path)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
-	stats, err := dh.Docker.Stats(composePath)
+	stats, err := dh.Docker.Stats(stack)
 	if err != nil {
 		log.Printf("docker stats error: %v", err)
 		jsonError(w, "stats failed: "+err.Error(), http.StatusInternalServerError)
@@ -52,13 +79,13 @@ func (dh *DockerHandlers) DockerContainers(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	composePath, err := composeFilePath(path)
+	stack, err := composeStackFromRequest(r, path)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
-	containers, err := dh.Docker.Containers(composePath)
+	containers, err := dh.Docker.Containers(stack)
 	if err != nil {
 		log.Printf("docker containers error: %v", err)
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -74,13 +101,13 @@ func (dh *DockerHandlers) DockerInspect(w http.ResponseWriter, r *http.Request) 
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	composePath, err2 := composeFilePath(path)
-	if err2 != nil {
-		jsonError(w, err2.Error(), http.StatusNotFound)
+	stack, err := composeStackFromRequest(r, path)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	name := mux.Vars(r)["name"]
-	inspect, err := dh.Docker.Inspect(composePath, name)
+	inspect, err := dh.Docker.Inspect(stack, name)
 	if err != nil {
 		jsonError(w, "inspect failed: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -100,13 +127,13 @@ func (dh *DockerHandlers) DockerAction(w http.ResponseWriter, r *http.Request) {
 	containerName := vars["name"]
 	action := vars["action"]
 
-	composePath, err := composeFilePath(path)
+	stack, err := composeStackFromRequest(r, path)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
-	if err := dh.Docker.Action(composePath, containerName, action); err != nil {
+	if err := dh.Docker.Action(stack, containerName, action); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -138,7 +165,7 @@ func (dh *DockerHandlers) DockerLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	composePath, err := composeFilePath(path)
+	stack, err := composeStackFromRequest(r, path)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
@@ -158,7 +185,7 @@ func (dh *DockerHandlers) DockerLogs(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	lines, errCh := dh.Docker.StreamLogs(ctx, composePath, containerName, 100)
+	lines, errCh := dh.Docker.StreamLogs(ctx, stack, containerName, 100)
 
 	for {
 		select {
@@ -189,13 +216,13 @@ func (dh *DockerHandlers) DockerComposeUp(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	composePath, err := composeFilePath(path)
+	stack, err := composeStackFromRequest(r, path)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
-	out, err := dh.Docker.ComposeUp(composePath)
+	out, err := dh.Docker.ComposeUp(stack)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -218,13 +245,13 @@ func (dh *DockerHandlers) DockerComposeUpBuild(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	composePath, err := composeFilePath(path)
+	stack, err := composeStackFromRequest(r, path)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
-	out, err := dh.Docker.ComposeUpBuild(composePath)
+	out, err := dh.Docker.ComposeUpBuild(stack)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -247,13 +274,13 @@ func (dh *DockerHandlers) DockerComposeDown(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	composePath, err := composeFilePath(path)
+	stack, err := composeStackFromRequest(r, path)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
-	out, err := dh.Docker.ComposeDown(composePath)
+	out, err := dh.Docker.ComposeDown(stack)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -278,7 +305,7 @@ func (dh *DockerHandlers) DockerExec(w http.ResponseWriter, r *http.Request) {
 
 	containerName := mux.Vars(r)["name"]
 
-	composePath, err := composeFilePath(path)
+	stack, err := composeStackFromRequest(r, path)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
@@ -299,14 +326,14 @@ func (dh *DockerHandlers) DockerExec(w http.ResponseWriter, r *http.Request) {
 		body.Rows = 24
 	}
 
-	composeDir := filepath.Dir(composePath)
-	composeFile := filepath.Base(composePath)
+	// Build the command: docker compose -f a.yml -f b.yml --profile p exec <name> sh -c "..."
+	execArgs := append(stack.Args(), "exec", containerName, "sh", "-c",
+		"if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi")
 
 	id := generateID()
 	sess, err := dh.TermManager.CreateWithCommand(
-		id, composeDir, body.Cols, body.Rows,
-		"docker", "compose", "-f", composeFile, "exec", containerName, "sh", "-c",
-		"if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi",
+		id, stack.Dir, body.Cols, body.Rows,
+		"docker", execArgs...,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)

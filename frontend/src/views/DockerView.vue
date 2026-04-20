@@ -262,10 +262,129 @@ watch(
   { immediate: true },
 )
 
+// Refetch container list whenever the user picks a different compose stack.
+watch(
+  () => [dockerStore.selectedFiles.slice(), dockerStore.selectedProfiles.slice()],
+  () => {
+    if (dockerStore.scopeTab === 'project' && hasDocker.value) {
+      dockerStore.fetchContainers()
+    }
+  },
+  { deep: true },
+)
+
+// Start/stop the global "all containers" poller based on which scope tab is active.
+watch(
+  () => dockerStore.scopeTab,
+  (tab) => {
+    if (tab === 'all') {
+      dockerStore.startAllPolling()
+    } else {
+      dockerStore.stopAllPolling()
+    }
+  },
+  { immediate: true },
+)
+
+// Effective `docker compose -f ... --profile ...` preview for the UI hint line.
+const effectiveCommand = computed(() => {
+  const files = dockerStore.selectedFiles.length
+    ? dockerStore.selectedFiles.map((f) => `-f ${f}`).join(' ')
+    : '-f <default>'
+  const profiles = dockerStore.selectedProfiles.map((p) => `--profile ${p}`).join(' ')
+  return `docker compose ${files}${profiles ? ' ' + profiles : ''}`
+})
+
+const allProfiles = computed(() => {
+  const set = new Set<string>()
+  for (const f of dockerStore.composeInfo?.files ?? []) {
+    for (const p of f.profiles) set.add(p)
+  }
+  return Array.from(set).sort()
+})
+
+const composeFiles = computed(() => dockerStore.composeInfo?.files ?? [])
+
+const isCompact = computed(() =>
+  composeFiles.value.length <= 1 && allProfiles.value.length === 0,
+)
+
+function confirmStopAll() {
+  const n = dockerStore.globalRunningCount
+  if (n === 0) return
+  if (!confirm(`Stop ${n} running container${n === 1 ? '' : 's'} across all projects?`)) return
+  dockerStore.stopAllRunning()
+}
+
+function confirmGlobalAction(id: string, action: 'start' | 'stop' | 'restart' | 'kill' | 'remove') {
+  if (action === 'kill' || action === 'remove') {
+    if (!confirm(`Really ${action} container ${id.slice(0, 12)}?`)) return
+  }
+  dockerStore.globalAction(id, action)
+}
+
+function groupLabel(group: { project: string; path: string }): string {
+  if (group.project) return group.project
+  return 'Standalone'
+}
+
+function groupKey(group: { project: string; path: string }): string {
+  return group.project || `__standalone:${group.path}`
+}
+
+function groupRunning(group: { containers: Array<{ state: string }> }): number {
+  return group.containers.filter((c) => c.state === 'running').length
+}
+
+function groupStopped(group: { containers: Array<{ state: string }> }): number {
+  return group.containers.filter((c) => c.state !== 'running').length
+}
+
+async function startAllInGroup(group: { containers: Array<{ id: string; state: string }> }) {
+  const ids = group.containers.filter((c) => c.state !== 'running').map((c) => c.id)
+  if (!ids.length) return
+  await Promise.all(ids.map((id) => dockerStore.globalAction(id, 'start').catch(() => {})))
+  await dockerStore.fetchAllContainers()
+}
+
+async function stopAllInGroup(group: { containers: Array<{ id: string; state: string }> }) {
+  const ids = group.containers.filter((c) => c.state === 'running').map((c) => c.id)
+  if (!ids.length) return
+  if (!confirm(`Stop ${ids.length} container${ids.length === 1 ? '' : 's'} in this group?`)) return
+  await Promise.all(ids.map((id) => dockerStore.globalAction(id, 'stop').catch(() => {})))
+  await dockerStore.fetchAllContainers()
+}
+
+/**
+ * Persists which All-view groups the user collapsed. Default: everything
+ * collapsed so the first time you open All you see just the project headers.
+ */
+const COLLAPSED_KEY = 'devhub.docker.allGroups.expanded'
+const expandedGroups = ref<Record<string, boolean>>(
+  (() => {
+    try {
+      const raw = localStorage.getItem(COLLAPSED_KEY)
+      if (raw) return JSON.parse(raw) as Record<string, boolean>
+    } catch { /* ignore */ }
+    return {}
+  })(),
+)
+
+function toggleGroup(group: { project: string; path: string }) {
+  const key = groupKey(group)
+  expandedGroups.value = { ...expandedGroups.value, [key]: !expandedGroups.value[key] }
+  try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify(expandedGroups.value)) } catch {}
+}
+
+function isGroupExpanded(group: { project: string; path: string }): boolean {
+  return !!expandedGroups.value[groupKey(group)]
+}
+
 onUnmounted(() => {
   disconnectLogs()
   closeTerminal()
   dockerStore.stopStatsPolling()
+  dockerStore.stopAllPolling()
 })
 </script>
 
@@ -276,11 +395,14 @@ onUnmounted(() => {
       <div class="header-row">
         <div class="header-title">
           <h1>Docker</h1>
-          <span class="header-count" v-if="dockerStore.totalCount > 0">
+          <span class="header-count" v-if="dockerStore.scopeTab === 'project' && dockerStore.totalCount > 0">
             {{ dockerStore.runningCount }} running / {{ dockerStore.totalCount }} total
           </span>
+          <span class="header-count" v-else-if="dockerStore.scopeTab === 'all' && dockerStore.globalTotalCount > 0">
+            {{ dockerStore.globalRunningCount }} running / {{ dockerStore.globalTotalCount }} total
+          </span>
         </div>
-        <div v-if="hasDocker" class="header-actions">
+        <div class="header-actions" v-if="dockerStore.scopeTab === 'project' && hasDocker">
           <button class="btn btn-green" @click="startAll" :disabled="dockerStore.loading">
             Start All
           </button>
@@ -291,11 +413,32 @@ onUnmounted(() => {
             Refresh
           </button>
         </div>
+        <div class="header-actions" v-else-if="dockerStore.scopeTab === 'all'">
+          <button class="btn btn-red" @click="confirmStopAll" :disabled="dockerStore.globalRunningCount === 0">
+            Stop all running
+          </button>
+          <button class="btn" @click="dockerStore.fetchAllContainers()" :disabled="dockerStore.allLoading">
+            Refresh
+          </button>
+        </div>
+      </div>
+      <!-- Scope tabs: this project / all containers on the host -->
+      <div class="scope-tabs">
+        <button
+          class="scope-tab"
+          :class="{ on: dockerStore.scopeTab === 'project' }"
+          @click="dockerStore.setScopeTab('project')"
+        >This project</button>
+        <button
+          class="scope-tab"
+          :class="{ on: dockerStore.scopeTab === 'all' }"
+          @click="dockerStore.setScopeTab('all')"
+        >All containers</button>
       </div>
     </header>
 
     <!-- No Docker -->
-    <div v-if="!hasDocker" class="no-docker">
+    <div v-if="dockerStore.scopeTab === 'project' && !hasDocker" class="no-docker">
       <div class="no-docker-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
@@ -305,16 +448,61 @@ onUnmounted(() => {
       </div>
       <h2>Docker not available</h2>
       <p>This project does not have a <code>docker-compose.yml</code> file.</p>
-      <p class="no-docker-hint">Add a docker-compose.yml to the project root to manage containers here.</p>
+      <p class="no-docker-hint">Add a docker-compose.yml to the project root to manage containers here. Or switch to <b>All containers</b> to see everything running on the host.</p>
     </div>
 
-    <template v-else>
-    <!-- Docker Compose section -->
-    <section class="compose-section">
-      <div class="compose-header">
-        <span class="compose-title">Docker Compose</span>
-        <span class="compose-file">docker-compose.yml</span>
+    <template v-if="dockerStore.scopeTab === 'project' && hasDocker">
+    <!-- Compose Stack selector — replaces the legacy "Docker Compose" strip -->
+    <section class="compose-stack" :class="{ compact: isCompact }">
+      <header class="compose-stack-head">
+        <span class="compose-stack-title">Compose stack</span>
+        <span class="compose-stack-count">
+          {{ composeFiles.length }} file{{ composeFiles.length === 1 ? '' : 's' }}
+          <template v-if="allProfiles.length"> · {{ allProfiles.length }} profile{{ allProfiles.length === 1 ? '' : 's' }}</template>
+        </span>
+      </header>
+
+      <div class="compose-stack-body" v-if="!isCompact">
+        <ul class="compose-files">
+          <li
+            v-for="f in composeFiles"
+            :key="f.path"
+            class="compose-file-row"
+            :class="{ on: dockerStore.selectedFiles.includes(f.path) }"
+            @click="dockerStore.toggleFile(f.path)"
+          >
+            <span class="check" :class="{ on: dockerStore.selectedFiles.includes(f.path) }">
+              <svg v-if="dockerStore.selectedFiles.includes(f.path)" viewBox="0 0 16 16" fill="currentColor" width="10" height="10"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 1 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z"/></svg>
+            </span>
+            <span class="file-path">{{ f.path }}</span>
+            <span class="file-meta">{{ f.services.length }} service{{ f.services.length === 1 ? '' : 's' }}</span>
+          </li>
+        </ul>
+
+        <div class="compose-profiles" v-if="allProfiles.length">
+          <span class="compose-profiles-label">Profiles</span>
+          <button
+            v-for="p in allProfiles"
+            :key="p"
+            type="button"
+            class="profile-chip"
+            :class="{ on: dockerStore.selectedProfiles.includes(p) }"
+            @click="dockerStore.toggleProfile(p)"
+          >
+            <span class="bullet"></span>
+            {{ p }}
+          </button>
+        </div>
+
+        <code class="compose-effective">{{ effectiveCommand }}</code>
       </div>
+      <div v-else class="compose-stack-compact">
+        <span class="file-path">{{ (dockerStore.selectedFiles[0] || composeFiles[0]?.path) || 'docker-compose.yml' }}</span>
+      </div>
+    </section>
+
+    <!-- Up / Rebuild / Down strip -->
+    <section class="compose-section">
       <div class="compose-buttons">
         <button
           class="compose-btn compose-btn-green"
@@ -636,6 +824,102 @@ onUnmounted(() => {
       </div>
     </Teleport>
     </template>
+
+    <!-- ============== ALL CONTAINERS (host-wide) ============== -->
+    <template v-if="dockerStore.scopeTab === 'all'">
+      <div v-if="dockerStore.allLoading && !dockerStore.allGroups.length" class="shimmer-rows">
+        <ShimmerBlock variant="row" :lines="6" />
+      </div>
+      <div v-else-if="!dockerStore.allGroups.length" class="empty">
+        No containers on this host.
+      </div>
+      <section v-else class="all-scope">
+        <div
+          v-for="group in dockerStore.allGroups"
+          :key="group.project || '__standalone'"
+          class="all-group card"
+          :class="{ collapsed: !isGroupExpanded(group) }"
+        >
+          <header @click="toggleGroup(group)">
+            <svg class="group-chev" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 4l4 4-4 4" />
+            </svg>
+            <span class="group-name">{{ groupLabel(group) }}</span>
+            <span class="group-count">
+              {{ groupRunning(group) }} up · {{ group.containers.length }} total
+            </span>
+            <span class="group-path" v-if="group.path">{{ group.path }}</span>
+            <div class="group-bulk" @click.stop>
+              <button
+                v-if="groupStopped(group) > 0"
+                class="action-btn action-btn-start"
+                @click.stop="startAllInGroup(group)"
+              >Start all</button>
+              <button
+                v-if="groupRunning(group) > 0"
+                class="action-btn action-btn-stop"
+                @click.stop="stopAllInGroup(group)"
+              >Stop all</button>
+            </div>
+          </header>
+          <table v-if="isGroupExpanded(group)" class="containers-table all-table"><colgroup><col class="cg-state"/><col class="cg-container"/><col class="cg-image"/><col class="cg-ports"/><col class="cg-actions"/></colgroup>
+            <thead>
+              <tr>
+                <th class="col-status">State</th>
+                <th>Container</th>
+                <th>Image</th>
+                <th>Ports</th>
+                <th class="col-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="c in group.containers" :key="c.id">
+                <td><span class="status-dot" :class="stateClass(c.state)"></span></td>
+                <td>
+                  <div class="ctn-name-cell">
+                    <span class="ctn-name">{{ c.name }}</span>
+                    <span class="ctn-svc" v-if="c.compose_service">{{ c.compose_service }}</span>
+                  </div>
+                  <div class="ctn-id">{{ c.id.slice(0, 12) }}</div>
+                </td>
+                <td class="mono">{{ c.image }}</td>
+                <td class="mono">{{ c.ports || '—' }}</td>
+                <td class="col-actions">
+                  <button
+                    v-if="c.state !== 'running'"
+                    class="action-btn action-btn-start"
+                    :disabled="dockerStore.allActionLoading === c.id"
+                    @click="confirmGlobalAction(c.id, 'start')"
+                  >Start</button>
+                  <button
+                    v-if="c.state === 'running'"
+                    class="action-btn action-btn-stop"
+                    :disabled="dockerStore.allActionLoading === c.id"
+                    @click="confirmGlobalAction(c.id, 'stop')"
+                  >Stop</button>
+                  <button
+                    v-if="c.state === 'running'"
+                    class="action-btn action-btn-restart"
+                    :disabled="dockerStore.allActionLoading === c.id"
+                    @click="confirmGlobalAction(c.id, 'restart')"
+                  >Restart</button>
+                  <button
+                    class="action-btn action-btn-kill"
+                    :disabled="dockerStore.allActionLoading === c.id"
+                    @click="confirmGlobalAction(c.id, 'kill')"
+                  >Kill</button>
+                  <button
+                    class="action-btn action-btn-remove"
+                    :disabled="dockerStore.allActionLoading === c.id"
+                    @click="confirmGlobalAction(c.id, 'remove')"
+                  >Remove</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </template>
   </div>
 </template>
 
@@ -644,6 +928,292 @@ onUnmounted(() => {
 }
 
 /* No Docker state */
+/* --- Scope tabs --- */
+.scope-tabs {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+  margin-bottom: var(--s4);
+}
+.scope-tab {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  font-size: 12.5px;
+  color: var(--fg-2);
+  cursor: pointer;
+  font-family: var(--ui);
+  transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+}
+.scope-tab:hover { color: var(--fg); border-color: var(--fg-2); }
+.scope-tab.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* --- Compose Stack selector --- */
+.compose-stack {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  margin-top: var(--s3);
+  margin-bottom: var(--s3);
+}
+.compose-stack-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-2);
+}
+.compose-stack-count {
+  color: var(--fg-3);
+  font-family: var(--mono);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 11.5px;
+  margin-left: auto;
+}
+.compose-stack-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.compose-stack.compact .compose-stack-body { display: none; }
+.compose-stack-compact {
+  padding: 8px 14px;
+  color: var(--fg-3);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.compose-files {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.compose-file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-2);
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.compose-file-row:hover { border-color: var(--fg-3); }
+.compose-file-row.on {
+  border-color: var(--accent);
+  background: var(--accent-2);
+}
+.compose-file-row .check {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid var(--line);
+  background: var(--bg-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.compose-file-row .check.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.compose-file-row .file-path {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--fg);
+  flex: 1;
+}
+.compose-file-row .file-meta {
+  font-size: 11px;
+  color: var(--fg-3);
+  font-family: var(--mono);
+}
+
+.compose-profiles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.compose-profiles-label {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  font-weight: 600;
+}
+.profile-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  color: var(--fg-2);
+  font-size: 11.5px;
+  font-family: var(--mono);
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.profile-chip:hover { border-color: var(--fg-3); }
+.profile-chip.on {
+  border-color: var(--accent);
+  background: var(--accent-2);
+  color: var(--accent);
+}
+.profile-chip .bullet {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--line);
+}
+.profile-chip.on .bullet { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+.compose-effective {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--fg-3);
+  background: var(--bg-0);
+  border: 1px solid var(--line-soft);
+  padding: 6px 10px;
+  border-radius: var(--r1);
+  display: block;
+}
+
+/* --- All containers scope --- */
+.all-scope {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  margin-top: var(--s4);
+}
+.all-group header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-2);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--t-fast);
+}
+.all-group header:hover { background: var(--bg-2); }
+.all-group.collapsed header { border-bottom: 0; }
+.all-group .group-chev {
+  color: var(--fg-2);
+  transition: transform var(--t-fast);
+  flex-shrink: 0;
+}
+.all-group:not(.collapsed) .group-chev { transform: rotate(90deg); }
+
+.all-group .group-bulk {
+  margin-left: 12px;
+  display: flex;
+  gap: 6px;
+}
+/* Keep all-scope table columns uniform across groups — without table-layout:fixed
+ * each table auto-sizes from its own content and headers jitter from group to
+ * group (especially when PORTS is empty in some projects). */
+.containers-table.all-table {
+  table-layout: fixed;
+  width: 100%;
+}
+.containers-table.all-table .cg-state     { width: 56px; }
+.containers-table.all-table .cg-container { width: 340px; }
+.containers-table.all-table .cg-image     { width: 300px; }
+.containers-table.all-table .cg-ports     { width: auto; }
+.containers-table.all-table .cg-actions   { width: 360px; }
+.containers-table.all-table td.mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.containers-table.all-table .col-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+.containers-table.all-table .col-actions .action-btn + .action-btn {
+  margin-left: 6px;
+}
+
+/* Tame the compose-stack row padding/height + uniform column gaps for tables */
+.containers-table th,
+.containers-table td {
+  padding: 10px 14px;
+}
+.containers-table .col-state,
+.containers-table .col-status {
+  width: 60px;
+}
+.containers-table .col-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+.all-group .group-name {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg);
+}
+.all-group .group-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-3);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.all-group .group-path {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-3);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ctn-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ctn-name { font-family: var(--mono); font-weight: 600; color: var(--fg); }
+.ctn-svc {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--fg-3);
+  padding: 1px 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+}
+.ctn-id {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--fg-3);
+  margin-top: 2px;
+}
+
 .no-docker {
   display: flex;
   flex-direction: column;
@@ -747,23 +1317,23 @@ onUnmounted(() => {
 }
 
 .btn-green {
-  background: rgba(63, 185, 80, 0.15);
+  background: var(--ok-2);
   border-color: var(--accent-green);
   color: var(--accent-green);
 }
 
 .btn-green:hover:not(:disabled) {
-  background: rgba(63, 185, 80, 0.25);
+  background: color-mix(in oklab, var(--ok) 30%, transparent);
 }
 
 .btn-red {
-  background: rgba(248, 81, 73, 0.15);
+  background: var(--bad-2);
   border-color: var(--accent-red);
   color: var(--accent-red);
 }
 
 .btn-red:hover:not(:disabled) {
-  background: rgba(248, 81, 73, 0.25);
+  background: color-mix(in oklab, var(--bad) 30%, transparent);
 }
 
 /* Compose section */
@@ -771,8 +1341,14 @@ onUnmounted(() => {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 14px 16px;
+  margin-top: var(--s4);
   margin-bottom: 24px;
   background: var(--bg-secondary);
+}
+/* When Compose Stack selector is rendered above, give the Up/Rebuild/Down
+ * strip a bit more air so they don't stick to the `docker compose -f …` line. */
+.compose-stack + .compose-section {
+  margin-top: var(--s5);
 }
 
 .compose-header {
@@ -823,35 +1399,35 @@ onUnmounted(() => {
 }
 
 .compose-btn-green {
-  background: rgba(63, 185, 80, 0.1);
+  background: var(--ok-2);
   color: var(--accent-green);
-  border-color: rgba(63, 185, 80, 0.3);
+  border-color: color-mix(in oklab, var(--ok) 40%, transparent);
 }
 
 .compose-btn-green:hover:not(:disabled) {
-  background: rgba(63, 185, 80, 0.2);
+  background: var(--ok-2);
   border-color: var(--accent-green);
 }
 
 .compose-btn-blue {
-  background: rgba(88, 166, 255, 0.1);
+  background: var(--accent-2);
   color: var(--accent-blue);
-  border-color: rgba(88, 166, 255, 0.3);
+  border-color: color-mix(in oklab, var(--accent) 40%, transparent);
 }
 
 .compose-btn-blue:hover:not(:disabled) {
-  background: rgba(88, 166, 255, 0.2);
+  background: color-mix(in oklab, var(--accent) 25%, transparent);
   border-color: var(--accent-blue);
 }
 
 .compose-btn-red {
-  background: rgba(248, 81, 73, 0.1);
+  background: var(--bad-2);
   color: var(--accent-red);
-  border-color: rgba(248, 81, 73, 0.3);
+  border-color: color-mix(in oklab, var(--bad) 40%, transparent);
 }
 
 .compose-btn-red:hover:not(:disabled) {
-  background: rgba(248, 81, 73, 0.2);
+  background: var(--bad-2);
   border-color: var(--accent-red);
 }
 
@@ -914,8 +1490,8 @@ onUnmounted(() => {
 }
 
 .containers-table tbody tr.row-active td {
-  background: rgba(88, 166, 255, 0.08);
-  border-color: rgba(88, 166, 255, 0.2);
+  background: var(--accent-2);
+  border-color: color-mix(in oklab, var(--accent) 25%, transparent);
 }
 
 .col-expand {
@@ -963,13 +1539,13 @@ onUnmounted(() => {
 
 .dot-running {
   background: var(--accent-green);
-  box-shadow: 0 0 6px rgba(63, 185, 80, 0.5);
+  box-shadow: 0 0 6px var(--ok);
   animation: pulse-green 2s ease-in-out infinite;
 }
 
 @keyframes pulse-green {
-  0%, 100% { box-shadow: 0 0 6px rgba(63, 185, 80, 0.5); }
-  50% { box-shadow: 0 0 12px rgba(63, 185, 80, 0.8); }
+  0%, 100% { box-shadow: 0 0 6px var(--ok); }
+  50% { box-shadow: 0 0 12px var(--ok); }
 }
 
 .dot-exited {
@@ -978,13 +1554,13 @@ onUnmounted(() => {
 
 .dot-restarting {
   background: var(--accent-orange);
-  box-shadow: 0 0 6px rgba(210, 153, 34, 0.5);
+  box-shadow: 0 0 6px var(--warn);
   animation: pulse-orange 1.5s ease-in-out infinite;
 }
 
 @keyframes pulse-orange {
-  0%, 100% { box-shadow: 0 0 6px rgba(210, 153, 34, 0.5); }
-  50% { box-shadow: 0 0 12px rgba(210, 153, 34, 0.8); }
+  0%, 100% { box-shadow: 0 0 6px var(--warn); }
+  50% { box-shadow: 0 0 12px var(--warn); }
 }
 
 .cell-name {
@@ -1052,17 +1628,17 @@ onUnmounted(() => {
 }
 
 .state-running {
-  background: rgba(63, 185, 80, 0.15);
+  background: var(--ok-2);
   color: var(--accent-green);
 }
 
 .state-exited {
-  background: rgba(248, 81, 73, 0.15);
+  background: var(--bad-2);
   color: var(--accent-red);
 }
 
 .state-restarting {
-  background: rgba(210, 153, 34, 0.15);
+  background: var(--warn-2);
   color: var(--accent-orange);
 }
 
@@ -1100,38 +1676,38 @@ onUnmounted(() => {
 
 .action-btn-stop {
   color: var(--accent-red);
-  border-color: rgba(248, 81, 73, 0.3);
+  border-color: color-mix(in oklab, var(--bad) 40%, transparent);
 }
 
 .action-btn-stop:hover:not(:disabled) {
-  background: rgba(248, 81, 73, 0.12);
+  background: var(--bad-2);
 }
 
 .action-btn-start {
   color: var(--accent-green);
-  border-color: rgba(63, 185, 80, 0.3);
+  border-color: color-mix(in oklab, var(--ok) 40%, transparent);
 }
 
 .action-btn-start:hover:not(:disabled) {
-  background: rgba(63, 185, 80, 0.12);
+  background: var(--ok-2);
 }
 
 .action-btn-restart {
   color: var(--accent-blue);
-  border-color: rgba(88, 166, 255, 0.3);
+  border-color: color-mix(in oklab, var(--accent) 40%, transparent);
 }
 
 .action-btn-restart:hover:not(:disabled) {
-  background: rgba(88, 166, 255, 0.12);
+  background: var(--accent-2);
 }
 
 .action-btn-terminal {
   color: var(--accent-orange);
-  border-color: rgba(210, 153, 34, 0.3);
+  border-color: color-mix(in oklab, var(--warn) 40%, transparent);
 }
 
 .action-btn-terminal:hover:not(:disabled) {
-  background: rgba(210, 153, 34, 0.12);
+  background: var(--warn-2);
 }
 
 .action-btn-open {
@@ -1146,11 +1722,27 @@ onUnmounted(() => {
 
 .action-btn-logs {
   color: var(--accent-purple);
-  border-color: rgba(188, 140, 255, 0.3);
+  border-color: color-mix(in oklab, var(--mag) 40%, transparent);
 }
 
 .action-btn-logs:hover:not(:disabled) {
-  background: rgba(188, 140, 255, 0.12);
+  background: var(--mag-2);
+}
+
+.action-btn-kill {
+  color: var(--warn);
+  border-color: color-mix(in oklab, var(--warn) 45%, transparent);
+}
+.action-btn-kill:hover:not(:disabled) {
+  background: var(--warn-2);
+}
+
+.action-btn-remove {
+  color: var(--bad);
+  border-color: color-mix(in oklab, var(--bad) 55%, transparent);
+}
+.action-btn-remove:hover:not(:disabled) {
+  background: var(--bad-2);
 }
 
 /* Docker exec terminal modal */
@@ -1292,7 +1884,7 @@ onUnmounted(() => {
 }
 
 .log-line:hover {
-  background: rgba(88, 166, 255, 0.04);
+  background: var(--accent-2);
 }
 
 /* Expand button */
@@ -1463,17 +2055,17 @@ onUnmounted(() => {
 }
 
 .health-healthy {
-  background: rgba(63, 185, 80, 0.15);
+  background: var(--ok-2);
   color: var(--accent-green);
 }
 
 .health-unhealthy {
-  background: rgba(248, 81, 73, 0.15);
+  background: var(--bad-2);
   color: var(--accent-red);
 }
 
 .health-starting {
-  background: rgba(210, 153, 34, 0.15);
+  background: var(--warn-2);
   color: var(--accent-orange);
 }
 

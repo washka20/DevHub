@@ -54,6 +54,44 @@ export interface ContainerStats {
   block_io: string
 }
 
+/** One docker-compose file discovered in a project. */
+export interface ComposeFile {
+  path: string
+  services: string[]
+  profiles: string[]
+}
+
+/** Full compose picture: every file we found, plus which subset to use by default. */
+export interface ComposeInfo {
+  files: ComposeFile[]
+  default_files: string[]
+}
+
+/** Container row returned by `docker ps -a` in the global scope. */
+export interface GlobalContainer {
+  id: string
+  name: string
+  image: string
+  status: string
+  state: string
+  ports: string
+  command: string
+  created_at: string
+  compose_project: string
+  compose_dir: string
+  compose_service: string
+}
+
+export interface DockerAllGroup {
+  project: string
+  path: string
+  containers: GlobalContainer[]
+}
+
+export interface DockerAllResponse {
+  groups: DockerAllGroup[]
+}
+
 export interface GitStatus {
   branch: string
   modified: string[]
