@@ -10,6 +10,22 @@ const mockContainers: Container[] = [
   { name: 'redis', image: 'redis:7', status: 'Exited (0) 1 hour ago', ports: '', state: 'exited' },
 ]
 
+const emptyComposeInfo = { files: [], default_files: [] }
+
+/**
+ * The docker store installs a watch that calls `fetchComposeInfo()` immediately
+ * when the project is set. Tests below stub that very first fetch so it
+ * resolves harmlessly, then assert the subsequent calls we actually care about.
+ */
+function stubFetchInOrder(responses: unknown[]): ReturnType<typeof vi.fn> {
+  const fn = vi.fn()
+  for (const r of responses) {
+    fn.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(r) })
+  }
+  vi.stubGlobal('fetch', fn)
+  return fn
+}
+
 describe('useDockerStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -28,17 +44,15 @@ describe('useDockerStore', () => {
 
   describe('fetchContainers', () => {
     it('parses Container[] response', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockContainers),
-      }))
+      // 1st fetch = watcher-triggered fetchComposeInfo, 2nd = fetchContainers
+      const fetchMock = stubFetchInOrder([emptyComposeInfo, mockContainers])
 
       const store = useDockerStore()
       await store.fetchContainers()
 
       expect(store.containers).toEqual(mockContainers)
       expect(store.containers).toHaveLength(3)
-      expect(fetch).toHaveBeenCalledWith('/api/projects/myapp/docker/containers', undefined)
+      expect(fetchMock).toHaveBeenCalledWith('/api/projects/myapp/docker/containers', undefined)
     })
   })
 
@@ -47,13 +61,12 @@ describe('useDockerStore', () => {
       vi.useFakeTimers()
 
       const fetchMock = vi.fn()
+        // watcher: fetchComposeInfo
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(emptyComposeInfo) })
         // POST action
-        .mockResolvedValueOnce({ ok: true })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(null) })
         // refetch containers after delay
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve(mockContainers),
-        })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(mockContainers) })
 
       vi.stubGlobal('fetch', fetchMock)
 
@@ -68,15 +81,19 @@ describe('useDockerStore', () => {
         '/api/projects/myapp/docker/app/restart',
         expect.objectContaining({ method: 'POST' }),
       )
-      // Second call is the refetch
       expect(fetchMock).toHaveBeenCalledWith('/api/projects/myapp/docker/containers', undefined)
-      expect(fetchMock).toHaveBeenCalledTimes(2)
+      // 3 calls: compose info + POST + refetch
+      expect(fetchMock).toHaveBeenCalledTimes(3)
 
       vi.useRealTimers()
     })
   })
 
   describe('computed properties', () => {
+    beforeEach(() => {
+      stubFetchInOrder([emptyComposeInfo])
+    })
+
     it('runningCount counts only running containers', () => {
       const store = useDockerStore()
       store.containers = [...mockContainers]

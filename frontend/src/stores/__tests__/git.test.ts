@@ -103,7 +103,7 @@ describe('useGitStore', () => {
       expect(store.log[1].short_hash).toBe('bbb222c')
       expect(store.log[1].refs).toEqual([])
       expect(store.log[1].parents).toEqual([])
-      expect(fetch).toHaveBeenCalledWith('/api/projects/myapp/git/log/metadata?offset=0&limit=5', undefined)
+      expect(fetch).toHaveBeenCalledWith('/api/projects/myapp/git/log/metadata?offset=0&limit=30', undefined)
     })
   })
 
