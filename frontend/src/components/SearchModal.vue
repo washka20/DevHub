@@ -195,7 +195,7 @@ defineExpose({ query, onInput })
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay-soft);
   display: flex;
   align-items: flex-start;
   justify-content: center;

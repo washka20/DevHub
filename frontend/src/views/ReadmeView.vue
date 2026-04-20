@@ -23,6 +23,7 @@ import langDiff from 'highlight.js/lib/languages/diff'
 import langDockerfile from 'highlight.js/lib/languages/dockerfile'
 import langMarkdown from 'highlight.js/lib/languages/markdown'
 import mermaid from 'mermaid'
+import { useTheme } from '../composables/useTheme'
 
 hljs.registerLanguage('go', langGo)
 hljs.registerLanguage('typescript', langTypeScript)
@@ -50,18 +51,37 @@ hljs.registerLanguage('docker', langDockerfile)
 hljs.registerLanguage('markdown', langMarkdown)
 hljs.registerLanguage('md', langMarkdown)
 
-mermaid.initialize({
-  startOnLoad: false,
-  theme: 'dark',
-  themeVariables: {
-    primaryColor: '#58a6ff',
-    primaryBorderColor: '#30363d',
-    primaryTextColor: '#f0f6fc',
-    lineColor: '#8b949e',
-    secondaryColor: '#1c2128',
-    tertiaryColor: '#161b22',
-  },
-})
+// Mermaid needs concrete hex/rgba; it can't parse OKLCH tokens. Values below
+// approximate the warm-dark / warm-paper palette for diagrams only.
+function mermaidVarsFor(mode: 'dark' | 'light') {
+  return mode === 'dark'
+    ? {
+        primaryColor:       '#3b2f1f',
+        primaryBorderColor: '#3d3528',
+        primaryTextColor:   '#f5efe0',
+        lineColor:          '#8a8170',
+        secondaryColor:     '#2a251c',
+        tertiaryColor:      '#1f1b14',
+      }
+    : {
+        primaryColor:       '#f4e6c8',
+        primaryBorderColor: '#d9d0b9',
+        primaryTextColor:   '#1c1810',
+        lineColor:          '#8a8170',
+        secondaryColor:     '#f2ece0',
+        tertiaryColor:      '#ffffff',
+      }
+}
+
+function reinitMermaid(mode: 'dark' | 'light') {
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: mode === 'dark' ? 'dark' : 'default',
+    themeVariables: mermaidVarsFor(mode),
+  })
+}
+
+reinitMermaid((document.documentElement.getAttribute('data-theme') as 'dark' | 'light') || 'dark')
 
 const projectsStore = useProjectsStore()
 const currentProject = computed(() => projectsStore.currentProject)
@@ -73,7 +93,8 @@ const md = new MarkdownIt({
   highlight: (str: string, lang: string): string => {
     // Mermaid diagrams — render as special container
     if (lang === 'mermaid') {
-      return `<div class="mermaid-container"><pre class="mermaid">${str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></div>`
+      const src = str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      return `<div class="mermaid-container"><pre class="mermaid" data-mermaid-src="${src}">${src}</pre></div>`
     }
     if (lang && hljs.getLanguage(lang)) {
       try {
@@ -355,6 +376,18 @@ async function init() {
 }
 
 watch(() => currentProject.value?.name, () => init(), { immediate: true })
+
+const { theme } = useTheme()
+watch(theme, (mode) => {
+  reinitMermaid(mode)
+  // Wipe previously-rendered diagrams so mermaid.run re-inserts with new palette.
+  document.querySelectorAll('.readme-article .mermaid').forEach((el) => {
+    el.removeAttribute('data-processed')
+    const src = el.getAttribute('data-mermaid-src')
+    if (src) el.textContent = src
+  })
+  renderMermaid()
+})
 </script>
 
 <template>
@@ -894,38 +927,38 @@ watch(() => currentProject.value?.name, () => init(), { immediate: true })
 }
 
 .hljs-comment,
-.hljs-quote { color: var(--text-secondary); font-style: italic; }
+.hljs-quote { color: var(--fg-3); font-style: italic; }
 
 .hljs-keyword,
-.hljs-selector-tag { color: #ff7b72; }
+.hljs-selector-tag { color: var(--bad); }
 
 .hljs-string,
 .hljs-doctag,
-.hljs-regexp { color: #a5d6ff; }
+.hljs-regexp { color: var(--info); }
 
 .hljs-number,
 .hljs-literal,
 .hljs-variable,
-.hljs-template-variable { color: #79c0ff; }
+.hljs-template-variable { color: var(--info); }
 
 .hljs-title,
 .hljs-section,
-.hljs-name { color: #d2a8ff; }
+.hljs-name { color: var(--mag); }
 
 .hljs-type,
-.hljs-built_in { color: #ffa657; }
+.hljs-built_in { color: var(--warn); }
 
 .hljs-attr,
-.hljs-attribute { color: #79c0ff; }
+.hljs-attribute { color: var(--info); }
 
 .hljs-symbol,
 .hljs-bullet,
-.hljs-link { color: #a5d6ff; }
+.hljs-link { color: var(--info); }
 
-.hljs-meta { color: #79c0ff; }
+.hljs-meta { color: var(--info); }
 
-.hljs-deletion { color: #ffa198; background: rgba(248, 81, 73, 0.1); }
-.hljs-addition { color: #7ee787; background: rgba(63, 185, 80, 0.1); }
+.hljs-deletion { color: var(--bad); background: var(--diff-del-bg); }
+.hljs-addition { color: var(--ok); background: var(--diff-add-bg); }
 
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 700; }

@@ -193,7 +193,7 @@ function handleRefresh() {
 }
 
 .session-row.attached {
-  border-color: rgba(63, 185, 80, 0.2);
+  border-color: var(--ok-2);
 }
 
 .session-info {
@@ -273,21 +273,21 @@ function handleRefresh() {
 
 .action-btn.resume {
   color: var(--accent-green);
-  border-color: rgba(63, 185, 80, 0.3);
+  border-color: color-mix(in oklab, var(--ok) 40%, transparent);
 }
 
 .action-btn.resume:hover {
-  background: rgba(63, 185, 80, 0.1);
+  background: var(--ok-2);
   border-color: var(--accent-green);
 }
 
 .action-btn.goto {
   color: var(--accent-blue);
-  border-color: rgba(88, 166, 255, 0.3);
+  border-color: color-mix(in oklab, var(--accent) 40%, transparent);
 }
 
 .action-btn.goto:hover {
-  background: rgba(88, 166, 255, 0.1);
+  background: var(--accent-2);
   border-color: var(--accent-blue);
 }
 
@@ -300,6 +300,6 @@ function handleRefresh() {
   color: var(--accent-red);
   border-color: var(--accent-red);
   opacity: 1;
-  background: rgba(248, 81, 73, 0.1);
+  background: var(--bad-2);
 }
 </style>

@@ -283,9 +283,9 @@ function handleContentUpdate(value: string) {
 }
 
 .blame-toggle.active {
-  background: rgba(88, 166, 255, 0.1);
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .blame-toggle:disabled {
@@ -324,9 +324,9 @@ function handleContentUpdate(value: string) {
 .editor-tab:hover { background: var(--bg-tertiary); }
 
 .editor-tab.active {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  border-bottom: 2px solid var(--accent-blue);
+  background: var(--bg-0);
+  color: var(--fg);
+  border-bottom: 2px solid var(--accent);
   margin-bottom: -1px;
 }
 
@@ -335,7 +335,8 @@ function handleContentUpdate(value: string) {
 
 .tab-unsaved {
   width: 8px; height: 8px; border-radius: 50%;
-  background: var(--accent-orange); flex-shrink: 0;
+  background: var(--warn); box-shadow: 0 0 6px var(--warn);
+  flex-shrink: 0;
 }
 
 .tab-close {
@@ -349,27 +350,28 @@ function handleContentUpdate(value: string) {
 
 .editor-tab:hover .tab-close,
 .editor-tab.active .tab-close { opacity: 0.5; }
-.tab-close:hover { opacity: 1 !important; background: rgba(248,81,73,0.15); color: var(--accent-red); }
+.tab-close:hover { opacity: 1 !important; background: var(--bad-2); color: var(--bad); }
 
 /* Disk change banner */
 .disk-change-banner {
   padding: 8px 16px;
-  background: rgba(210,153,34,0.1);
-  border-bottom: 1px solid rgba(210,153,34,0.25);
+  background: var(--warn-2);
+  border-bottom: 1px solid color-mix(in oklab, var(--warn) 40%, transparent);
   display: flex;
   align-items: center;
   justify-content: space-between;
   font-size: 13px;
-  color: var(--accent-orange);
+  color: var(--warn);
   flex-shrink: 0;
 }
 .banner-actions { display: flex; gap: 8px; }
 .banner-btn {
-  padding: 4px 12px; border-radius: 6px; border: 1px solid;
+  padding: 4px 12px; border-radius: var(--r1); border: 1px solid;
   font-size: 12px; cursor: pointer; font-weight: 500;
 }
-.banner-btn.primary { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
-.banner-btn.secondary { background: none; color: var(--text-secondary); border-color: var(--border); }
+.banner-btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.banner-btn.secondary { background: transparent; color: var(--fg-2); border-color: var(--line); }
+.banner-btn.secondary:hover { color: var(--fg); border-color: var(--fg-2); }
 
 /* Editor content */
 .editor-content { flex: 1; min-height: 0; overflow: hidden; }
@@ -386,15 +388,15 @@ function handleContentUpdate(value: string) {
   align-items: center;
   justify-content: space-between;
   padding: 6px 16px;
-  background: rgba(88, 166, 255, 0.08);
-  border-bottom: 1px solid var(--border);
+  background: var(--accent-2);
+  border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
 
 .diff-mode-label {
   font-size: 12px;
   font-weight: 600;
-  color: var(--accent-blue);
+  color: var(--accent);
 }
 
 .diff-mode-close {
@@ -439,10 +441,10 @@ function handleContentUpdate(value: string) {
 
 /* Splitpanes overrides */
 :deep(.default-theme .splitpanes__splitter) {
-  background: var(--border); min-width: 4px;
+  background: var(--line); min-width: 4px;
 }
 :deep(.default-theme .splitpanes__splitter:hover) {
-  background: var(--accent-blue);
+  background: var(--accent);
 }
 :deep(.default-theme .splitpanes__splitter::before),
 :deep(.default-theme .splitpanes__splitter::after) {

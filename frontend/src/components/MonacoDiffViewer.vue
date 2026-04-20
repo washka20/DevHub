@@ -20,6 +20,7 @@ if (!self.MonacoEnvironment) {
 
 import { ref, onMounted, onBeforeUnmount, watch, shallowRef } from 'vue'
 import { useSettingsStore } from '../stores/settings'
+import { useTheme } from '../composables/useTheme'
 import { buildMonacoTheme, monacoThemeId } from '../data/monaco-themes'
 import { toMonacoLanguage } from '../data/monaco-languages'
 
@@ -38,22 +39,18 @@ const diffEditor = shallowRef<monaco.editor.IStandaloneDiffEditor | null>(null)
 const originalModel = shallowRef<monaco.editor.ITextModel | null>(null)
 const modifiedModel = shallowRef<monaco.editor.ITextModel | null>(null)
 const settingsStore = useSettingsStore()
-const registeredThemes = new Set<string>()
+const { theme } = useTheme()
 
-function ensureThemeRegistered(themeName: string): string {
-  const id = monacoThemeId(themeName)
-  if (!registeredThemes.has(id)) {
-    monaco.editor.defineTheme(id, buildMonacoTheme(themeName) as monaco.editor.IStandaloneThemeData)
-    registeredThemes.add(id)
-  }
+function applyTheme(mode: 'dark' | 'light'): string {
+  const id = monacoThemeId(mode)
+  monaco.editor.defineTheme(id, buildMonacoTheme(mode) as monaco.editor.IStandaloneThemeData)
   return id
 }
 
 onMounted(() => {
   if (!editorEl.value) return
 
-  const themeName = settingsStore.ui.siteThemeName
-  const themeId = ensureThemeRegistered(themeName)
+  const themeId = applyTheme(theme.value)
   const lang = toMonacoLanguage(props.language)
 
   originalModel.value = monaco.editor.createModel(props.original, lang)
@@ -101,10 +98,8 @@ watch(() => props.inline, (inline) => {
   diffEditor.value?.updateOptions({ renderSideBySide: !inline })
 })
 
-watch(() => settingsStore.ui.siteThemeName, (themeName) => {
-  const id = monacoThemeId(themeName)
-  monaco.editor.defineTheme(id, buildMonacoTheme(themeName) as monaco.editor.IStandaloneThemeData)
-  registeredThemes.add(id)
+watch(theme, (mode) => {
+  const id = applyTheme(mode)
   monaco.editor.setTheme(id)
 })
 
@@ -130,6 +125,6 @@ onBeforeUnmount(() => {
 .monaco-diff-wrapper {
   width: 100%;
   height: 100%;
-  background: var(--bg-primary);
+  background: var(--bg-0);
 }
 </style>

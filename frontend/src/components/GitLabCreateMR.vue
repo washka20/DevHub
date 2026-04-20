@@ -234,7 +234,7 @@ async function submit() {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--overlay-strong);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -249,7 +249,7 @@ async function submit() {
   max-width: 90vw;
   max-height: 85vh;
   overflow-y: auto;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-3);
 }
 
 .modal-header {
@@ -316,7 +316,7 @@ async function submit() {
 .form-select:focus,
 .form-textarea:focus {
   border-color: var(--accent-blue);
-  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 25%, transparent);
   outline: none;
 }
 
@@ -377,7 +377,7 @@ async function submit() {
 }
 
 .reviewer-chip.active {
-  background: rgba(88, 166, 255, 0.15);
+  background: var(--accent-2);
   border-color: var(--accent-blue);
   color: var(--accent-blue);
 }
@@ -437,8 +437,8 @@ async function submit() {
   gap: 6px;
   padding: 8px 20px;
   border-radius: 6px;
-  border: 1px solid rgba(88, 166, 255, 0.4);
-  background: rgba(88, 166, 255, 0.15);
+  border: 1px solid color-mix(in oklab, var(--accent) 50%, transparent);
+  background: var(--accent-2);
   color: var(--accent-blue);
   font-size: 14px;
   font-weight: 500;
@@ -447,7 +447,7 @@ async function submit() {
 }
 
 .btn-submit:hover:not(:disabled) {
-  background: rgba(88, 166, 255, 0.25);
+  background: color-mix(in oklab, var(--accent) 30%, transparent);
   border-color: var(--accent-blue);
 }
 

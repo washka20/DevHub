@@ -381,8 +381,8 @@ const formatDate = formatRelativeTime
 }
 
 .btn-new-note:hover {
-  background: var(--bg-tertiary);
-  color: var(--accent-blue);
+  background: var(--bg-2);
+  color: var(--accent);
 }
 
 .new-note-form {
@@ -429,9 +429,12 @@ const formatDate = formatRelativeTime
 }
 
 .note-item.active {
-  background: color-mix(in srgb, var(--accent-blue) 8%, var(--bg-tertiary));
-  border-left: 2px solid var(--accent-blue);
+  background: var(--accent-2);
+  border-left: 3px solid var(--accent);
+  padding-left: 15px;
+  box-shadow: inset 0 0 12px color-mix(in oklab, var(--accent) 6%, transparent);
 }
+.note-item.active .note-item-title { color: var(--fg); }
 
 .note-item-title {
   font-size: 13px;
@@ -465,15 +468,15 @@ const formatDate = formatRelativeTime
 .btn-create-first {
   padding: 6px 14px;
   font-size: 13px;
-  border: 1px solid var(--accent-blue);
+  border: 1px solid var(--accent);
   background: transparent;
-  color: var(--accent-blue);
-  border-radius: 6px;
+  color: var(--accent);
+  border-radius: var(--r1);
   cursor: pointer;
 }
 
 .btn-create-first:hover {
-  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+  background: var(--accent-2);
 }
 
 /* --- Right: Editor --- */
@@ -528,8 +531,8 @@ const formatDate = formatRelativeTime
 }
 
 .toolbar-btn.active {
-  background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
-  color: var(--accent-blue);
+  background: var(--accent-2);
+  color: var(--accent);
 }
 
 .toolbar-btn-danger:hover {
@@ -655,10 +658,16 @@ const formatDate = formatRelativeTime
 }
 
 .notes-editor-content blockquote {
-  padding: 0 1em;
-  color: var(--text-secondary);
-  border-left: 3px solid var(--accent-blue);
-  margin: 0 0 12px 0;
+  padding: 8px 14px;
+  color: var(--fg-2);
+  border-left: 3px solid var(--accent);
+  background: var(--accent-2);
+  border-radius: 0 var(--r1) var(--r1) 0;
+  margin: 12px 0;
+}
+
+.notes-editor-content code {
+  color: var(--accent);
 }
 
 .notes-editor-content strong { font-weight: 600; }
@@ -710,8 +719,8 @@ const formatDate = formatRelativeTime
 }
 
 .notes-editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
-  background: var(--accent-blue);
-  border-color: var(--accent-blue);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .notes-editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:checked::after {

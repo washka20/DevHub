@@ -1,11 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/error'
 import { settingsApi } from '../api/projects'
 import type { ServerSettings, UISettings, TerminalTheme } from '../types'
 import { terminalThemes } from '../data/terminal-themes'
-import { siteThemes } from '../data/site-themes'
 
 const UI_SETTINGS_KEY = 'devhub-ui-settings'
 
@@ -14,8 +13,8 @@ const defaultUI: UISettings = {
   fontFamily: "'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
   scrollback: 10000,
   cursorBlink: true,
-  themeName: 'github-dark',
-  siteThemeName: 'github-dark',
+  themeName: 'github-dark',  // xterm terminal palette (separate from app theme)
+  siteThemeName: 'devhub',   // legacy field, no longer applied
   editorEngine: 'codemirror',
   editorKeymap: 'default',
   editorMinimap: true,
@@ -74,18 +73,23 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem(UI_SETTINGS_KEY, JSON.stringify(ui.value))
   }
 
-  function applySiteTheme(themeName: string) {
-    const theme = siteThemes[themeName]
-    if (!theme) return
+  // Legacy site-theme overrides (`--bg-primary`, `--accent-blue`, etc. inline on
+  // <html>) used to fight the design-system tokens, so the user always saw the
+  // old GitHub-dark palette regardless of the warm dark/light toggle. We now
+  // strip those inline overrides on boot and turn applySiteTheme into a no-op;
+  // the design-system dark/light themes are the single source of truth.
+  function applySiteTheme(_themeName: string) {
     const root = document.documentElement
-    for (const [key, value] of Object.entries(theme)) {
-      root.style.setProperty(key, value)
-    }
+    const keys = [
+      '--bg-primary', '--bg-secondary', '--bg-tertiary', '--border',
+      '--text-primary', '--text-secondary',
+      '--accent-blue', '--accent-green', '--accent-red', '--accent-orange', '--accent-purple',
+      '--glow-blue', '--glow-green', '--glow-red', '--glow-orange', '--glow-purple',
+    ]
+    for (const k of keys) root.style.removeProperty(k)
   }
 
-  // Apply site theme on init and when changed
   applySiteTheme(ui.value.siteThemeName)
-  watch(() => ui.value.siteThemeName, (name) => applySiteTheme(name))
 
   return { server, ui, shells, currentTheme, fetchSettings, saveSettings, fetchShells, updateUI, applySiteTheme }
 })

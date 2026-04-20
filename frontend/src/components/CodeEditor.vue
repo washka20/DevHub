@@ -7,6 +7,7 @@ import { syntaxHighlighting, HighlightStyle, bracketMatching, indentOnInput } fr
 import { tags } from '@lezer/highlight'
 import { vim } from '@replit/codemirror-vim'
 import { useSettingsStore } from '../stores/settings'
+import { useTheme } from '../composables/useTheme'
 
 import { javascript } from '@codemirror/lang-javascript'
 import { html } from '@codemirror/lang-html'
@@ -36,6 +37,7 @@ const emit = defineEmits<{
 const editorEl = ref<HTMLDivElement>()
 const view = shallowRef<EditorView | null>(null)
 const settingsStore = useSettingsStore()
+const { theme } = useTheme()
 const themeCompartment = new Compartment()
 const highlightCompartment = new Compartment()
 const fontSizeCompartment = new Compartment()
@@ -46,64 +48,58 @@ function getCssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 }
 
-function buildEditorTheme() {
-  const bgPrimary = getCssVar('--bg-primary') || '#0d1117'
-  const bgSecondary = getCssVar('--bg-secondary') || '#161b22'
-  const textPrimary = getCssVar('--text-primary') || '#f0f6fc'
-  const textSecondary = getCssVar('--text-secondary') || '#8b949e'
-  const accentBlue = getCssVar('--accent-blue') || '#58a6ff'
-  const border = getCssVar('--border') || '#30363d'
+function isLightTheme(): boolean {
+  return document.documentElement.getAttribute('data-theme') === 'light'
+}
 
-  // Detect light theme
-  const isLight = isLightColor(bgPrimary)
+function buildEditorTheme() {
+  const bg0     = getCssVar('--bg-0') || (isLightTheme() ? '#faf7f0' : '#17140f')
+  const bg2     = getCssVar('--bg-2') || (isLightTheme() ? '#f2ece0' : '#2a251c')
+  const fg      = getCssVar('--fg')   || (isLightTheme() ? '#1c1810' : '#f5efe0')
+  const fg3     = getCssVar('--fg-3') || '#8a8170'
+  const accent  = getCssVar('--accent') || (isLightTheme() ? '#bf8138' : '#d7a965')
+  const accent2 = getCssVar('--accent-2') || 'rgba(215, 169, 101, .18)'
+  const line    = getCssVar('--line') || (isLightTheme() ? '#d9d0b9' : '#3d3528')
+  const isLight = isLightTheme()
 
   return EditorView.theme({
-    '&': { backgroundColor: bgPrimary, color: textPrimary, height: '100%' },
-    '.cm-gutters': { backgroundColor: bgPrimary, color: textSecondary, border: 'none', opacity: '0.5' },
-    '.cm-activeLineGutter': { backgroundColor: bgSecondary, opacity: '1' },
+    '&': { backgroundColor: bg0, color: fg, height: '100%' },
+    '.cm-gutters': { backgroundColor: bg0, color: fg3, border: 'none', opacity: '0.5' },
+    '.cm-activeLineGutter': { backgroundColor: bg2, opacity: '1' },
     '.cm-activeLine': { backgroundColor: isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.04)' },
-    '.cm-cursor': { borderLeftColor: accentBlue },
-    '.cm-selectionBackground': { backgroundColor: isLight ? 'rgba(9,105,218,0.15) !important' : 'rgba(88,166,255,0.2) !important' },
-    '&.cm-focused .cm-selectionBackground': { backgroundColor: isLight ? 'rgba(9,105,218,0.25) !important' : 'rgba(88,166,255,0.3) !important' },
-    '.cm-matchingBracket': { backgroundColor: isLight ? 'rgba(9,105,218,0.15)' : 'rgba(88,166,255,0.2)', outline: `1px solid ${border}` },
+    '.cm-cursor': { borderLeftColor: accent },
+    '.cm-selectionBackground': { backgroundColor: `${accent2} !important` },
+    '&.cm-focused .cm-selectionBackground': { backgroundColor: `${accent2} !important` },
+    '.cm-matchingBracket': { backgroundColor: accent2, outline: `1px solid ${line}` },
     '.cm-line': { padding: '0 8px' },
   }, { dark: !isLight })
 }
 
-function isLightColor(hex: string): boolean {
-  hex = hex.replace('#', '')
-  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('')
-  const r = parseInt(hex.substring(0, 2), 16)
-  const g = parseInt(hex.substring(2, 4), 16)
-  const b = parseInt(hex.substring(4, 6), 16)
-  return (r * 299 + g * 587 + b * 114) / 1000 > 128
-}
-
 // Syntax highlighting that adapts to theme
 function buildHighlightStyle() {
-  const bgPrimary = getCssVar('--bg-primary') || '#0d1117'
-  const accentBlue = getCssVar('--accent-blue') || '#58a6ff'
-  const accentGreen = getCssVar('--accent-green') || '#3fb950'
-  const accentRed = getCssVar('--accent-red') || '#f85149'
-  const accentOrange = getCssVar('--accent-orange') || '#d29922'
-  const accentPurple = getCssVar('--accent-purple') || '#bc8cff'
-  const textSecondary = getCssVar('--text-secondary') || '#8b949e'
-  const textPrimary = getCssVar('--text-primary') || '#f0f6fc'
-  const isLight = isLightColor(bgPrimary)
+  const accent       = getCssVar('--accent') || '#d7a965'
+  const ok           = getCssVar('--ok')     || '#7eb88a'
+  const bad          = getCssVar('--bad')    || '#e07a73'
+  const warn         = getCssVar('--warn')   || '#d8a85a'
+  const info         = getCssVar('--info')   || '#7faecc'
+  const mag          = getCssVar('--mag')    || '#b58cc8'
+  const fg3          = getCssVar('--fg-3')   || '#8a8170'
+  const fg           = getCssVar('--fg')     || (isLightTheme() ? '#1c1810' : '#f5efe0')
 
-  // GitHub-style syntax colors adapted for each theme
-  const keyword = accentRed
-  const string = isLight ? '#0a3069' : '#a5d6ff'
-  const number = accentBlue
-  const comment = textSecondary
-  const fn = accentPurple
-  const type = accentOrange
-  const variable = textPrimary
-  const tag = accentGreen
-  const attribute = accentBlue
-  const literal = accentBlue
-  const operator = isLight ? '#cf222e' : '#ff7b72'
-  const property = accentBlue
+  // Warm syntax-color mapping (no GitHub colors hardcoded)
+  const keyword   = bad
+  const string    = info
+  const number    = info
+  const comment   = fg3
+  const fn        = mag
+  const type      = warn
+  const variable  = fg
+  const tag       = ok
+  const attribute = info
+  const literal   = info
+  const operator  = bad
+  const property  = info
+  const meta      = accent
 
   return HighlightStyle.define([
     { tag: tags.keyword, color: keyword },
@@ -144,14 +140,14 @@ function buildHighlightStyle() {
     { tag: tags.attributeValue, color: string },
 
     { tag: tags.operator, color: operator },
-    { tag: tags.punctuation, color: textSecondary },
-    { tag: tags.bracket, color: textSecondary },
-    { tag: tags.meta, color: textSecondary },
+    { tag: tags.punctuation, color: fg3 },
+    { tag: tags.bracket, color: fg3 },
+    { tag: tags.meta, color: meta },
 
-    { tag: tags.regexp, color: accentBlue },
-    { tag: tags.escape, color: accentOrange },
-    { tag: tags.link, color: accentBlue, textDecoration: 'underline' },
-    { tag: tags.heading, color: accentBlue, fontWeight: 'bold' },
+    { tag: tags.regexp, color: info },
+    { tag: tags.escape, color: warn },
+    { tag: tags.link, color: info, textDecoration: 'underline' },
+    { tag: tags.heading, color: accent, fontWeight: 'bold' },
     { tag: tags.emphasis, fontStyle: 'italic' },
     { tag: tags.strong, fontWeight: 'bold' },
   ])
@@ -236,10 +232,9 @@ watch(() => props.language, () => {
   }
 })
 
-// Watch site theme changes — reconfigure editor theme + syntax colors
-watch(() => settingsStore.ui.siteThemeName, () => {
+// Watch warm dark/light theme changes — reconfigure editor theme + syntax colors
+watch(theme, () => {
   if (!view.value) return
-  // Wait for CSS vars to update
   requestAnimationFrame(() => {
     view.value!.dispatch({
       effects: [
@@ -286,7 +281,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--bg-primary);
+  background: var(--bg-0);
 }
 .code-editor :deep(.cm-editor) {
   height: 100%;

@@ -80,19 +80,19 @@ function formatDate(dateStr: string): string {
 
 function getFileStatusColor(statusChar: string): string {
   switch (statusChar) {
-    case 'A': return '#3fb950'
-    case 'M': return '#d29922'
-    case 'D': return '#f85149'
-    default: return '#8b949e'
+    case 'A': return 'var(--ok)'
+    case 'M': return 'var(--warn)'
+    case 'D': return 'var(--bad)'
+    default:  return 'var(--fg-2)'
   }
 }
 
 function getFileStatusBg(statusChar: string): string {
   switch (statusChar) {
-    case 'A': return 'rgba(63, 185, 80, 0.15)'
-    case 'M': return 'rgba(210, 153, 34, 0.15)'
-    case 'D': return 'rgba(248, 81, 73, 0.15)'
-    default: return 'rgba(139, 148, 158, 0.15)'
+    case 'A': return 'var(--ok-2)'
+    case 'M': return 'var(--warn-2)'
+    case 'D': return 'var(--bad-2)'
+    default:  return 'var(--bg-2)'
   }
 }
 </script>
@@ -520,7 +520,7 @@ function getFileStatusBg(statusChar: string): string {
 }
 
 .cherry-pick-ok {
-  color: #fff;
+  color: var(--accent-ink);
   background: var(--accent-blue);
   border-color: var(--accent-blue);
 }

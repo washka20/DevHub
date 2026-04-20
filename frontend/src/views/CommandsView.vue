@@ -378,12 +378,12 @@ onUnmounted(() => {
 
 .history-item.success .history-status {
   color: var(--accent-green);
-  background: rgba(63, 185, 80, 0.1);
+  background: var(--ok-2);
 }
 
 .history-item.failure .history-status {
-  color: var(--accent-red, #f85149);
-  background: rgba(248, 81, 73, 0.1);
+  color: var(--bad);
+  background: var(--bad-2);
 }
 
 .history-cmd {

@@ -140,7 +140,7 @@ onBeforeUnmount(() => {
 
 .menu-item:hover {
   background: var(--accent-blue);
-  color: #fff;
+  color: var(--accent-ink);
 }
 
 .menu-item.danger {
@@ -149,7 +149,7 @@ onBeforeUnmount(() => {
 
 .menu-item.danger:hover {
   background: var(--accent-red);
-  color: #fff;
+  color: var(--accent-ink);
 }
 
 .menu-item.disabled {

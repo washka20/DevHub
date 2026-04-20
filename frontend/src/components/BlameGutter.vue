@@ -171,7 +171,7 @@ onBeforeUnmount(() => {
 }
 
 .blame-line.blame-hovered {
-  background: rgba(88, 166, 255, 0.06);
+  background: var(--accent-2);
 }
 
 .blame-author {

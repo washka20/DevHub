@@ -1,6 +1,7 @@
 import { onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useTerminalStore } from '../stores/terminal'
+import { openCommandPalette } from './useCommandPalette'
 
 const ROUTE_MAP: Record<string, string> = {
   Digit1: '/',
@@ -105,6 +106,13 @@ export function useKeyboardShortcuts() {
         return
       }
 
+      return
+    }
+
+    // Ctrl+K / Cmd+K — command palette (outside terminal)
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.code === 'KeyK') {
+      e.preventDefault()
+      openCommandPalette()
       return
     }
 

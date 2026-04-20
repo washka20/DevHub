@@ -35,7 +35,7 @@ defineProps<{
 <style scoped>
 .shimmer-line {
   height: 12px;
-  background: linear-gradient(90deg, var(--bg-tertiary) 25%, #2d333b 50%, var(--bg-tertiary) 75%);
+  background: linear-gradient(90deg, var(--bg-2) 25%, var(--shimmer-mid) 50%, var(--bg-2) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
   border-radius: 4px;
@@ -65,7 +65,7 @@ defineProps<{
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(90deg, var(--bg-tertiary) 25%, #2d333b 50%, var(--bg-tertiary) 75%);
+  background: linear-gradient(90deg, var(--bg-2) 25%, var(--shimmer-mid) 50%, var(--bg-2) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
   flex-shrink: 0;

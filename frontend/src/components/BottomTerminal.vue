@@ -193,7 +193,7 @@ function toggleMode() {
 .bt-tab-close:hover {
   opacity: 1 !important;
   color: var(--accent-red);
-  background: rgba(248, 81, 73, 0.15);
+  background: var(--bad-2);
 }
 
 .bt-tab-add {

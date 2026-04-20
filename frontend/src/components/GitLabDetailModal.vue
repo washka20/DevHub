@@ -163,9 +163,9 @@ function labelStyle(labelName: string): Record<string, string> {
     }
   }
   return {
-    background: 'rgba(139,148,158,0.1)',
-    color: '#8b949e',
-    borderColor: 'rgba(139,148,158,0.25)',
+    background: 'var(--bg-2)',
+    color: 'var(--fg-2)',
+    borderColor: 'var(--line)',
   }
 }
 
@@ -613,7 +613,7 @@ onUnmounted(() => {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--overlay-strong);
   z-index: 100;
   display: flex;
   align-items: center;
@@ -642,7 +642,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-3);
   animation: modalIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -701,17 +701,17 @@ onUnmounted(() => {
 }
 
 .state-open {
-  background: rgba(63, 185, 80, 0.15);
+  background: var(--ok-2);
   color: var(--accent-green);
 }
 
 .state-closed {
-  background: rgba(188, 140, 255, 0.15);
+  background: var(--mag-2);
   color: var(--accent-purple);
 }
 
 .state-merged {
-  background: rgba(88, 166, 255, 0.15);
+  background: var(--accent-2);
   color: var(--accent-blue);
 }
 
@@ -772,20 +772,20 @@ onUnmounted(() => {
 
 .btn-close-item {
   color: var(--accent-red);
-  border-color: rgba(248, 81, 73, 0.25);
+  border-color: color-mix(in oklab, var(--bad) 30%, transparent);
 }
 
 .btn-close-item:hover {
-  background: rgba(248, 81, 73, 0.1);
+  background: var(--bad-2);
 }
 
 .btn-reopen-item {
   color: var(--accent-green);
-  border-color: rgba(63, 185, 80, 0.25);
+  border-color: color-mix(in oklab, var(--ok) 30%, transparent);
 }
 
 .btn-reopen-item:hover {
-  background: rgba(63, 185, 80, 0.1);
+  background: var(--ok-2);
 }
 
 /* === Loading === */
@@ -938,7 +938,7 @@ onUnmounted(() => {
 }
 
 .markdown-body :deep(tr:hover td) {
-  background: rgba(88, 166, 255, 0.03);
+  background: var(--accent-2);
 }
 
 .markdown-body :deep(blockquote) {
@@ -1015,7 +1015,7 @@ onUnmounted(() => {
 }
 
 .task-item:hover {
-  background: rgba(88, 166, 255, 0.05);
+  background: var(--accent-2);
 }
 
 .task-cb {
@@ -1035,7 +1035,7 @@ onUnmounted(() => {
 .task-cb.done {
   background: var(--accent-green);
   border-color: var(--accent-green);
-  color: #fff;
+  color: var(--accent-ink);
 }
 
 .task-text.done {
@@ -1159,15 +1159,15 @@ onUnmounted(() => {
   padding: 3px 10px;
   font-size: 11px;
   border-radius: 5px;
-  border: 1px solid rgba(88, 166, 255, 0.25);
-  background: rgba(88, 166, 255, 0.1);
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+  background: var(--accent-2);
   color: var(--accent-blue);
   cursor: pointer;
   font-weight: 500;
 }
 
 .send-btn:hover:not(:disabled) {
-  background: rgba(88, 166, 255, 0.2);
+  background: color-mix(in oklab, var(--accent) 25%, transparent);
   border-color: var(--accent-blue);
 }
 
@@ -1277,17 +1277,17 @@ onUnmounted(() => {
 }
 
 .pipeline-success {
-  background: rgba(63, 185, 80, 0.15);
+  background: var(--ok-2);
   color: var(--accent-green);
 }
 
 .pipeline-failed {
-  background: rgba(248, 81, 73, 0.15);
+  background: var(--bad-2);
   color: var(--accent-red);
 }
 
 .pipeline-running {
-  background: rgba(88, 166, 255, 0.15);
+  background: var(--accent-2);
   color: var(--accent-blue);
 }
 
@@ -1295,7 +1295,7 @@ onUnmounted(() => {
 .pipeline-created,
 .pipeline-waiting_for_resource,
 .pipeline-preparing {
-  background: rgba(210, 153, 34, 0.15);
+  background: var(--warn-2);
   color: var(--accent-orange);
 }
 
@@ -1314,12 +1314,12 @@ onUnmounted(() => {
 }
 
 .approval-approved {
-  background: rgba(63, 185, 80, 0.15);
+  background: var(--ok-2);
   color: var(--accent-green);
 }
 
 .approval-pending {
-  background: rgba(210, 153, 34, 0.15);
+  background: var(--warn-2);
   color: var(--accent-orange);
 }
 
@@ -1328,26 +1328,26 @@ onUnmounted(() => {
 }
 
 .approval-avatar {
-  background: rgba(63, 185, 80, 0.2);
+  background: var(--ok-2);
   color: var(--accent-green);
 }
 
 .btn-approve {
   color: var(--accent-green);
-  border-color: rgba(63, 185, 80, 0.25);
+  border-color: color-mix(in oklab, var(--ok) 30%, transparent);
 }
 
 .btn-approve:hover:not(:disabled) {
-  background: rgba(63, 185, 80, 0.1);
+  background: var(--ok-2);
 }
 
 .btn-unapprove {
   color: var(--accent-orange);
-  border-color: rgba(210, 153, 34, 0.25);
+  border-color: color-mix(in oklab, var(--warn) 30%, transparent);
 }
 
 .btn-unapprove:hover:not(:disabled) {
-  background: rgba(210, 153, 34, 0.1);
+  background: var(--warn-2);
 }
 
 /* === Discussions === */
@@ -1387,12 +1387,12 @@ onUnmounted(() => {
 }
 
 .thread-resolved {
-  background: rgba(63, 185, 80, 0.15);
+  background: var(--ok-2);
   color: var(--accent-green);
 }
 
 .thread-unresolved {
-  background: rgba(210, 153, 34, 0.15);
+  background: var(--warn-2);
   color: var(--accent-orange);
 }
 

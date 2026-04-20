@@ -63,6 +63,12 @@ const router = createRouter({
       meta: { order: 9 },
       component: () => import('../views/GitLabView.vue'),
     },
+    {
+      path: '/onboarding',
+      name: 'onboarding',
+      meta: { order: 10 },
+      component: () => import('../views/OnboardingView.vue'),
+    },
   ],
 })
 

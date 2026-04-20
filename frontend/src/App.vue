@@ -15,6 +15,7 @@ import { useSettingsStore } from './stores/settings'
 import { useTerminalStore } from './stores/terminal'
 import SearchModal from './components/SearchModal.vue'
 import ToastContainer from './components/ToastContainer.vue'
+import CommandPalette from './components/CommandPalette.vue'
 
 const { initProject } = useProject()
 useSettingsStore()
@@ -187,6 +188,7 @@ onMounted(async () => {
     </div>
   </div>
   <SearchModal :visible="showSearch" @close="showSearch = false" />
+  <CommandPalette />
   <ToastContainer />
 </template>
 

@@ -456,13 +456,14 @@ function handleExportHTML() {
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
   const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg-0').trim() || '#17140f'
   const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <title>Terminal Export - ${stamp}</title>
   <style>
-    body { margin: 0; padding: 16px; background: #1e1e1e; }
+    body { margin: 0; padding: 16px; background: ${bg}; }
   </style>
 </head>
 <body>

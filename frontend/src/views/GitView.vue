@@ -808,7 +808,7 @@ watch(() => gitStore.status.branch, () => {
   background: var(--accent-green);
   border: 1px solid var(--accent-green);
   border-radius: 6px;
-  color: #fff;
+  color: var(--accent-ink);
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
@@ -905,7 +905,7 @@ watch(() => gitStore.status.branch, () => {
 
 .commit-bar .commit-input:focus {
   border-color: var(--accent-blue);
-  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 25%, transparent);
   outline: none;
 }
 
@@ -945,7 +945,7 @@ watch(() => gitStore.status.branch, () => {
 
 .btn-commit {
   padding: 6px 20px;
-  background: rgba(63, 185, 80, 0.15);
+  background: var(--ok-2);
   border: 1px solid var(--accent-green);
   color: var(--accent-green);
   font-weight: 600;
@@ -953,7 +953,7 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .btn-commit:hover:not(:disabled) {
-  background: rgba(63, 185, 80, 0.25);
+  background: color-mix(in oklab, var(--ok) 30%, transparent);
 }
 
 .btn-commit:disabled {
@@ -975,8 +975,8 @@ watch(() => gitStore.status.branch, () => {
   align-items: center;
   gap: 6px;
   padding: 2px 10px;
-  background: rgba(88, 166, 255, 0.1);
-  border: 1px solid rgba(88, 166, 255, 0.3);
+  background: var(--accent-2);
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
   border-radius: 12px;
   font-size: 12px;
   color: var(--accent-blue);
@@ -1061,7 +1061,7 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .diff-toggle-btn.active {
-  background: rgba(88, 166, 255, 0.15);
+  background: var(--accent-2);
   border-color: var(--accent-blue);
   color: var(--accent-blue);
 }
@@ -1077,7 +1077,7 @@ watch(() => gitStore.status.branch, () => {
 .confirm-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--overlay-strong);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1091,7 +1091,7 @@ watch(() => gitStore.status.branch, () => {
   padding: 24px;
   width: 380px;
   max-width: 90vw;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-3);
 }
 
 .confirm-title {
@@ -1109,7 +1109,7 @@ watch(() => gitStore.status.branch, () => {
 
 .confirm-text code {
   font-family: var(--font-mono);
-  background: rgba(88, 166, 255, 0.1);
+  background: var(--accent-2);
   color: var(--accent-blue);
   padding: 2px 6px;
   border-radius: 4px;
@@ -1121,7 +1121,7 @@ watch(() => gitStore.status.branch, () => {
   color: var(--accent-orange);
   margin-bottom: 20px;
   padding: 8px 10px;
-  background: rgba(210, 153, 34, 0.1);
+  background: var(--warn-2);
   border-radius: 6px;
   border-left: 2px solid var(--accent-orange);
 }
@@ -1133,14 +1133,14 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .btn-checkout {
-  background: rgba(63, 185, 80, 0.15);
+  background: var(--ok-2);
   border-color: var(--accent-green);
   color: var(--accent-green);
   font-weight: 600;
 }
 
 .btn-checkout:hover:not(:disabled) {
-  background: rgba(63, 185, 80, 0.25);
+  background: color-mix(in oklab, var(--ok) 30%, transparent);
 }
 
 /* ===== Modal ===== */
@@ -1148,7 +1148,7 @@ watch(() => gitStore.status.branch, () => {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--overlay-strong);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1165,7 +1165,7 @@ watch(() => gitStore.status.branch, () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-3);
 }
 
 .modal-header {
@@ -1217,7 +1217,7 @@ watch(() => gitStore.status.branch, () => {
   padding: 24px;
   width: 380px;
   max-width: 90vw;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-3);
 }
 
 .stash-dialog-title {
@@ -1244,7 +1244,7 @@ watch(() => gitStore.status.branch, () => {
 
 .stash-dialog-input:focus {
   border-color: var(--accent-purple);
-  box-shadow: 0 0 0 2px rgba(188, 140, 255, 0.2);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--mag) 25%, transparent);
 }
 
 .stash-dialog-input::placeholder {
@@ -1258,14 +1258,14 @@ watch(() => gitStore.status.branch, () => {
 }
 
 .btn-stash-confirm {
-  background: rgba(188, 140, 255, 0.15);
+  background: var(--mag-2);
   border-color: var(--accent-purple);
   color: var(--accent-purple);
   font-weight: 600;
 }
 
 .btn-stash-confirm:hover:not(:disabled) {
-  background: rgba(188, 140, 255, 0.25);
+  background: color-mix(in oklab, var(--mag) 30%, transparent);
 }
 
 .btn-stash-confirm:disabled {

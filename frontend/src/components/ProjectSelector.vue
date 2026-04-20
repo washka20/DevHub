@@ -158,7 +158,7 @@ onUnmounted(() => {
 
 .selector-btn:hover {
   border-color: var(--accent-blue);
-  box-shadow: 0 0 8px rgba(88, 166, 255, 0.12);
+  box-shadow: 0 0 8px var(--accent-2);
 }
 
 .selector-info {
@@ -199,17 +199,17 @@ onUnmounted(() => {
 }
 
 .feature-badge[title="Git"] {
-  background: rgba(248, 129, 102, 0.2);
+  background: var(--warn-2);
   color: var(--accent-orange);
 }
 
 .feature-badge[title="Makefile"] {
-  background: rgba(63, 185, 80, 0.2);
+  background: var(--ok-2);
   color: var(--accent-green);
 }
 
 .feature-badge[title="Docker"] {
-  background: rgba(88, 166, 255, 0.2);
+  background: color-mix(in oklab, var(--accent) 25%, transparent);
   color: var(--accent-blue);
 }
 
@@ -283,7 +283,7 @@ onUnmounted(() => {
 }
 
 .dropdown-item.active {
-  background: rgba(88, 166, 255, 0.1);
+  background: var(--accent-2);
 }
 
 .item-row {

@@ -315,7 +315,7 @@ async function handleNewTab() {
 
 .tab-close:hover {
   opacity: 1 !important;
-  background: rgba(248, 81, 73, 0.15);
+  background: var(--bad-2);
   color: var(--accent-red);
 }
 
@@ -378,7 +378,7 @@ async function handleNewTab() {
 .toolbar-btn.active {
   color: var(--accent-blue);
   border-color: var(--accent-blue);
-  background: rgba(88, 166, 255, 0.1);
+  background: var(--accent-2);
 }
 
 .toolbar-btn:disabled {
@@ -397,8 +397,8 @@ async function handleNewTab() {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.4); }
-  50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(88, 166, 255, 0); }
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 50%, transparent); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px transparent; }
 }
 
 @keyframes bell-flash {

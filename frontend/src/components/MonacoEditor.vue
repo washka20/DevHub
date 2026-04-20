@@ -18,6 +18,7 @@ self.MonacoEnvironment = {
 
 import { ref, onMounted, onBeforeUnmount, watch, shallowRef } from 'vue'
 import { useSettingsStore } from '../stores/settings'
+import { useTheme } from '../composables/useTheme'
 import { buildMonacoTheme, monacoThemeId } from '../data/monaco-themes'
 import { toMonacoLanguage } from '../data/monaco-languages'
 
@@ -34,23 +35,19 @@ const emit = defineEmits<{
 const editorEl = ref<HTMLDivElement>()
 const editor = shallowRef<monaco.editor.IStandaloneCodeEditor | null>(null)
 const settingsStore = useSettingsStore()
+const { theme } = useTheme()
 let isUpdating = false
-const registeredThemes = new Set<string>()
 
-function ensureThemeRegistered(themeName: string): string {
-  const id = monacoThemeId(themeName)
-  if (!registeredThemes.has(id)) {
-    monaco.editor.defineTheme(id, buildMonacoTheme(themeName) as monaco.editor.IStandaloneThemeData)
-    registeredThemes.add(id)
-  }
+function applyTheme(mode: 'dark' | 'light'): string {
+  const id = monacoThemeId(mode)
+  monaco.editor.defineTheme(id, buildMonacoTheme(mode) as monaco.editor.IStandaloneThemeData)
   return id
 }
 
 onMounted(() => {
   if (!editorEl.value) return
 
-  const themeName = settingsStore.ui.siteThemeName
-  const themeId = ensureThemeRegistered(themeName)
+  const themeId = applyTheme(theme.value)
 
   editor.value = monaco.editor.create(editorEl.value, {
     value: props.modelValue,
@@ -95,13 +92,10 @@ watch(() => props.language, (lang) => {
   }
 })
 
-// Watch site theme changes — re-define and apply theme
-watch(() => settingsStore.ui.siteThemeName, (themeName) => {
+// Watch warm dark/light theme changes — rebuild + apply Monaco theme
+watch(theme, (mode) => {
   if (!editor.value) return
-  // Re-register to pick up any CSS var changes
-  const id = monacoThemeId(themeName)
-  monaco.editor.defineTheme(id, buildMonacoTheme(themeName) as monaco.editor.IStandaloneThemeData)
-  registeredThemes.add(id)
+  const id = applyTheme(mode)
   monaco.editor.setTheme(id)
 })
 
@@ -136,6 +130,6 @@ onBeforeUnmount(() => {
 .monaco-editor-wrapper {
   width: 100%;
   height: 100%;
-  background: var(--bg-primary);
+  background: var(--bg-0);
 }
 </style>

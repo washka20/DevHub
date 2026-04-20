@@ -1,0 +1,174 @@
+/* DevHub design tokens — warm dark (default) + warm paper (light)
+ * Applied via data-theme="dark" | "light" on <html>.
+ *
+ * Exposes two parallel naming schemes:
+ *   - New (handoff):   --bg-0/1/2/3, --fg/--fg-2/--fg-3, --line/--line-soft,
+ *                      --accent, --ok, --warn, --bad, --info, --mag
+ *   - Legacy aliases:  --bg-primary/--bg-secondary/--bg-tertiary, --border,
+ *                      --text-primary/--text-secondary,
+ *                      --accent-blue/--accent-green/--accent-red/--accent-orange/--accent-purple
+ *
+ * Aliases map onto the new palette so unported components look close to the
+ * new theme automatically — remove them once every component uses the new names.
+ */
+
+:root {
+  --ui: 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-ui: var(--ui);
+  --font-mono: var(--mono);
+
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+  --r1: 6px; --r2: 10px; --r3: 14px; --r-pill: 999px;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .08);
+  --shadow-2: 0 4px 14px rgba(0, 0, 0, .12);
+  --shadow-3: 0 20px 60px rgba(0, 0, 0, .22);
+
+  --t-fast: .12s ease;
+  --t-med: .2s ease;
+  --transition-fast: var(--t-fast);
+  --transition-smooth: var(--t-med);
+  --transition-bounce: 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+
+  --sidebar-width: 232px;
+}
+
+/* ================= DARK (default) — warm neutral ================= */
+[data-theme="dark"] {
+  --bg-0: #17140f;
+  --bg-1: #1f1b14;
+  --bg-2: #2a251c;
+  --bg-3: #363026;
+  --line: #3d3528;
+  --line-soft: #2b2619;
+
+  --fg:   #f5efe0;
+  --fg-2: #bdb3a1;
+  --fg-3: #8a8170;
+
+  --accent:   oklch(72% 0.13 68);
+  --accent-2: oklch(72% 0.13 68 / .18);
+  --accent-ink: #1b1710;
+
+  --ok:    oklch(72% 0.13 150);
+  --ok-2:  oklch(72% 0.13 150 / .18);
+  --warn:  oklch(75% 0.14 75);
+  --warn-2:oklch(75% 0.14 75 / .18);
+  --bad:   oklch(68% 0.16 28);
+  --bad-2: oklch(68% 0.16 28 / .18);
+  --info:  oklch(72% 0.11 230);
+  --info-2:oklch(72% 0.11 230 / .18);
+  --mag:   oklch(70% 0.14 320);
+  --mag-2: oklch(70% 0.14 320 / .18);
+
+  --diff-add-bg: color-mix(in oklab, var(--ok) 12%, transparent);
+  --diff-del-bg: color-mix(in oklab, var(--bad) 12%, transparent);
+
+  --shadow-3: 0 20px 60px rgba(0, 0, 0, .45), 0 1px 0 rgba(255, 255, 255, .02) inset;
+
+  /* Modal/popover overlay — theme-aware so the same value works in light too */
+  --overlay-strong: color-mix(in oklab, black 55%, transparent);
+  --overlay-soft:   color-mix(in oklab, black 35%, transparent);
+
+  /* Mid-stop for skeleton shimmer animation */
+  --shimmer-mid: var(--bg-3);
+
+  --body-bg:
+    radial-gradient(1200px 600px at 80% -10%, oklch(72% 0.13 68 / .06), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, oklch(72% 0.11 230 / .05), transparent 60%),
+    var(--bg-0);
+
+  /* legacy aliases */
+  --bg-primary: var(--bg-0);
+  --bg-secondary: var(--bg-1);
+  --bg-tertiary: var(--bg-2);
+  --border: var(--line);
+  --text-primary: var(--fg);
+  --text-secondary: var(--fg-2);
+  --accent-blue: var(--info);
+  --accent-green: var(--ok);
+  --accent-red: var(--bad);
+  --accent-orange: var(--warn);
+  --accent-purple: var(--mag);
+  --glow-green: 0 0 8px color-mix(in oklab, var(--ok) 55%, transparent);
+  --glow-blue:  0 0 8px color-mix(in oklab, var(--info) 55%, transparent);
+  --glow-orange:0 0 8px color-mix(in oklab, var(--warn) 55%, transparent);
+  --glow-red:   0 0 8px color-mix(in oklab, var(--bad) 55%, transparent);
+  --glow-purple:0 0 8px color-mix(in oklab, var(--mag) 55%, transparent);
+}
+
+/* ================= LIGHT — warm paper ================= */
+[data-theme="light"] {
+  --bg-0: #faf7f0;
+  --bg-1: #ffffff;
+  --bg-2: #f2ece0;
+  --bg-3: #e7dfcf;
+  --line: #d9d0b9;
+  --line-soft: #ece4d1;
+
+  --fg:   #1c1810;
+  --fg-2: #5b5240;
+  --fg-3: #8a8170;
+
+  --accent:   oklch(55% 0.14 60);
+  --accent-2: oklch(55% 0.14 60 / .12);
+  --accent-ink: #ffffff;
+
+  --ok:    oklch(48% 0.13 150);
+  --ok-2:  oklch(48% 0.13 150 / .12);
+  --warn:  oklch(58% 0.14 70);
+  --warn-2:oklch(58% 0.14 70 / .14);
+  --bad:   oklch(52% 0.18 28);
+  --bad-2: oklch(52% 0.18 28 / .12);
+  --info:  oklch(48% 0.14 240);
+  --info-2:oklch(48% 0.14 240 / .12);
+  --mag:   oklch(52% 0.17 320);
+  --mag-2: oklch(52% 0.17 320 / .12);
+
+  --diff-add-bg: color-mix(in oklab, var(--ok) 14%, transparent);
+  --diff-del-bg: color-mix(in oklab, var(--bad) 14%, transparent);
+
+  --shadow-3: 0 20px 60px rgba(60, 40, 10, .10), 0 1px 0 rgba(255, 255, 255, .6) inset;
+
+  /* Light overlays are softer to keep the underlying card readable */
+  --overlay-strong: color-mix(in oklab, black 30%, transparent);
+  --overlay-soft:   color-mix(in oklab, black 18%, transparent);
+
+  --shimmer-mid: var(--bg-2);
+
+  --body-bg:
+    radial-gradient(1200px 600px at 80% -10%, oklch(72% 0.13 68 / .10), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, oklch(72% 0.11 230 / .06), transparent 60%),
+    var(--bg-0);
+
+  /* legacy aliases */
+  --bg-primary: var(--bg-0);
+  --bg-secondary: var(--bg-1);
+  --bg-tertiary: var(--bg-2);
+  --border: var(--line);
+  --text-primary: var(--fg);
+  --text-secondary: var(--fg-2);
+  --accent-blue: var(--info);
+  --accent-green: var(--ok);
+  --accent-red: var(--bad);
+  --accent-orange: var(--warn);
+  --accent-purple: var(--mag);
+  --glow-green: 0 0 8px color-mix(in oklab, var(--ok) 40%, transparent);
+  --glow-blue:  0 0 8px color-mix(in oklab, var(--info) 40%, transparent);
+  --glow-orange:0 0 8px color-mix(in oklab, var(--warn) 40%, transparent);
+  --glow-red:   0 0 8px color-mix(in oklab, var(--bad) 40%, transparent);
+  --glow-purple:0 0 8px color-mix(in oklab, var(--mag) 40%, transparent);
+}
+
+html, body {
+  margin: 0;
+  background: var(--body-bg);
+  color: var(--fg);
+  font-family: var(--ui);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+  transition: background-color var(--t-med), color var(--t-med);
+}
+* { box-sizing: border-box; }

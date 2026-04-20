@@ -397,7 +397,7 @@ function flattenTree(nodes: FileNode[], depth: number = 0): FlatNode[] {
 }
 
 .tree-item.active {
-  background: rgba(88, 166, 255, 0.12);
+  background: var(--accent-2);
   color: var(--text-primary);
 }
 
@@ -485,7 +485,7 @@ function flattenTree(nodes: FileNode[], depth: number = 0): FlatNode[] {
 
 .menu-item:hover {
   background: var(--accent-blue);
-  color: #fff;
+  color: var(--accent-ink);
 }
 
 .menu-item.danger {
@@ -494,7 +494,7 @@ function flattenTree(nodes: FileNode[], depth: number = 0): FlatNode[] {
 
 .menu-item.danger:hover {
   background: var(--accent-red);
-  color: #fff;
+  color: var(--accent-ink);
 }
 
 .menu-sep {

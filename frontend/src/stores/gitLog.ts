@@ -31,11 +31,11 @@ export const useGitLogStore = defineStore('gitLog', () => {
   const metadataLoading = ref(false)
   const totalCommits = computed(() => topoNodes.value.length)
 
-  async function fetchLog() {
+  async function fetchLog(limit = 30) {
     loadingLog.value = true
     try {
-      const data = await gitApi.logMetadata(projectApiUrl.value, 0, 5)
-      log.value = data.map(m => ({
+      const data = await gitApi.logMetadata(projectApiUrl.value, 0, limit)
+      log.value = (data ?? []).map(m => ({
         hash: m.hash,
         short_hash: m.short_hash,
         message: m.message,
@@ -55,7 +55,7 @@ export const useGitLogStore = defineStore('gitLog', () => {
     loadingLog.value = true
     try {
       const data = await gitApi.graph(projectApiUrl.value)
-      topoNodes.value = data.map(n => ({ id: n.id, parents: n.parents ?? [] }))
+      topoNodes.value = (data ?? []).map(n => ({ id: n.id, parents: n.parents ?? [] }))
       metadataMap.value = new Map()
       metadataLoaded.value = 0
       await fetchMetadata(0, LOG_PAGE_SIZE)

@@ -4,14 +4,18 @@ defineOptions({ name: 'SettingsView' })
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useSettingsStore } from '../stores/settings'
 import { terminalThemes, themeNames } from '../data/terminal-themes'
-import { siteThemes, siteThemeNames } from '../data/site-themes'
+import { useTheme } from '../composables/useTheme'
+import ThemeToggle from '../components/ThemeToggle.vue'
 import type { ServerSettings, UISettings } from '../types'
 
 const settingsStore = useSettingsStore()
+const { theme } = useTheme()
+
+type Section = 'general' | 'appearance' | 'editor' | 'terminal' | 'theme' | 'about'
+const activeSection = ref<Section>('general')
 
 /* ---------- local form state ---------- */
 const localServer = reactive<ServerSettings>(JSON.parse(JSON.stringify(settingsStore.server)))
-
 const localUI = reactive<UISettings>(JSON.parse(JSON.stringify(settingsStore.ui)))
 
 function syncFromStore() {
@@ -24,7 +28,6 @@ onMounted(async () => {
   syncFromStore()
 })
 
-// Re-sync when store changes externally
 watch(() => settingsStore.server, () => {
   if (!isDirty.value) syncFromStore()
 }, { deep: true })
@@ -82,9 +85,7 @@ async function save() {
   }
 }
 
-function reset() {
-  syncFromStore()
-}
+function reset() { syncFromStore() }
 
 /* ---------- font family options ---------- */
 const fontFamilies = [
@@ -95,294 +96,311 @@ const fontFamilies = [
   { label: 'monospace', value: "monospace" },
 ]
 
-/* ---------- selected theme computed ---------- */
-const selectedTheme = computed(() => {
-  return terminalThemes[localUI.themeName] || terminalThemes['github-dark']
-})
+const selectedTerm = computed(() => terminalThemes[localUI.themeName] || terminalThemes['github-dark'])
 
-function selectTheme(key: string) {
-  localUI.themeName = key
-}
+function selectTerm(key: string) { localUI.themeName = key }
+
+const sections: { id: Section; label: string; group: string }[] = [
+  { id: 'general',    label: 'General',         group: 'Preferences' },
+  { id: 'appearance', label: 'Appearance',      group: 'Preferences' },
+  { id: 'editor',     label: 'Editor',          group: 'Preferences' },
+  { id: 'terminal',   label: 'Terminal',        group: 'Preferences' },
+  { id: 'theme',      label: 'Terminal theme',  group: 'Preferences' },
+  { id: 'about',      label: 'About',           group: 'System' },
+]
+
+const groupedSections = computed(() => {
+  const groups = new Map<string, { id: Section; label: string }[]>()
+  for (const s of sections) {
+    const arr = groups.get(s.group) ?? []
+    arr.push({ id: s.id, label: s.label })
+    groups.set(s.group, arr)
+  }
+  return Array.from(groups.entries()).map(([name, items]) => ({ name, items }))
+})
 </script>
 
 <template>
   <div class="settings-view">
-    <!-- Page Header -->
-    <div class="page-header">
-      <h1>Settings</h1>
-      <p>Server and terminal configuration</p>
-    </div>
-
-    <!-- General Section -->
-    <div class="settings-section">
-      <div class="section-header">
-        <span class="section-icon">&#9881;</span> General
+    <header class="page-head">
+      <div>
+        <h1>Settings</h1>
+        <p class="sub">User and workspace preferences — stored in <code>~/.config/devhub/config.yaml</code>.</p>
       </div>
+      <span class="chip mute">route: /settings</span>
+    </header>
 
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">Projects Directory</div>
-          <div class="setting-desc">Root directory to scan for projects</div>
-        </div>
-        <div class="setting-control">
-          <input type="text" v-model="localServer.projects_dir">
-        </div>
-      </div>
+    <div class="card settings-card">
+      <div class="settings-grid">
+        <aside class="set-nav">
+          <template v-for="g in groupedSections" :key="g.name">
+            <h6>{{ g.name }}</h6>
+            <a
+              v-for="s in g.items"
+              :key="s.id"
+              class="set-nav-item"
+              :class="{ on: activeSection === s.id }"
+              @click="activeSection = s.id"
+            >{{ s.label }}</a>
+          </template>
+        </aside>
 
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">Default Project</div>
-          <div class="setting-desc">Project selected on startup</div>
-        </div>
-        <div class="setting-control">
-          <input type="text" v-model="localServer.default_project">
-        </div>
-      </div>
+        <div class="panel">
+          <!-- GENERAL -->
+          <section v-if="activeSection === 'general'">
+            <h2>General</h2>
+            <p class="lede">Core behaviour of the hub. Changes are saved after pressing the Save button below.</p>
 
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">Server Port</div>
-          <div class="setting-desc">Backend API port</div>
-          <div class="setting-hint">Requires restart</div>
-        </div>
-        <div class="setting-control">
-          <input type="number" v-model.number="localServer.port" style="width:100px">
-        </div>
-      </div>
-    </div>
-
-    <!-- Editor Section -->
-    <div class="settings-section">
-      <div class="section-header">
-        <span class="section-icon">&#9998;</span> Editor
-      </div>
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">Editor Engine</div>
-          <div class="setting-desc">Code editor component</div>
-        </div>
-        <div class="setting-control">
-          <select v-model="localUI.editorEngine">
-            <option value="codemirror">CodeMirror 6</option>
-            <option value="monaco">Monaco Editor</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">Editor Keymap</div>
-          <div class="setting-desc">Keyboard shortcut scheme for code editor</div>
-        </div>
-        <div class="setting-control">
-          <select v-model="localUI.editorKeymap">
-            <option value="default">Default</option>
-            <option value="vim">Vim</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">Editor Font Size</div>
-          <div class="setting-desc">Font size for code editor (px)</div>
-        </div>
-        <div class="setting-control">
-          <input type="number" v-model.number="localUI.editorFontSize" min="10" max="24" style="width:80px">
-          <span class="suffix">px</span>
-        </div>
-      </div>
-
-      <div v-if="localUI.editorEngine === 'monaco'" class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">Minimap</div>
-          <div class="setting-desc">Code overview on the right side (Monaco only)</div>
-        </div>
-        <div class="setting-control">
-          <label class="toggle">
-            <input type="checkbox" v-model="localUI.editorMinimap">
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-      </div>
-    </div>
-
-    <!-- Terminal Section -->
-    <div class="settings-section">
-      <div class="section-header">
-        <span class="section-icon">&#9002;</span> Terminal
-      </div>
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">Shell</div>
-          <div class="setting-desc">Default shell for new terminal sessions</div>
-        </div>
-        <div class="setting-control">
-          <select v-model="localServer.terminal.shell">
-            <option v-for="sh in settingsStore.shells" :key="sh" :value="sh">{{ sh }}</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">Font Size</div>
-          <div class="setting-desc">Terminal font size in pixels</div>
-        </div>
-        <div class="setting-control">
-          <input type="number" v-model.number="localUI.fontSize" min="8" max="32" style="width:80px">
-          <span class="suffix">px</span>
-        </div>
-      </div>
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">Font Family</div>
-          <div class="setting-desc">Monospace font for terminal</div>
-        </div>
-        <div class="setting-control">
-          <select v-model="localUI.fontFamily">
-            <option v-for="f in fontFamilies" :key="f.value" :value="f.value">{{ f.label }}</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">Scrollback</div>
-          <div class="setting-desc">Maximum lines kept in terminal history</div>
-        </div>
-        <div class="setting-control">
-          <input type="number" v-model.number="localUI.scrollback" step="1000" style="width:100px">
-          <span class="suffix">lines</span>
-        </div>
-      </div>
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">Cursor Blink</div>
-          <div class="setting-desc">Blinking cursor in terminal</div>
-        </div>
-        <div class="setting-control">
-          <label class="toggle">
-            <input type="checkbox" v-model="localUI.cursorBlink">
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-      </div>
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <div class="setting-label">Max Sessions</div>
-          <div class="setting-desc">Maximum concurrent terminal sessions</div>
-        </div>
-        <div class="setting-control">
-          <input type="number" v-model.number="localServer.terminal.max_sessions" min="1" max="20" style="width:80px">
-        </div>
-      </div>
-    </div>
-
-    <!-- Site Theme Section -->
-    <div class="settings-section">
-      <div class="section-header">
-        <span class="section-icon">&#127912;</span> Site Theme
-      </div>
-
-      <div class="theme-grid">
-        <div
-          v-for="(theme, key) in siteThemes"
-          :key="key"
-          class="theme-card"
-          :class="{ active: localUI.siteThemeName === key }"
-          @click="localUI.siteThemeName = key as string; settingsStore.updateUI({ siteThemeName: key as string })"
-        >
-          <div
-            class="theme-preview site-theme-preview"
-            :style="{ background: theme['--bg-primary'], color: theme['--text-primary'] }"
-          >
-            <div class="site-preview-sidebar" :style="{ background: theme['--bg-secondary'], borderColor: theme['--border'] }">
-              <div class="site-preview-dot" :style="{ background: theme['--accent-green'] }"></div>
-              <div class="site-preview-line" :style="{ background: theme['--accent-blue'] }"></div>
-              <div class="site-preview-line" :style="{ background: theme['--text-secondary'] }"></div>
-            </div>
-            <div class="site-preview-content">
-              <div class="site-preview-card" :style="{ borderColor: theme['--border'], background: theme['--bg-secondary'] }">
-                <div class="site-preview-accent" :style="{ background: theme['--accent-green'] }"></div>
-              </div>
-              <div class="site-preview-card" :style="{ borderColor: theme['--border'], background: theme['--bg-secondary'] }">
-                <div class="site-preview-accent" :style="{ background: theme['--accent-blue'] }"></div>
+            <div class="field">
+              <div><label>Projects directory</label><div class="hint">Root folder DevHub scans for projects.</div></div>
+              <div class="ctl">
+                <div class="ds-input">
+                  <input v-model="localServer.projects_dir" type="text" spellcheck="false" />
+                </div>
               </div>
             </div>
-          </div>
-          <div class="theme-name">{{ siteThemeNames[key] || key }}</div>
+
+            <div class="field">
+              <div><label>Default project</label><div class="hint">Loaded on startup.</div></div>
+              <div class="ctl">
+                <div class="ds-input">
+                  <input v-model="localServer.default_project" type="text" spellcheck="false" />
+                </div>
+              </div>
+            </div>
+
+            <div class="field">
+              <div><label>Server port</label><div class="hint">Backend API port. Requires restart.</div></div>
+              <div class="ctl">
+                <div class="ds-input" style="max-width: 160px">
+                  <input v-model.number="localServer.port" type="number" />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- APPEARANCE -->
+          <section v-else-if="activeSection === 'appearance'">
+            <h2>Appearance</h2>
+            <p class="lede">Warm dark is the default. The palette uses OKLCH so both modes stay harmonious.</p>
+
+            <div class="field">
+              <div><label>Theme</label><div class="hint">Switch at any time — <span class="kbd">{{ theme === 'dark' ? 'dark' : 'light' }}</span> is active.</div></div>
+              <div class="ctl row-ctl">
+                <ThemeToggle />
+              </div>
+            </div>
+
+          </section>
+
+          <!-- EDITOR -->
+          <section v-else-if="activeSection === 'editor'">
+            <h2>Editor</h2>
+            <p class="lede">Code-editor engine and input behaviour.</p>
+
+            <div class="field">
+              <div><label>Engine</label><div class="hint">Switch between two editors.</div></div>
+              <div class="ctl">
+                <div class="choices two">
+                  <button
+                    type="button"
+                    class="choice"
+                    :class="{ sel: localUI.editorEngine === 'codemirror' }"
+                    @click="localUI.editorEngine = 'codemirror'"
+                  >
+                    <span class="t">CodeMirror 6</span>
+                    <span class="d">Lightweight, fast. Best for most files.</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="choice"
+                    :class="{ sel: localUI.editorEngine === 'monaco' }"
+                    @click="localUI.editorEngine = 'monaco'"
+                  >
+                    <span class="t">Monaco</span>
+                    <span class="d">VS Code engine. Minimap, IntelliSense.</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="field">
+              <div><label>Keymap</label><div class="hint">Keyboard scheme inside the editor.</div></div>
+              <div class="ctl">
+                <select v-model="localUI.editorKeymap" class="select-native">
+                  <option value="default">Default</option>
+                  <option value="vim">Vim</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <div><label>Font size</label></div>
+              <div class="ctl row-ctl">
+                <div class="ds-input" style="width: 100px">
+                  <input v-model.number="localUI.editorFontSize" type="number" min="10" max="24" />
+                </div>
+                <span class="unit">px</span>
+              </div>
+            </div>
+
+            <div v-if="localUI.editorEngine === 'monaco'" class="field">
+              <div><label>Minimap</label><div class="hint">Code overview on the right.</div></div>
+              <div class="ctl">
+                <button
+                  type="button"
+                  class="tgl"
+                  :class="{ on: localUI.editorMinimap }"
+                  aria-label="Minimap"
+                  @click="localUI.editorMinimap = !localUI.editorMinimap"
+                ></button>
+              </div>
+            </div>
+          </section>
+
+          <!-- TERMINAL (shell + session limits) -->
+          <section v-else-if="activeSection === 'terminal'">
+            <h2>Terminal</h2>
+            <p class="lede">Shell, font, and scrollback for the web console.</p>
+
+            <div class="field">
+              <div><label>Shell</label><div class="hint">Default shell for new sessions.</div></div>
+              <div class="ctl">
+                <select v-model="localServer.terminal.shell" class="select-native">
+                  <option v-for="sh in settingsStore.shells" :key="sh" :value="sh">{{ sh }}</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <div><label>Font family</label></div>
+              <div class="ctl">
+                <select v-model="localUI.fontFamily" class="select-native">
+                  <option v-for="f in fontFamilies" :key="f.value" :value="f.value">{{ f.label }}</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <div><label>Font size</label></div>
+              <div class="ctl row-ctl">
+                <div class="ds-input" style="width: 100px">
+                  <input v-model.number="localUI.fontSize" type="number" min="8" max="32" />
+                </div>
+                <span class="unit">px</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <div><label>Scrollback</label><div class="hint">Lines kept in history.</div></div>
+              <div class="ctl row-ctl">
+                <div class="ds-input" style="width: 120px">
+                  <input v-model.number="localUI.scrollback" type="number" step="1000" />
+                </div>
+                <span class="unit">lines</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <div><label>Cursor blink</label></div>
+              <div class="ctl">
+                <button
+                  type="button"
+                  class="tgl"
+                  :class="{ on: localUI.cursorBlink }"
+                  aria-label="Cursor blink"
+                  @click="localUI.cursorBlink = !localUI.cursorBlink"
+                ></button>
+              </div>
+            </div>
+
+            <div class="field">
+              <div><label>Max sessions</label><div class="hint">Concurrent terminal sessions allowed.</div></div>
+              <div class="ctl row-ctl">
+                <div class="ds-input" style="width: 100px">
+                  <input v-model.number="localServer.terminal.max_sessions" type="number" min="1" max="20" />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- TERMINAL THEME -->
+          <section v-else-if="activeSection === 'theme'">
+            <h2>Terminal theme</h2>
+            <p class="lede">Colour palette for the terminal pane only — app chrome uses the warm dark / warm paper tokens.</p>
+
+            <div class="choices grid">
+              <button
+                v-for="(term, key) in terminalThemes"
+                :key="key"
+                type="button"
+                class="choice term-choice"
+                :class="{ sel: localUI.themeName === key }"
+                @click="selectTerm(key as string)"
+              >
+                <span class="t">{{ themeNames[key as string] || key }}</span>
+                <span class="preview" :style="{ background: term.background, color: term.foreground }">
+                  <span :style="{ color: term.green }">$</span> git status<br />
+                  <span :style="{ color: term.red }">M</span> app.vue
+                </span>
+              </button>
+            </div>
+
+            <div class="preview-terminal">
+              <div class="preview-header">
+                <span class="chip info">live preview</span>
+              </div>
+              <div
+                class="preview-body"
+                :style="{
+                  background: selectedTerm.background,
+                  color: selectedTerm.foreground,
+                  fontFamily: localUI.fontFamily,
+                  fontSize: localUI.fontSize + 'px',
+                }"
+              >
+                <span :style="{ color: selectedTerm.green }">washka@fedora</span>:<span :style="{ color: selectedTerm.blue }">~/project/devhub</span>$ ls -la<br />
+                total 42<br />
+                -rw-r--r-- 1 washka washka  892 <span :style="{ color: selectedTerm.yellow }">go.mod</span><br />
+                drwxr-xr-x 3 washka washka 4096 <span :style="{ color: selectedTerm.blue }">frontend/</span><br />
+                <span :style="{ color: selectedTerm.green }">washka@fedora</span>:<span :style="{ color: selectedTerm.blue }">~/project/devhub</span>$ <span style="opacity:.7">_</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- ABOUT -->
+          <section v-else-if="activeSection === 'about'">
+            <h2>About DevHub</h2>
+            <p class="lede">Local-first developer dashboard.</p>
+            <div class="field">
+              <div><label>Version</label></div>
+              <div class="ctl"><span class="mono">0.0.0-dev</span></div>
+            </div>
+            <div class="field">
+              <div><label>Config path</label></div>
+              <div class="ctl"><span class="mono">~/.config/devhub/config.yaml</span></div>
+            </div>
+            <div class="field">
+              <div><label>Reset onboarding</label><div class="hint">Re-run the first-time wizard.</div></div>
+              <div class="ctl">
+                <button class="btn" @click="() => { try { localStorage.removeItem('devhub.onboarded') } catch {} }">Clear flag</button>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>
 
-    <!-- Terminal Theme Section -->
-    <div class="settings-section">
-      <div class="section-header">
-        <span class="section-icon">&#9002;</span> Terminal Theme
-      </div>
+    <div style="height: 72px"></div>
 
-      <div class="theme-grid">
-        <div
-          v-for="(theme, key) in terminalThemes"
-          :key="key"
-          class="theme-card"
-          :class="{ active: localUI.themeName === key }"
-          @click="selectTheme(key as string)"
-        >
-          <div
-            class="theme-preview"
-            :style="{ background: theme.background, color: theme.foreground }"
-          >
-            <span :style="{ color: theme.green }">$</span> git status<br>
-            <span :style="{ color: theme.red }">modified:</span> app.vue<br>
-            <span :style="{ color: theme.blue }">3 files</span> changed
-          </div>
-          <div class="theme-name">{{ themeNames[key] || key }}</div>
-        </div>
-      </div>
-
-      <!-- Live Preview -->
-      <div class="preview-terminal">
-        <div class="preview-header">
-          <span>&#9654;</span> Live Preview
-        </div>
-        <div
-          class="preview-body"
-          :style="{
-            background: selectedTheme.background,
-            color: selectedTheme.foreground,
-            fontFamily: localUI.fontFamily,
-            fontSize: localUI.fontSize + 'px',
-          }"
-        >
-          <span :style="{ color: selectedTheme.green }">washka@fedora</span>:<span :style="{ color: selectedTheme.blue }">~/project/devhub</span>$ ls -la<br>
-          total 42<br>
-          drwxr-xr-x  8 washka washka 4096 Mar 28 <span :style="{ color: selectedTheme.blue }">.</span><br>
-          -rw-r--r--  1 washka washka  892 Mar 28 <span :style="{ color: selectedTheme.yellow }">go.mod</span><br>
-          drwxr-xr-x  3 washka washka 4096 Mar 28 <span :style="{ color: selectedTheme.blue }">frontend/</span><br>
-          <span :style="{ color: selectedTheme.green }">washka@fedora</span>:<span :style="{ color: selectedTheme.blue }">~/project/devhub</span>$ <span style="opacity:0.7">_</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- spacer for fixed save bar -->
-    <div style="height:60px"></div>
-
-    <!-- Save Bar -->
     <Transition name="save-bar">
       <div v-if="isDirty" class="save-bar">
         <span class="unsaved-dot"></span>
         <span class="save-text">Unsaved changes</span>
         <span style="flex:1"></span>
         <button class="btn" @click="reset">Reset</button>
-        <button class="btn btn-primary" @click="save" :disabled="saving">
-          {{ saving ? 'Saving...' : 'Save Changes' }}
+        <button class="btn primary" :disabled="saving" @click="save">
+          {{ saving ? 'Saving…' : 'Save changes' }}
         </button>
       </div>
     </Transition>
@@ -391,273 +409,235 @@ function selectTheme(key: string) {
 
 <style scoped>
 .settings-view {
-  padding: 32px 40px;
-  max-width: 800px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  width: 100%;
 }
 
-/* Page Header */
-.page-header { margin-bottom: 32px; }
-.page-header h1 { font-size: 28px; font-weight: 700; }
-.page-header p { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+.settings-card { padding: 0; overflow: hidden; }
 
-/* Settings Sections */
-.settings-section { margin-bottom: 32px; }
-.section-header {
-  font-size: 16px;
+.settings-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 620px;
+}
+@media (max-width: 900px) {
+  .settings-grid { grid-template-columns: 180px 1fr; }
+}
+
+.set-nav {
+  background: var(--bg-1);
+  border-right: 1px solid var(--line-soft);
+  padding: 10px 6px;
+}
+.set-nav h6 {
+  margin: 12px 8px 4px;
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--fg-3);
   font-weight: 600;
-  margin-bottom: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
+}
+.set-nav-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: var(--r1);
+  font-size: 13px;
+  color: var(--fg-2);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+  position: relative;
+}
+.set-nav-item:hover { background: var(--bg-2); color: var(--fg); }
+.set-nav-item.on { background: var(--accent-2); color: var(--fg); }
+.set-nav-item.on::before {
+  content: "";
+  position: absolute;
+  left: -6px; top: 8px; bottom: 8px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+}
+
+.panel { padding: 24px 28px; overflow: auto; min-width: 0; }
+.panel h2 { margin: 0 0 4px; font-size: 22px; font-weight: 700; color: var(--fg); letter-spacing: -0.01em; }
+.panel .lede { color: var(--fg-3); margin: 0 0 22px; font-size: 13.5px; }
+.panel code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg-2);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--fg-2);
+}
+
+.field {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line-soft);
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.field:last-child { border-bottom: 0; }
+.field label { font-weight: 600; font-size: 13.5px; color: var(--fg); }
+.field .hint { color: var(--fg-3); font-size: 12.5px; margin-top: 3px; }
+.field .ctl { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-width: 0; }
+.field .ctl.row-ctl { flex-direction: row; align-items: center; gap: 10px; }
+.field .unit { color: var(--fg-3); font-size: 12px; }
+.field .mono { font-family: var(--mono); font-size: 12.5px; color: var(--fg-2); }
+
+/* Shared input override for scoped usage */
+.ds-input {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 7px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  width: 100%;
+  max-width: 360px;
 }
-.section-icon { color: var(--text-secondary); font-size: 14px; }
-
-/* Setting Row */
-.setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(48, 54, 61, 0.4);
-}
-.setting-row:last-child { border-bottom: none; }
-.setting-info { flex: 1; }
-.setting-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-.setting-desc {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
-.setting-hint {
-  font-size: 11px;
-  color: var(--accent-orange);
-  margin-top: 2px;
-}
-
-/* Inputs */
-.setting-control {
-  min-width: 200px;
-  text-align: right;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-}
-.setting-control input[type="text"],
-.setting-control input[type="number"],
-.setting-control select {
-  font-family: var(--font-mono);
+.ds-input input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--fg);
   font-size: 13px;
-  color: var(--text-primary);
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 12px;
-  outline: none;
-  width: 200px;
-  transition: all var(--transition-fast);
+  font-family: var(--ui);
+  padding: 0;
+  width: 100%;
 }
-.setting-control input:focus,
-.setting-control select:focus {
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.3);
-}
-.setting-control select {
+.ds-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 25%, transparent); }
+
+.select-native {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  border-radius: var(--r1);
+  font-size: 13px;
+  color: var(--fg);
+  font-family: var(--ui);
   cursor: pointer;
-  appearance: auto;
+  min-width: 220px;
 }
-.suffix {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
+.select-native:focus { outline: none; border-color: var(--accent); }
 
-/* Toggle Switch */
-.toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
-.toggle input { opacity: 0; width: 0; height: 0; }
-.toggle-slider {
-  position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-  background: var(--border); border-radius: 11px; transition: 0.2s;
-}
-.toggle-slider:before {
-  position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px;
-  background: var(--text-secondary); border-radius: 50%; transition: 0.2s;
-}
-.toggle input:checked + .toggle-slider { background: var(--accent-blue); }
-.toggle input:checked + .toggle-slider:before { transform: translateX(18px); background: #fff; }
-
-/* Theme Cards */
-.theme-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 12px;
-  margin-top: 12px;
-}
-.theme-card {
-  border: 2px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.theme-card:hover { border-color: var(--text-secondary); transform: translateY(-1px); }
-.theme-card.active { border-color: var(--accent-blue); box-shadow: var(--glow-blue); }
-.theme-preview {
-  height: 60px;
-  padding: 8px 10px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.4;
-  overflow: hidden;
-}
-.theme-name {
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border);
-  text-align: center;
-}
-
-.site-theme-preview {
-  display: flex;
-  gap: 4px;
-  padding: 6px !important;
-  font-size: 0;
-}
-
-.site-preview-sidebar {
-  width: 24px;
-  border-right: 1px solid;
-  border-radius: 3px 0 0 3px;
-  padding: 4px 3px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.site-preview-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  margin-bottom: 2px;
-}
-
-.site-preview-line {
-  height: 2px;
-  border-radius: 1px;
-  opacity: 0.7;
-}
-
-.site-preview-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 2px;
-}
-
-.site-preview-card {
-  flex: 1;
-  border: 1px solid;
-  border-radius: 3px;
+/* Toggle switch */
+.tgl {
   position: relative;
-  overflow: hidden;
+  width: 36px;
+  height: 20px;
+  border-radius: var(--r-pill);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast);
+  padding: 0;
 }
-
-.site-preview-accent {
+.tgl::after {
+  content: "";
   position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
+  left: 2px; top: 2px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--fg-2);
+  transition: all var(--t-fast);
 }
+.tgl.on { background: var(--accent); border-color: var(--accent); }
+.tgl.on::after { left: 18px; background: var(--accent-ink); }
 
-/* Live Preview Terminal */
-.preview-terminal {
-  margin-top: 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+/* Choice cards */
+.choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+.choices.two { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 480px; }
+.choice {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-2);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  font-family: var(--ui);
+  color: var(--fg);
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.choice:hover { border-color: var(--accent); }
+.choice.sel { border-color: var(--accent); background: var(--accent-2); }
+.choice .t { font-size: 13px; font-weight: 600; color: var(--fg); }
+.choice .d { font-size: 11.5px; color: var(--fg-3); }
+.choice .preview {
+  display: block;
+  height: 56px;
+  border-radius: var(--r1);
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
   overflow: hidden;
+  line-height: 1.4;
+}
+.term-choice .preview { line-height: 1.5; }
+
+.preview-terminal {
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  overflow: hidden;
+  background: var(--bg-1);
 }
 .preview-header {
-  background: var(--bg-secondary);
-  padding: 6px 12px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line-soft);
 }
 .preview-body {
   padding: 12px 16px;
-  font-family: var(--font-mono);
-  font-size: 14px;
+  font-family: var(--mono);
   line-height: 1.5;
   min-height: 120px;
   transition: background 0.15s, color 0.15s, font-size 0.15s;
 }
 
-/* Save Bar */
+/* Save bar */
 .save-bar {
   position: fixed;
   bottom: 0;
   left: var(--sidebar-width);
   right: 0;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border);
-  padding: 12px 40px;
+  background: var(--bg-1);
+  border-top: 1px solid var(--line);
+  padding: 12px 28px;
   display: flex;
   align-items: center;
   gap: 12px;
   z-index: 100;
+  box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.12);
 }
 .unsaved-dot {
   width: 6px; height: 6px; border-radius: 50%;
-  background: var(--accent-orange);
-  box-shadow: 0 0 6px var(--accent-orange);
+  background: var(--warn);
+  box-shadow: 0 0 6px var(--warn);
 }
-.save-text {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-.btn {
-  padding: 6px 20px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  border: 1px solid var(--border);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.btn:hover { color: var(--text-primary); border-color: var(--text-secondary); }
-.btn-primary {
-  background: var(--accent-green);
-  border-color: var(--accent-green);
-  color: #fff;
-}
-.btn-primary:hover { box-shadow: 0 0 12px rgba(63, 185, 80, 0.4); }
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+.save-text { font-size: 13px; color: var(--fg-2); }
 
-/* Save bar transition */
-.save-bar-enter-active,
-.save-bar-leave-active {
-  transition: transform 0.2s ease, opacity 0.2s ease;
+.save-bar-enter-active, .save-bar-leave-active {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
 }
-.save-bar-enter-from,
-.save-bar-leave-to {
-  transform: translateY(100%);
-  opacity: 0;
-}
+.save-bar-enter-from, .save-bar-leave-to { transform: translateY(100%); opacity: 0; }
 </style>

@@ -78,7 +78,7 @@ function labelStyle(label: string): Record<string, string> {
       borderColor: `rgba(${rgb},0.25)`,
     }
   }
-  return { background: 'rgba(139,148,158,0.1)', color: '#8b949e', borderColor: 'rgba(139,148,158,0.25)' }
+  return { background: 'var(--bg-2)', color: 'var(--fg-2)', borderColor: 'var(--line)' }
 }
 
 function ciStatusClass(pipeline: GitLabMR['pipeline']): string {
@@ -1055,23 +1055,23 @@ onUnmounted(() => {
 }
 
 .btn-green {
-  background: rgba(63, 185, 80, 0.15);
-  border-color: rgba(63, 185, 80, 0.3);
+  background: var(--ok-2);
+  border-color: color-mix(in oklab, var(--ok) 40%, transparent);
   color: var(--accent-green);
 }
 
 .btn-green:hover:not(:disabled) {
-  background: rgba(63, 185, 80, 0.25);
+  background: color-mix(in oklab, var(--ok) 30%, transparent);
 }
 
 .btn-blue {
-  background: rgba(88, 166, 255, 0.15);
-  border-color: rgba(88, 166, 255, 0.3);
+  background: var(--accent-2);
+  border-color: color-mix(in oklab, var(--accent) 40%, transparent);
   color: var(--accent-blue);
 }
 
 .btn-blue:hover:not(:disabled) {
-  background: rgba(88, 166, 255, 0.25);
+  background: color-mix(in oklab, var(--info) 30%, transparent);
 }
 
 @keyframes spin {
@@ -1120,7 +1120,7 @@ onUnmounted(() => {
   font-size: 11px;
   font-weight: 600;
   background: var(--accent-blue);
-  color: #fff;
+  color: var(--accent-ink);
   padding: 0 6px;
   border-radius: 8px;
   min-width: 18px;
@@ -1165,8 +1165,8 @@ onUnmounted(() => {
 }
 
 .sub-tab.active {
-  background: rgba(88, 166, 255, 0.15);
-  border-color: rgba(88, 166, 255, 0.3);
+  background: var(--accent-2);
+  border-color: color-mix(in oklab, var(--accent) 40%, transparent);
   color: var(--accent-blue);
 }
 
@@ -1191,7 +1191,7 @@ onUnmounted(() => {
 
 .filter-search:focus {
   border-color: var(--accent-blue);
-  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 25%, transparent);
   outline: none;
 }
 
@@ -1225,7 +1225,7 @@ onUnmounted(() => {
 }
 
 .filter-clear:hover {
-  background: rgba(248, 81, 73, 0.1);
+  background: var(--bad-2);
 }
 
 /* Empty states */
@@ -1322,11 +1322,11 @@ onUnmounted(() => {
 }
 
 .item-row:hover {
-  background: rgba(88, 166, 255, 0.04);
+  background: var(--accent-2);
 }
 
 .item-row.row-selected {
-  background: rgba(88, 166, 255, 0.08);
+  background: var(--accent-2);
   border-left: 2px solid var(--accent-blue);
   padding-left: 26px;
 }
@@ -1417,7 +1417,7 @@ onUnmounted(() => {
 
 .draft-badge {
   font-size: 11px;
-  background: rgba(210, 153, 34, 0.15);
+  background: var(--warn-2);
   color: var(--accent-orange);
   padding: 1px 6px;
   border-radius: 8px;
@@ -1444,12 +1444,12 @@ onUnmounted(() => {
 
 .ci-passed {
   background: var(--accent-green);
-  box-shadow: 0 0 6px rgba(63, 185, 80, 0.5);
+  box-shadow: 0 0 6px var(--ok);
 }
 
 .ci-failed {
   background: var(--accent-red);
-  box-shadow: 0 0 6px rgba(248, 81, 73, 0.5);
+  box-shadow: 0 0 6px var(--bad);
 }
 
 .ci-pending {
@@ -1485,17 +1485,17 @@ onUnmounted(() => {
 }
 
 .state-opened {
-  background: rgba(63, 185, 80, 0.15);
+  background: var(--ok-2);
   color: var(--accent-green);
 }
 
 .state-closed {
-  background: rgba(188, 140, 255, 0.15);
+  background: var(--mag-2);
   color: var(--accent-purple);
 }
 
 .state-merged {
-  background: rgba(88, 166, 255, 0.15);
+  background: var(--accent-2);
   color: var(--accent-blue);
 }
 
@@ -1666,7 +1666,7 @@ onUnmounted(() => {
 }
 
 .job-row:hover {
-  background: rgba(88, 166, 255, 0.04);
+  background: var(--accent-2);
 }
 
 .job-row-left {
@@ -1723,7 +1723,7 @@ onUnmounted(() => {
   font-size: 10px;
   font-weight: 700;
   color: var(--accent-orange);
-  background: rgba(210, 153, 34, 0.15);
+  background: var(--warn-2);
   padding: 0 4px;
   border-radius: 3px;
 }
@@ -1755,12 +1755,12 @@ onUnmounted(() => {
 }
 
 .job-retry-btn:hover {
-  border-color: rgba(63, 185, 80, 0.4);
+  border-color: color-mix(in oklab, var(--ok) 50%, transparent);
   color: var(--accent-green);
 }
 
 .job-cancel-btn:hover {
-  border-color: rgba(248, 81, 73, 0.4);
+  border-color: color-mix(in oklab, var(--bad) 50%, transparent);
   color: var(--accent-red);
 }
 
@@ -1873,7 +1873,7 @@ onUnmounted(() => {
 }
 
 .todo-row:hover {
-  background: rgba(88, 166, 255, 0.04);
+  background: var(--accent-2);
 }
 
 .todo-left {
@@ -1899,17 +1899,17 @@ onUnmounted(() => {
 }
 
 .target-issue {
-  background: rgba(63, 185, 80, 0.15);
+  background: var(--ok-2);
   color: var(--accent-green);
 }
 
 .target-mergerequest {
-  background: rgba(88, 166, 255, 0.15);
+  background: var(--accent-2);
   color: var(--accent-blue);
 }
 
 .target-commit {
-  background: rgba(210, 153, 34, 0.15);
+  background: var(--warn-2);
   color: var(--accent-orange);
 }
 
@@ -1965,8 +1965,8 @@ onUnmounted(() => {
 }
 
 .todo-done-btn:hover {
-  background: rgba(63, 185, 80, 0.15);
-  border-color: rgba(63, 185, 80, 0.3);
+  background: var(--ok-2);
+  border-color: color-mix(in oklab, var(--ok) 40%, transparent);
   color: var(--accent-green);
 }
 

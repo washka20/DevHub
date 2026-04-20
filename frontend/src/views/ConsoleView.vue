@@ -195,7 +195,7 @@ function handlePaneDetach(paneId: string) {
 .pane-detach:hover {
   opacity: 1;
   color: var(--accent-blue);
-  background: rgba(88, 166, 255, 0.15);
+  background: var(--accent-2);
 }
 
 .pane-close {
@@ -216,7 +216,7 @@ function handlePaneDetach(paneId: string) {
 .pane-close:hover {
   opacity: 1;
   color: var(--accent-red);
-  background: rgba(248, 81, 73, 0.15);
+  background: var(--bad-2);
 }
 
 .pane-body {
